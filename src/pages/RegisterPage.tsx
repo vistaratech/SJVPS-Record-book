@@ -3888,7 +3888,7 @@ export default function RegisterPage() {
                         }
                       }}
                     />
-                    <Plus size={18} /> Add
+                    <Plus size={18} /> Add Image
                   </label>
                   <button 
                     className="img-preview-remove" 
