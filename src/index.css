@@ -4058,13 +4058,16 @@ a {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 320px;
+  width: 340px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
   z-index: 1000;
   overflow: hidden;
   animation: fdp-slide-in 0.2s cubic-bezier(0,0,0.2,1);
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
 }
 
 @keyframes fdp-slide-in {
@@ -4196,7 +4199,13 @@ a {
 .fdp-apply-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(0,45,93,0.3); }
 
 /* Wizard */
-.fdp-wizard { display: flex; flex-direction: column; }
+.fdp-wizard { 
+  display: flex; 
+  flex-direction: column; 
+  flex: 1; 
+  min-height: 0;
+  overflow: hidden;
+}
 
 .fdp-wizard-header {
   padding: 14px 16px;
@@ -4487,6 +4496,7 @@ a {
   padding: 12px 16px;
   border-top: 1px solid #f0f0f0;
   background: white;
+  flex-shrink: 0;
 }
 
 .fdp-apply-btn {
