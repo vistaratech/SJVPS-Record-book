@@ -30,6 +30,8 @@ export interface User {
     rowEditRestrictions?: Record<string, { start?: number; end?: number }> | null;
     rowDownloadRestrictions?: Record<string, { start?: number; end?: number }> | null;
     fullSheetAccess?: boolean;
+    allowedRegisters?: string[];
+    allowedFolders?: string[];
   };
 }
 

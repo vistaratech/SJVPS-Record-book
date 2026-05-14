@@ -30,7 +30,7 @@ export function RequestModal({ isOpen, onClose, type, registerName, registerId, 
 
     setIsSubmitting(true);
     try {
-      await firebaseCreateRequest(user?.id || 'unknown', user?.name || user?.email || 'User', {
+      await firebaseCreateRequest(String(user?.id || 'unknown'), user?.name || user?.email || 'User', {
         type,
         registerId: registerId?.toString(),
         registerName,

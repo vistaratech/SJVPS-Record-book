@@ -39,8 +39,7 @@ export default function AdminUserSettingsPage() {
     async function loadData() {
       try {
         const data = await firebaseGetUsers();
-        const users = data.users || [];
-        const foundUser = users.find((u: any) => u.id === id);
+        const foundUser = (data.users || []).find((u: any) => u.id === id) as any;
         if (!foundUser) {
           addNotification({ title: 'Error', message: 'User not found', type: 'error' });
           navigate('/admin/dashboard');

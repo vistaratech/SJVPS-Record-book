@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 interface ColumnIconProps {
-  type: string;
+  type?: string;
   size?: number;
   className?: string;
   style?: React.CSSProperties;

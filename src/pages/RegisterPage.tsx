@@ -68,7 +68,7 @@ export default function RegisterPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const registerId = id || '';
+  const registerId = Number(id) || 0;
   const queryClient = useQueryClient();
   const { addNotification, scheduleReminder } = useNotifications();
 
@@ -129,7 +129,7 @@ export default function RegisterPage() {
       }
     }
 
-    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(registerId.toString())) {
+    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(String(registerId))) {
       return false;
     }
 
@@ -140,11 +140,11 @@ export default function RegisterPage() {
     if (!user || (user as any).permissions?.isAdmin || (user as any).role === 'superadmin' || (user as any).role === 'admin' || (user as any).role === 'sheet_admin') return true;
     
     const allowedRegs = (user as any).permissions?.allowedRegisters;
-    if (!Array.isArray(allowedRegs) || !allowedRegs.map(String).includes(registerId.toString())) return false;
+    if (!Array.isArray(allowedRegs) || !allowedRegs.map(String).includes(String(registerId))) return false;
 
     const dlRest = (user as any).permissions?.downloadRestrictions;
     // If downloadRestrictions[registerId] is an empty array, it means download is disabled for this sheet
-    if (dlRest && Array.isArray(dlRest[registerId]) && dlRest[registerId].length === 0) return false;
+    if (dlRest && Array.isArray(dlRest[String(registerId)]) && dlRest[String(registerId)].length === 0) return false;
     
     return true;
   }, [user, registerId]);
@@ -833,10 +833,10 @@ export default function RegisterPage() {
   const lastSyncId = useRef<number | null>(null);
   const lastSyncData = useRef<any>(null);
 
-  const dataToSync = register || (registerId !== lastSyncId.current ? cachedRegister : null);
+  const dataToSync = register || (Number(registerId) !== lastSyncId.current ? cachedRegister : null);
 
-  if (registerId !== lastSyncId.current || (register && register !== lastSyncData.current)) {
-    lastSyncId.current = registerId;
+  if (Number(registerId) !== lastSyncId.current || (register && register !== lastSyncData.current)) {
+    lastSyncId.current = Number(registerId);
     lastSyncData.current = register;
 
     if (dataToSync) {
@@ -2001,7 +2001,7 @@ export default function RegisterPage() {
   });
 
   const deleteEntryMutation = useMutation({
-    mutationFn: (entryId: number) => deleteEntry(registerId, entryId),
+    mutationFn: (entryId: number) => deleteEntry(Number(registerId), entryId),
     onMutate: async (entryId) => {
       // 1. Cancel any outgoing refetches (so they don't overwrite our optimistic update)
       await queryClient.cancelQueries({ queryKey: ['register', registerId] });
