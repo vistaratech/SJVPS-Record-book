@@ -143,7 +143,7 @@ export default function RegisterPage() {
     if (!Array.isArray(allowedRegs) || !allowedRegs.map(String).includes(String(registerId))) return false;
 
     const dlRest = (user as any).permissions?.downloadRestrictions;
-    // If downloadRestrictions[registerId] is an empty array, it means download is disabled for this sheet
+    // If downloadRestrictions[String(registerId)] is an empty array, it means download is disabled for this sheet
     if (dlRest && Array.isArray(dlRest[String(registerId)]) && dlRest[String(registerId)].length === 0) return false;
     
     return true;
@@ -153,11 +153,11 @@ export default function RegisterPage() {
     if (!user || (user as any).permissions?.isAdmin || (user as any).permissions?.fullSheetAccess || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).role === 'sheet_admin') return true;
     
     const allowedRegs = (user as any).permissions?.allowedRegisters;
-    if (!Array.isArray(allowedRegs) || !allowedRegs.map(String).includes(registerId.toString())) return false;
+    if (!Array.isArray(allowedRegs) || !allowedRegs.map(String).includes(String(registerId))) return false;
 
     const editRest = (user as any).permissions?.editRestrictions;
-    // If editRest[registerId] is an empty array, it means edit is disabled for this sheet
-    if (editRest && Array.isArray(editRest[registerId]) && editRest[registerId].length === 0) return false;
+    // If editRest[String(registerId)] is an empty array, it means edit is disabled for this sheet
+    if (editRest && Array.isArray(editRest[String(registerId)]) && editRest[String(registerId)].length === 0) return false;
     
     return true;
   }, [user, registerId]);
@@ -180,7 +180,7 @@ export default function RegisterPage() {
   const rowViewRange = useMemo(() => {
     if (!user || isAdminUserTop) return null; // null = show all rows
     const rvr = (user as any).permissions?.rowViewRestrictions;
-    if (rvr && rvr[registerId]) return rvr[registerId];
+    if (rvr && rvr[String(registerId)]) return rvr[String(registerId)];
     return null;
   }, [user, registerId, isAdminUserTop]);
 
@@ -188,7 +188,7 @@ export default function RegisterPage() {
   const _rowEditRange = useMemo(() => {
     if (!user || isAdminUserTop) return null;
     const rer = (user as any).permissions?.rowEditRestrictions;
-    if (rer && rer[registerId]) return rer[registerId];
+    if (rer && rer[String(registerId)]) return rer[String(registerId)];
     return null;
   }, [user, registerId, isAdminUserTop]);
 
@@ -196,7 +196,7 @@ export default function RegisterPage() {
   const rowDownloadRange = useMemo(() => {
     if (!user || isAdminUserTop) return null;
     const rdr = (user as any).permissions?.rowDownloadRestrictions;
-    if (rdr && rdr[registerId]) return rdr[registerId];
+    if (rdr && rdr[String(registerId)]) return rdr[String(registerId)];
     return null;
   }, [user, registerId, isAdminUserTop]);
 
@@ -205,7 +205,7 @@ export default function RegisterPage() {
     if (!user || (user as any).permissions?.isAdmin || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).permissions?.fullSheetAccess) return null;
     
     const allowedRegs = (user as any).permissions?.allowedRegisters;
-    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(registerId.toString())) {
+    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(String(registerId))) {
       return null; // All columns downloadable if approved
     }
     return new Set<number>(); // No access
@@ -216,7 +216,7 @@ export default function RegisterPage() {
     if (!user || (user as any).permissions?.isAdmin || (user as any).permissions?.fullSheetAccess || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).role === 'sheet_admin') return null; // null = all
     
     const allowedRegs = (user as any).permissions?.allowedRegisters;
-    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(registerId.toString())) {
+    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(String(registerId))) {
       return null; // Always show all columns if access is granted
     }
     
@@ -722,7 +722,7 @@ export default function RegisterPage() {
         title: 'Data Load Error',
         message: 'Failed to load register data. Please try refreshing the page.',
         type: 'error',
-        link: { registerId: registerId.toString() }
+        link: { registerId: String(registerId) }
       });
     }
   }, [error, addNotification, registerId]);
@@ -2285,7 +2285,7 @@ export default function RegisterPage() {
             message: `The value "${value}" already exists in column "${col.name}".`,
             type: 'warning',
             link: {
-              registerId: registerId.toString(),
+              registerId: String(registerId),
               rowId: entryId,
             }
           });
@@ -3980,7 +3980,7 @@ export default function RegisterPage() {
                   scheduleReminder({
                     triggerTime: dt.getTime(),
                     message: reminderMessage,
-                    registerId: registerId.toString(),
+                    registerId: String(registerId),
                     rowId: reminderModal.entryId
                   });
                   toast.success('Reminder set successfully!');
