@@ -167,7 +167,11 @@ export function useExport({
             const m = parseInt(parts[1]) - 1;
             const y = parseInt(parts[2]);
             const dt = new Date(y, m, d);
-            rowData.push(isNaN(dt.getTime()) ? val : dt);
+            if (!isNaN(dt.getTime())) {
+              rowData.push({ v: dt, t: 'd', z: 'dd-mm-yyyy' });
+            } else {
+              rowData.push(val);
+            }
           } else {
             rowData.push(val);
           }
@@ -502,6 +506,17 @@ export function useExport({
           const cleaned = original.replace(/[^\d.-]/g, '');
           const n = parseFloat(cleaned);
           return isNaN(n) ? original : n;
+        } else if (c.type === 'date' && val) {
+          const parts = val.split(/[-/]/);
+          if (parts.length === 3) {
+            const d = parseInt(parts[0]);
+            const m = parseInt(parts[1]) - 1;
+            const y = parseInt(parts[2]);
+            const dt = new Date(y, m, d);
+            if (!isNaN(dt.getTime())) {
+              return { v: dt, t: 'd', z: 'dd-mm-yyyy' };
+            }
+          }
         }
         return val;
       })];
