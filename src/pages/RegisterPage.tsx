@@ -1039,7 +1039,7 @@ export default function RegisterPage() {
           let passFilters = true;
           for (let j = 0; j < filterLen; j++) {
             const f = preparedFilters[j];
-            const val = e.cells?.[f.columnId.toString()] || '';
+            const val = (e.cells?.[f.columnId.toString()] || '').trim();
             const lVal = val.toLowerCase();
 
             let condition = true;
@@ -1082,11 +1082,10 @@ export default function RegisterPage() {
               case 'empty': condition = !val; break;
               case 'not_empty': condition = !!val; break;
               case 'multi_select': {
-                const trimmed = val.trim();
-                if (!trimmed) {
+                if (!val) {
                   condition = f.values.includes('(Blanks)');
                 } else {
-                  condition = f.values.includes(trimmed);
+                  condition = f.values.includes(val);
                 }
                 break;
               }
