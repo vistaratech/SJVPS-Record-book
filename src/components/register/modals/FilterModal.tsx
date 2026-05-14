@@ -297,7 +297,7 @@ export function FilterModal({
                 {selectedOp === null ? (
                   /* Combined Step 2: Searchable Values & List Operators */
                   <div className="fdp-step2-combined">
-                    <div className="fdp-multi-container" style={{ borderBottom: '1px solid var(--border-light)', paddingBottom: '12px', marginBottom: '12px' }}>
+                    <div className="fdp-multi-container">
                       <div className="fdp-search-wrapper">
                         <Search className="fdp-search-icon" size={14} />
                         <input 
@@ -343,7 +343,7 @@ export function FilterModal({
                         </button>
                       </div>
 
-                      <div className="fdp-multi-list" style={{ maxHeight: '160px' }}>
+                      <div className="fdp-multi-list">
                         {(!filterSearch || '(blanks)'.includes(filterSearch.toLowerCase())) && (
                           <label className="fdp-multi-item">
                             <input
