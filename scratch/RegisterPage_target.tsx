@@ -20,11 +20,14 @@ import {
 import { useExport } from '../hooks/useExport';
 import { useColumnStats } from '../hooks/useColumnStats';
 import {
-  Plus, ChevronDown, Calendar,
-  Hash, FlaskConical, Pin, IndianRupee,
-  Mail, Phone, Globe, Star, CheckSquare, Image as ImageIcon, ArrowLeft,
-  Search, FileText, Download, ListOrdered, Maximize2, AlertCircle,
-  X, Link as LinkIcon, Info, AlertTriangle, Trash2, ZoomIn, ZoomOut, Bell
+  Plus, ChevronDown, 
+  Pin, 
+  ArrowLeft,
+  Search, FileText, Download, Maximize2, AlertCircle,
+  X, Link as LinkIcon, Info, AlertTriangle, Trash2, ZoomIn, ZoomOut, Bell,
+  CheckSquare, FlaskConical, Image as ImageIcon, ListOrdered
+
+
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { RegisterHeader } from '../components/register/RegisterHeader';
@@ -35,14 +38,14 @@ import { ShareModal } from '../components/register/modals/ShareModal';
 import { ColumnModals } from '../components/register/modals/ColumnModals';
 import { OtherModals } from '../components/register/modals/OtherModals';
 import { RegisterToolbar } from '../components/register/RegisterToolbar';
+import { type FilterRule } from '../components/register/modals/FilterModal';
 import { RegisterContextMenus } from '../components/register/menus/RegisterContextMenus';
 import { RegisterSummaryRow } from '../components/register/RegisterSummaryRow';
 import { AddRecordModal } from '../components/register/modals/AddRecordModal';
 import { COL_TYPES } from '../lib/constants';
 import { useNotifications } from '../lib/NotificationContext';
 import { ColumnIcon } from '../components/register/ColumnIcon';
-import { useAuth } from '../lib/auth';
-import { firebaseLogWorkspaceAction } from '../lib/firebaseAuth';
+
 
 type CalcType = 'sum' | 'average' | 'count' | 'min' | 'max' | 'filled' | 'empty' | 'distinct' | 'none';
 
@@ -64,164 +67,20 @@ function parseDateString(dStr: string) {
 }
 
 export default function RegisterPage() {
-  const { user } = useAuth();
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const registerId = id || '';
+  const registerId = Number(id);
   const queryClient = useQueryClient();
   const { addNotification, scheduleReminder } = useNotifications();
-
-  const isAdminUserTop = useMemo(() => {
-    return (user as any)?.permissions?.isAdmin === true || (user as any)?.permissions?.fullSheetAccess === true || (user as any)?.role === 'admin' || (user as any)?.role === 'superadmin' || (user as any)?.role === 'sheet_admin';
-  }, [user]);
-
-  // Helper to log workspace actions for activity tracking
-  const _logWork = useCallback((action: string, details: string) => {
-    if (user?.id) {
-      firebaseLogWorkspaceAction(user.id as string, (user as any)?.name || user?.email || 'Unknown', action, details);
-    }
-  }, [user]);
-
-  // Helper to parse column restriction strings like "1,3,5-8" into a Set of 0-indexed column indices
-  const _parseColumnRestriction = (value: any): Set<number> | null => {
-    if (Array.isArray(value)) return new Set(value);
-    if (typeof value === 'string' && value.trim()) {
-      const allowed = new Set<number>();
-      const parts = value.split(',').map((s: string) => s.trim()).filter(Boolean);
-      for (const p of parts) {
-        if (p.includes('-')) {
-          const [start, end] = p.split('-').map(Number);
-          if (!isNaN(start) && !isNaN(end)) {
-            for (let i = start; i <= end; i++) allowed.add(i - 1); // 0-indexed
-          }
-        } else {
-          const num = Number(p);
-          if (!isNaN(num)) allowed.add(num - 1);
-        }
-      }
-      return allowed.size > 0 ? allowed : null;
-    }
-    return null;
-  };
-
   const { data: register, isLoading, error } = useQuery({
     queryKey: ['register', registerId],
     queryFn: () => getRegister(Number(registerId)),
-    enabled: !!registerId && !isNaN(Number(registerId)),
-    staleTime: 30 * 1000,
+    enabled: !!registerId,
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
-
-  const isFullyRestricted = useMemo(() => {
-    if (!user || (user as any).permissions?.isAdmin || (user as any).permissions?.fullSheetAccess || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).role === 'sheet_admin') return false;
-    
-    // Check if sheet is explicitly allowed
-    const allowedRegs = (user as any).permissions?.allowedRegisters;
-    const allowedFolders = (user as any).permissions?.allowedFolders;
-
-    // Check folder access first
-    const folderId = (register as any)?.folderId;
-    if (folderId) {
-      if (!Array.isArray(allowedFolders) || !allowedFolders.map(String).includes(folderId.toString())) {
-        return true; // Restricted if folder not approved
-      }
-    }
-
-    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(registerId.toString())) {
-      return false;
-    }
-
-    return true;
-  }, [user, registerId]);
-
-  const _canDownloadAny = useMemo(() => {
-    if (!user || (user as any).permissions?.isAdmin || (user as any).role === 'superadmin' || (user as any).role === 'admin' || (user as any).role === 'sheet_admin') return true;
-    
-    const allowedRegs = (user as any).permissions?.allowedRegisters;
-    if (!Array.isArray(allowedRegs) || !allowedRegs.map(String).includes(registerId.toString())) return false;
-
-    const dlRest = (user as any).permissions?.downloadRestrictions;
-    // If downloadRestrictions[registerId] is an empty array, it means download is disabled for this sheet
-    if (dlRest && Array.isArray(dlRest[registerId]) && dlRest[registerId].length === 0) return false;
-    
-    return true;
-  }, [user, registerId]);
-
-  const _canEditAny = useMemo(() => {
-    if (!user || (user as any).permissions?.isAdmin || (user as any).permissions?.fullSheetAccess || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).role === 'sheet_admin') return true;
-    
-    const allowedRegs = (user as any).permissions?.allowedRegisters;
-    if (!Array.isArray(allowedRegs) || !allowedRegs.map(String).includes(registerId.toString())) return false;
-
-    const editRest = (user as any).permissions?.editRestrictions;
-    // If editRest[registerId] is an empty array, it means edit is disabled for this sheet
-    if (editRest && Array.isArray(editRest[registerId]) && editRest[registerId].length === 0) return false;
-    
-    return true;
-  }, [user, registerId]);
-
-  const _canCreateAny = _canEditAny;
-
-  const _editableColumnIds = useMemo(() => {
-    if (_canEditAny) return null; // All columns editable
-    return new Set<number>(); // No columns editable
-  }, [_canEditAny]);
-
-  useEffect(() => {
-    if (isFullyRestricted && id) {
-      toast.error("You do not have permission to view this register.");
-      navigate('/');
-    }
-  }, [isFullyRestricted, navigate, id]);
-
-  // Row-level view restrictions
-  const rowViewRange = useMemo(() => {
-    if (!user || isAdminUserTop) return null; // null = show all rows
-    const rvr = (user as any).permissions?.rowViewRestrictions;
-    if (rvr && rvr[registerId]) return rvr[registerId];
-    return null;
-  }, [user, registerId, isAdminUserTop]);
-
-  // Row-level edit restrictions
-  const _rowEditRange = useMemo(() => {
-    if (!user || isAdminUserTop) return null;
-    const rer = (user as any).permissions?.rowEditRestrictions;
-    if (rer && rer[registerId]) return rer[registerId];
-    return null;
-  }, [user, registerId, isAdminUserTop]);
-
-  // Row-level download restrictions
-  const rowDownloadRange = useMemo(() => {
-    if (!user || isAdminUserTop) return null;
-    const rdr = (user as any).permissions?.rowDownloadRestrictions;
-    if (rdr && rdr[registerId]) return rdr[registerId];
-    return null;
-  }, [user, registerId, isAdminUserTop]);
-
-  // Column-level download restrictions — only these columns can be exported
-  const downloadableColumnIds = useMemo(() => {
-    if (!user || (user as any).permissions?.isAdmin || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).permissions?.fullSheetAccess) return null;
-    
-    const allowedRegs = (user as any).permissions?.allowedRegisters;
-    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(registerId.toString())) {
-      return null; // All columns downloadable if approved
-    }
-    return new Set<number>(); // No access
-  }, [user, registerId]);
-
-  // Column-level view restrictions — only these columns should be visible
-  const _viewableColumnIds = useMemo(() => {
-    if (!user || (user as any).permissions?.isAdmin || (user as any).permissions?.fullSheetAccess || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).role === 'sheet_admin') return null; // null = all
-    
-    const allowedRegs = (user as any).permissions?.allowedRegisters;
-    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(registerId.toString())) {
-      return null; // Always show all columns if access is granted
-    }
-    
-    return new Set<number>(); // No access
-  }, [user, registerId, register?.columns]);
 
   const cachedRegister = queryClient.getQueryData(['register', registerId]) as any;
 
@@ -371,11 +230,11 @@ export default function RegisterPage() {
   const [dropdownConfigOptions, setDropdownConfigOptions] = useState('');
 
   // Filter
-  const [filters, setFilters] = useState<Array<{ columnId: number; operator: string; value: string; value2?: string; values?: string[] }>>(() => {
+  const [filters, setFilters] = useState<FilterRule[]>(() => {
     const saved = localStorage.getItem(`rb_filters_${registerId}`);
     return saved ? JSON.parse(saved) : [];
   });
-  const [activeFilters, setActiveFilters] = useState<Array<{ columnId: number; operator: string; value: string; value2?: string; values?: string[] }>>(() => {
+  const [activeFilters, setActiveFilters] = useState<FilterRule[]>(() => {
     const saved = localStorage.getItem(`rb_active_filters_${registerId}`);
     return saved ? JSON.parse(saved) : [];
   });
@@ -751,10 +610,8 @@ export default function RegisterPage() {
 
   // Stabilize references so child components only re-render when the actual data changes
   const columns = useMemo(() => {
-    const all = [...(register?.columns || [])].sort((a, b) => a.position - b.position);
-    if (!_viewableColumnIds) return all;
-    return all.filter(c => _viewableColumnIds.has(c.id));
-  }, [register?.columns, _viewableColumnIds]);
+    return [...(register?.columns || [])].sort((a, b) => a.position - b.position);
+  }, [register?.columns]);
   const pages = useMemo(() => register?.pages || [{ id: 1, name: 'Page 1', index: 0 }], [register?.pages]);
 
   useEffect(() => {
@@ -851,17 +708,6 @@ export default function RegisterPage() {
         });
         setColWidths(widths);
         setCalcTypes(calcs);
-      }
-      
-      // Safety: reset page index if it's out of bounds for the current register data
-      const totalEntries = dataToSync.entries?.length || 0;
-      if (totalEntries > 0) {
-        const lastPage = Math.floor((totalEntries - 1) / 500); // Assuming ~500 per page if not chunked, but we use pageIndex.
-        // Actually, let's just reset if it's a new register switch
-        if (registerId !== lastSyncId.current) {
-             const saved = localStorage.getItem(`rb_page_${registerId}`);
-             if (!saved) setCurrentPageIndex(0);
-        }
       }
     } else if (registerId !== lastSyncId.current) {
       // Clear data for a new register if no cache exists, avoiding showing stale data
@@ -964,6 +810,7 @@ export default function RegisterPage() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
+  // Index entries by page index for O(1) page access
   const entriesByPage = useMemo(() => {
     const map: Record<number, Entry[]> = {};
     const len = localEntries.length;
@@ -975,12 +822,6 @@ export default function RegisterPage() {
     }
     return map;
   }, [localEntries]);
-
-  // Apply row-level view restrictions before any search/filter/sort
-  const rowFilteredEntries = localEntries;
-
-  // Build paginated lookup from row-filtered entries
-  const rowFilteredEntriesByPage = entriesByPage;
 
   // Filter + sort entries — memoized so it only recomputes when inputs change
   const displayEntries = useMemo(() => {
@@ -999,14 +840,7 @@ export default function RegisterPage() {
 
     const filterLen = preparedFilters.length;
     const isSearching = !!s || filterLen > 0;
-    
-    // Safety check for pagination: if current page is empty but data exists, fallback to page 0
-    let targetPage = currentPageIndex;
-    if (!isSearching && !entriesByPage[targetPage] && entriesByPage[0]) {
-      targetPage = 0;
-    }
-    
-    const entriesToFilter = isSearching ? rowFilteredEntries : (entriesByPage[targetPage] || []);
+    const entriesToFilter = isSearching ? localEntries : (entriesByPage[currentPageIndex] || []);
 
     // Fast path: No search, no filters, no sorting.
     if (!isSearching && !sortColId) {
@@ -1082,10 +916,13 @@ export default function RegisterPage() {
               case 'empty': condition = !val; break;
               case 'not_empty': condition = !!val; break;
               case 'multi_select': {
-                if (!val) {
+                const trimmedVal = val.trim();
+                if (!trimmedVal) {
                   condition = f.values.includes('(Blanks)');
                 } else {
-                  condition = f.values.includes(val);
+                  // Case-insensitive + trim-aware comparison to match how uniqueValues are extracted
+                  const lTrimmedVal = trimmedVal.toLowerCase();
+                  condition = f.values.some(v => v.toLowerCase() === lTrimmedVal);
                 }
                 break;
               }
@@ -2237,12 +2074,6 @@ export default function RegisterPage() {
     const col = columnsRef.current.find(c => c.id.toString() === columnId);
     if (!col) return;
 
-    // ── Column-level Edit Permissions ──
-    if (_editableColumnIds && !_editableColumnIds.has(col.id)) {
-      toast.error(`You do not have permission to edit the "${col.name}" column.`);
-      return false;
-    }
-
     // ── System Columns Read-only ──
     if (col.type === 'auto_increment' || col.type === 'formula') return;
 
@@ -2536,8 +2367,6 @@ export default function RegisterPage() {
     selectedRows,
     calcTypes,
     colWidths,
-    rowDownloadRange,
-    downloadableColumnIds,
   });
 
 
@@ -2889,11 +2718,9 @@ export default function RegisterPage() {
           </button>
           <h1 className="register-header-title">{register.name}</h1>
           
-          {_canEditAny && (
-            <button className="pab-tab-action-btn primary header-add-btn" onClick={() => setShowAddRecordModal(true)}>
-              <Plus size={12} /> Add Row
-            </button>
-          )}
+          <button className="pab-tab-action-btn primary header-add-btn" onClick={() => setShowAddRecordModal(true)}>
+            <Plus size={12} /> Add Register
+          </button>
         </div>
 
         <div className="register-header-right">
@@ -2923,16 +2750,12 @@ export default function RegisterPage() {
             undoStackCount={undoStack.current.length}
             redoStackCount={redoStack.current.length}
             entries={localEntries}
-            canEdit={_canEditAny}
-            allColumnsCount={register?.columns?.length || 0}
           />
           
           <RegisterHeader 
             register={register} 
             setShareModal={setShareModal} 
             handleOpenExport={() => setShowExportModal(true)}
-            canDownload={_canDownloadAny}
-            canEdit={_canEditAny}
           />
         </div>
       </div>
@@ -2945,7 +2768,7 @@ export default function RegisterPage() {
         ref={parentRef}
         className="spreadsheet-wrapper" 
         key={`grid-${columns.length}-${columns.map(c => c.id).join('-')}`}
-        onMouseDown={_canEditAny ? handleTableMouseDown : undefined}
+        onMouseDown={handleTableMouseDown}
         onScroll={(e) => {
           if (isRestoringScroll.current) return;
           const target = e.currentTarget;
@@ -2959,7 +2782,7 @@ export default function RegisterPage() {
         }}
         style={{ '--dynamic-row-height': `${dynamicRowHeight}px` } as React.CSSProperties}
       >
-        <table className={`spreadsheet ${_canEditAny ? '' : 'readonly-access'}`}>
+        <table className="spreadsheet">
           <thead>
             <tr>
               <th className="serial">
@@ -3006,6 +2829,7 @@ export default function RegisterPage() {
                   const col = visibleColumns[vc.index];
                   if (!col) return null;
                   const IconComponent = <ColumnIcon type={col.type} size={12} />;
+
 
                   const isFrozen = frozenColumns.has(col.id);
                   const stickyLeft = isFrozen ? frozenLeftOffsets[col.id] : undefined;
@@ -3075,22 +2899,20 @@ export default function RegisterPage() {
                 )});
               })()}
               <th className="actions" style={{ width: '50px', minWidth: '50px', padding: 0, position: 'sticky', right: 0, zIndex: 14, background: 'var(--table-bg)', borderLeft: '1px solid var(--border-light)' }}>
-                {_canEditAny && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setNewColumnModal(true);
-                    }}
-                    title="Add Column"
-                    style={{
-                      background: 'transparent', border: 'none', cursor: 'pointer',
-                      color: 'var(--muted)', width: '100%', height: '100%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
-                  >
-                    <Plus size={16} strokeWidth={2.5} />
-                  </button>
-                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNewColumnModal(true);
+                  }}
+                  title="Add Column"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--muted)', width: '100%', height: '100%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}
+                >
+                  <Plus size={16} strokeWidth={2.5} />
+                </button>
               </th>
             </tr>
           </thead>
@@ -3118,17 +2940,14 @@ export default function RegisterPage() {
                   paddingRight={useColVirtual ? paddingRight : 0}
                   isSelected={selectedRows.has(entry.id)}
                   toggleSelectRow={toggleSelectRow}
-                  handleCellChange={(eid, cid, val) => {
-                    if (_editableColumnIds && !_editableColumnIds.has(Number(cid))) return;
-                    handleCellChange(eid, cid, val);
-                  }}
+                  handleCellChange={handleCellChange}
                   openDatePicker={openDatePicker}
                   openDropdown={openDropdown}
                   isMenuOpen={rowMenuId === entry.id}
                   toggleMenu={toggleMenu}
                   registerColumns={columns}
                   onRowDetail={setDetailViewEntry}
-                  onImagePreview={setPreviewImage}
+                  onImagePreview={(img) => { setPreviewImage(img); setPreviewImageIndex(0); }}
                   frozenColumns={frozenColumns}
                   frozenLeftOffsets={frozenLeftOffsets}
                   colWidths={colWidths}
@@ -3137,7 +2956,6 @@ export default function RegisterPage() {
                   rowHeight={dynamicRowHeight}
                   onCellFormatClick={onCellFormatClick}
                   searchTerm={deferredSearch || undefined}
-                  editableColumnIds={_editableColumnIds}
                 />
               );
             })}
@@ -3170,7 +2988,7 @@ export default function RegisterPage() {
               </tr>
             )}
             {displayEntries.length === 0 && !deferredSearch && deferredActiveFilters.length === 0 && columns.length > 0 && [1, 2, 3].map((n) => (
-              <tr key={`mock-${n}`} className="mock" onClick={_canEditAny ? () => setShowAddRecordModal(true) : undefined}>
+              <tr key={`mock-${n}`} className="mock" onClick={() => setShowAddRecordModal(true)}>
                 <td className="serial">{n}</td>
                 {visibleColumns.map((col) => (
                   <td key={col.id}><div className="mock-cell-content">&nbsp;</div></td>
@@ -3198,7 +3016,6 @@ export default function RegisterPage() {
                 frozenLeftOffsets={frozenLeftOffsets}
                 colWidths={colWidths}
                 defaultColWidth={defaultColWidth}
-                canEdit={_canEditAny}
               />
               );
             })()}
@@ -3290,7 +3107,6 @@ export default function RegisterPage() {
         updateCalcType={updateCalcType}
         manageColsMenu={manageColsMenu}
         setManageColsMenu={setManageColsMenu}
-        canEdit={_canEditAny}
       />
 
       {/* ── Modals ── */}
@@ -3317,33 +3133,20 @@ export default function RegisterPage() {
         currentRegisterId={registerId}
       />
 
-      {showExportModal && (() => {
-        // Filter columns by download restrictions
-        const exportableColumns = downloadableColumnIds
-          ? columns.filter(c => downloadableColumnIds.has(c.id))
-          : columns;
-        // Calculate permitted row count for download
-        let exportRowCount = displayEntries.length;
-        if (rowDownloadRange) {
-          const start = (rowDownloadRange.start || 1) - 1;
-          const end = rowDownloadRange.end || displayEntries.length;
-          exportRowCount = Math.max(0, Math.min(end, displayEntries.length) - start);
-        }
-        return (
-          <ExportModal
-            onClose={() => setShowExportModal(false)}
-            onExport={(options) => {
-              if (options.format === 'excel') handleExportExcel(options);
-              else handleExportPDF(options);
-              setShowExportModal(false);
-            }}
-            columns={exportableColumns}
-            hiddenColumns={hiddenColumns}
-            selectedRowCount={selectedRows.size}
-            totalRowCount={exportRowCount}
-          />
-        );
-      })()}
+      {showExportModal && (
+        <ExportModal
+          onClose={() => setShowExportModal(false)}
+          onExport={(options) => {
+            if (options.format === 'excel') handleExportExcel(options);
+            else handleExportPDF(options);
+            setShowExportModal(false);
+          }}
+          columns={columns}
+          hiddenColumns={hiddenColumns}
+          selectedRowCount={selectedRows.size}
+          totalRowCount={displayEntries.length}
+        />
+      )}
 
       <ShareModal 
         shareModal={shareModal} setShareModal={setShareModal}
@@ -3654,127 +3457,125 @@ export default function RegisterPage() {
             </div>
 
             <div className="row-detail-footer">
-              <button className="row-detail-btn-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setDetailErrors({}); }}>{_canEditAny ? 'Cancel' : 'Close'}</button>
-              {_canEditAny && (
-                <button 
-                  className="row-detail-btn-save" 
-                  disabled={isSaving}
-                  onClick={async () => {
-                    if (!detailViewEntry) return;
+              <button className="row-detail-btn-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setDetailErrors({}); }}>Cancel</button>
+              <button 
+                className="row-detail-btn-save" 
+                disabled={isSaving}
+                onClick={async () => {
+                  if (!detailViewEntry) return;
 
-                    const errors: Record<string, string | null> = {};
-                    let hasErrors = false;
+                  const errors: Record<string, string | null> = {};
+                  let hasErrors = false;
 
-                    columns.forEach(col => {
-                      // Fallback to existing value if not edited in this session
-                      const val = detailEdits[col.id.toString()] ?? detailViewEntry.cells?.[col.id.toString()] ?? '';
-                      
-                      if ((col as any).mandatory && col.type !== 'formula' && col.type !== 'auto_increment' && val.trim() === '') {
-                        errors[col.id.toString()] = "This field is mandatory and cannot be empty.";
-                        hasErrors = true;
-                      } else if ((col as any).unique && val.trim() !== '') {
-                        const isDuplicate = localEntriesRef.current.some(
-                          e => e.id !== detailViewEntry.id && e.cells?.[col.id.toString()]?.trim().toLowerCase() === val.trim().toLowerCase()
-                        );
-                        if (isDuplicate) {
-                          errors[col.id.toString()] = `Unique field: The value "${val}" already exists.`;
-                          hasErrors = true;
-                        }
-                      } 
-                      
-                      if (!errors[col.id.toString()]) {
-                        const validation = validateCellValue(col, val);
-                        if (!validation.isValid && val.trim() !== '') {
-                          errors[col.id.toString()] = validation.error;
-                          hasErrors = true;
-                        }
-                      }
-                    });
-
-                    // Check if we already showed these warnings
-                    const hadErrorsBefore = Object.keys(detailErrors || {}).length > 0;
-                    setDetailErrors(errors);
-
-                    if (hasErrors && !hadErrorsBefore) {
-                      toast("Some entries have formatting warnings. Click save again to confirm.", { icon: '⚠️' });
-                      return;
-                    }
-
-                    // Batch all changes from the modal
-                    const changedCells: Record<string, string> = {};
-                    Object.entries(detailEdits).forEach(([colId, value]) => {
-                      if (detailViewEntry.cells?.[colId] !== value) {
-                        changedCells[colId] = value;
-                      }
-                    });
-
-                    if (Object.keys(changedCells).length > 0) {
-                      // Push to undo stack
-                      const bulkChanges = Object.entries(changedCells).map(([colId, newVal]) => ({
-                        columnId: colId,
-                        oldValue: detailViewEntry.cells?.[colId] || '',
-                        newValue: newVal
-                      }));
-                      pushToUndoStack({
-                        type: 'BULK_EDIT_CELLS',
-                        entryId: detailViewEntry.id,
-                        changes: bulkChanges
-                      });
-
-                      // 1. Update local state instantly (optimistic)
-                      setLocalEntries(prev => prev.map(e => 
-                        e.id === detailViewEntry.id ? { ...e, cells: { ...e.cells, ...changedCells } } : e
-                      ));
-
-                      // 2. Clear any pending debounces for these specific cells
-                      Object.keys(changedCells).forEach(colId => {
-                        const key = `${detailViewEntry.id}-${colId}`;
-                        if (debounceTimers.current[key]) {
-                          clearTimeout(debounceTimers.current[key]);
-                          delete debounceTimers.current[key];
-                        }
-                      });
-
-                      // 3. Persist batch to Firestore (non-blocking for UI)
-                      setIsSaving(true);
-                      updateEntry(registerId, detailViewEntry.id, changedCells).then(() => {
-                        Object.keys(changedCells).forEach(colId => {
-                          const col = columnsRef.current.find(c => c.id.toString() === colId);
-                          if (col?.linkedTo) {
-                            queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
-                          }
-                        });
-                        
-                        // 4. Patch queryClient cache
-                        queryClient.setQueryData(['register', registerId], (old: any) => {
-                          if (!old) return old;
-                          return {
-                            ...old,
-                            entries: old.entries.map((e: any) =>
-                              e.id === detailViewEntry.id ? { ...e, cells: { ...e.cells, ...changedCells } } : e
-                            ),
-                          };
-                        });
-                        toast.success("Changes saved successfully!");
-                      }).catch(err => {
-                        console.error("Failed to save:", err);
-                        toast.error("Failed to save changes. Please check your connection.");
-                      }).finally(() => {
-                        setIsSaving(false);
-                      });
-                    } else {
-                      toast.success("No changes to save.");
-                    }
+                  columns.forEach(col => {
+                    // Fallback to existing value if not edited in this session
+                    const val = detailEdits[col.id.toString()] ?? detailViewEntry.cells?.[col.id.toString()] ?? '';
                     
-                    // Close modal IMMEDIATELY for instant feel
-                    setDetailViewEntry(null);
-                    setDetailEdits({});
-                    setDetailErrors({});
-                  }}
-                >
-                  Save Changes
-                </button>
-              )}
+                    if ((col as any).mandatory && col.type !== 'formula' && col.type !== 'auto_increment' && val.trim() === '') {
+                      errors[col.id.toString()] = "This field is mandatory and cannot be empty.";
+                      hasErrors = true;
+                    } else if ((col as any).unique && val.trim() !== '') {
+                      const isDuplicate = localEntriesRef.current.some(
+                        e => e.id !== detailViewEntry.id && e.cells?.[col.id.toString()]?.trim().toLowerCase() === val.trim().toLowerCase()
+                      );
+                      if (isDuplicate) {
+                        errors[col.id.toString()] = `Unique field: The value "${val}" already exists.`;
+                        hasErrors = true;
+                      }
+                    } 
+                    
+                    if (!errors[col.id.toString()]) {
+                      const validation = validateCellValue(col, val);
+                      if (!validation.isValid && val.trim() !== '') {
+                        errors[col.id.toString()] = validation.error;
+                        hasErrors = true;
+                      }
+                    }
+                  });
+
+                  // Check if we already showed these warnings
+                  const hadErrorsBefore = Object.keys(detailErrors || {}).length > 0;
+                  setDetailErrors(errors);
+
+                  if (hasErrors && !hadErrorsBefore) {
+                    toast("Some entries have formatting warnings. Click save again to confirm.", { icon: '⚠️' });
+                    return;
+                  }
+
+                  // Batch all changes from the modal
+                  const changedCells: Record<string, string> = {};
+                  Object.entries(detailEdits).forEach(([colId, value]) => {
+                    if (detailViewEntry.cells?.[colId] !== value) {
+                      changedCells[colId] = value;
+                    }
+                  });
+
+                  if (Object.keys(changedCells).length > 0) {
+                    // Push to undo stack
+                    const bulkChanges = Object.entries(changedCells).map(([colId, newVal]) => ({
+                      columnId: colId,
+                      oldValue: detailViewEntry.cells?.[colId] || '',
+                      newValue: newVal
+                    }));
+                    pushToUndoStack({
+                      type: 'BULK_EDIT_CELLS',
+                      entryId: detailViewEntry.id,
+                      changes: bulkChanges
+                    });
+
+                    // 1. Update local state instantly (optimistic)
+                    setLocalEntries(prev => prev.map(e => 
+                      e.id === detailViewEntry.id ? { ...e, cells: { ...e.cells, ...changedCells } } : e
+                    ));
+
+                    // 2. Clear any pending debounces for these specific cells
+                    Object.keys(changedCells).forEach(colId => {
+                      const key = `${detailViewEntry.id}-${colId}`;
+                      if (debounceTimers.current[key]) {
+                        clearTimeout(debounceTimers.current[key]);
+                        delete debounceTimers.current[key];
+                      }
+                    });
+
+                    // 3. Persist batch to Firestore (non-blocking for UI)
+                    setIsSaving(true);
+                    updateEntry(registerId, detailViewEntry.id, changedCells).then(() => {
+                      Object.keys(changedCells).forEach(colId => {
+                        const col = columnsRef.current.find(c => c.id.toString() === colId);
+                        if (col?.linkedTo) {
+                          queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
+                        }
+                      });
+                      
+                      // 4. Patch queryClient cache
+                      queryClient.setQueryData(['register', registerId], (old: any) => {
+                        if (!old) return old;
+                        return {
+                          ...old,
+                          entries: old.entries.map((e: any) =>
+                            e.id === detailViewEntry.id ? { ...e, cells: { ...e.cells, ...changedCells } } : e
+                          ),
+                        };
+                      });
+                      toast.success("Changes saved successfully!");
+                    }).catch(err => {
+                      console.error("Failed to save:", err);
+                      toast.error("Failed to save changes. Please check your connection.");
+                    }).finally(() => {
+                      setIsSaving(false);
+                    });
+                  } else {
+                    toast.success("No changes to save.");
+                  }
+                  
+                  // Close modal IMMEDIATELY for instant feel
+                  setDetailViewEntry(null);
+                  setDetailEdits({});
+                  setDetailErrors({});
+                }}
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         </div>
@@ -3838,91 +3639,100 @@ export default function RegisterPage() {
             <div className="img-preview-header">
               <h3>Image Preview {urls.length > 1 ? `(${previewImageIndex + 1}/${urls.length})` : ''}</h3>
               <div className="img-preview-actions">
-                {/* Previous Image */}
-                {urls.length > 1 && (
-                  <button 
-                    className="img-preview-nav"
-                    disabled={previewImageIndex === 0}
-                    onClick={() => setPreviewImageIndex(prev => prev - 1)}
-                  >
-                    <ChevronDown size={20} style={{ transform: 'rotate(90deg)' }} />
-                  </button>
-                )}
-                {/* Next Image */}
-                {urls.length > 1 && (
-                  <button 
-                    className="img-preview-nav"
-                    disabled={previewImageIndex === urls.length - 1}
-                    onClick={() => setPreviewImageIndex(prev => prev + 1)}
-                  >
-                    <ChevronDown size={20} style={{ transform: 'rotate(-90deg)' }} />
-                  </button>
-                )}
-                
-                <div className="img-preview-divider" />
-
-                <button onClick={() => handleImageDownload(currentUrl)} className="img-download-btn" title="Download Image">
+                <button 
+                  onClick={() => handleImageDownload(currentUrl)}
+                  className="img-download-btn"
+                  title="Download Image"
+                >
                   <Download size={18} />
                   Download
                 </button>
-
                 {previewImage.entryId !== undefined && previewImage.colId !== undefined && (
                   <>
                   <label className="img-preview-add" title="Add Image">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      style={{ display: 'none' }} 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (re) => {
-                            const newUrl = re.target?.result as string;
-                            const updated = [...urls, newUrl].join('|||');
-                            handleCellChange(previewImage.entryId!, previewImage.colId!, updated);
-                            setPreviewImage({ ...previewImage, url: updated });
-                            setPreviewImageIndex(urls.length);
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
                     <Plus size={18} /> Add
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                      const f = e.target.files?.[0]; 
+                      if (!f) return; 
+                      const r = new FileReader(); 
+                      r.onload = (ev) => {
+                        const newUrl = ev.target?.result as string;
+                        const currentVal = previewImage.url;
+                        const newVal = currentVal ? currentVal + '|||' + newUrl : newUrl;
+                        handleCellChange(previewImage.entryId!, previewImage.colId!, newVal);
+                        // If the row detail modal is currently open for this entry, we should also clear the detailEdits
+                        if (detailViewEntry?.id === previewImage.entryId) {
+                          setDetailEdits(prev => ({ ...prev, [previewImage.colId!]: newVal }));
+                        }
+                        setPreviewImage({ ...previewImage, url: newVal });
+                        setPreviewImageIndex(newVal.split('|||').length - 1);
+                      }; 
+                      r.readAsDataURL(f); 
+                    }} />
                   </label>
                   <button 
                     className="img-preview-remove" 
                     onClick={() => {
-                      if (urls.length > 1) {
-                        const next = [...urls];
-                        next.splice(previewImageIndex, 1);
-                        const updated = next.join('|||');
-                        handleCellChange(previewImage.entryId!, previewImage.colId!, updated);
-                        setPreviewImage({ ...previewImage, url: updated });
+                      const updatedUrls = [...urls];
+                      updatedUrls.splice(previewImageIndex, 1);
+                      const newVal = updatedUrls.join('|||');
+                      handleCellChange(previewImage.entryId!, previewImage.colId!, newVal);
+                      if (detailViewEntry?.id === previewImage.entryId) {
+                        setDetailEdits(prev => ({ ...prev, [previewImage.colId!]: newVal }));
+                      }
+                      if (newVal) {
+                        setPreviewImage({ ...previewImage, url: newVal });
                         setPreviewImageIndex(Math.max(0, previewImageIndex - 1));
                       } else {
-                        handleCellChange(previewImage.entryId!, previewImage.colId!, '');
-                        if (detailViewEntry?.id === previewImage.entryId) {
-                          setDetailEdits(prev => ({ ...prev, [previewImage.colId!]: '' }));
-                        }
                         setPreviewImage(null);
                         setIsImgZoomed(false);
+                        setPreviewImageIndex(0);
                       }
                     }}
-                    title="Remove Current Image"
+                    title="Remove Image"
                   >
-                    <Trash2 size={18} /> Remove
+                    <Trash2 size={18} />
+                    Remove
                   </button>
                   </>
                 )}
-                <button className="img-preview-btn" onClick={() => setIsImgZoomed(!isImgZoomed)} title={isImgZoomed ? "Zoom Out" : "Zoom In"}>
+                <button 
+                  className="img-preview-btn" 
+                  onClick={() => setIsImgZoomed(!isImgZoomed)}
+                  title={isImgZoomed ? "Zoom Out" : "Zoom In"}
+                >
                   {isImgZoomed ? <ZoomOut size={20} /> : <ZoomIn size={20} />}
                 </button>
-                <button className="img-preview-close" onClick={() => { setPreviewImage(null); setIsImgZoomed(false); setPreviewImageIndex(0); }}>✕</button>
+                <button 
+                  className="img-preview-close" 
+                  onClick={() => {
+                    setPreviewImage(null);
+                    setIsImgZoomed(false);
+                    setPreviewImageIndex(0);
+                  }}
+                  title="Close Preview"
+                >
+                  ✕
+                </button>
               </div>
             </div>
             <div className="img-preview-body" onClick={() => setIsImgZoomed(!isImgZoomed)}>
-              <img src={currentUrl} alt="Large preview" className={isImgZoomed ? 'zoomed' : ''} />
+              <img 
+                src={currentUrl} 
+                alt="Large preview" 
+                className={isImgZoomed ? 'zoomed' : ''}
+              />
+              {urls.length > 1 && !isImgZoomed && (
+                <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '10px', background: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '8px' }} onClick={e => e.stopPropagation()}>
+                  {urls.map((u, i) => (
+                    <div 
+                      key={i} 
+                      onClick={() => setPreviewImageIndex(i)}
+                      style={{ width: '40px', height: '40px', borderRadius: '4px', border: previewImageIndex === i ? '2px solid #fff' : '2px solid transparent', cursor: 'pointer', backgroundImage: `url(${u})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

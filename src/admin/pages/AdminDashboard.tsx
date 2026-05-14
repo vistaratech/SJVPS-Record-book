@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { firebaseLogout } from '../../lib/firebaseAuth';
-import { LayoutDashboard, Users, Activity, Download, LogOut, BarChart3, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, Activity, LogOut, BarChart3, Menu, X, ShieldAlert } from 'lucide-react';
 import AdminUsersPage from './AdminUsersPage';
 import AdminActivityPage from './AdminActivityPage';
 import AdminDownloadRequestsPage from './AdminDownloadRequestsPage';
@@ -34,7 +34,7 @@ export default function AdminDashboard() {
   const navItems: { key: typeof activeTab; icon: any; label: string }[] = [
     { key: 'users', icon: <Users size={18}/>, label: 'Users & Roles' },
     { key: 'activity', icon: <Activity size={18}/>, label: 'Activity Log' },
-    { key: 'downloads', icon: <Download size={18}/>, label: 'Download Requests' },
+    { key: 'downloads', icon: <ShieldAlert size={18}/>, label: 'Approval Requests' },
     { key: 'analytics', icon: <BarChart3 size={18}/>, label: 'Analytics' },
   ];
 

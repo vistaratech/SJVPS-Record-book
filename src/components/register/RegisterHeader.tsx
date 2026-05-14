@@ -1,6 +1,10 @@
-import { Bookmark, Download, Share2, X, MoreHorizontal } from 'lucide-react';
+import { Bookmark, Download, Share2, X, MoreHorizontal, Trash2, Lock } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import { RequestModal } from './modals/RequestModal';
+import { useAuth } from '../../lib/auth';
+import { deleteRegister } from '../../lib/api';
+import { useNavigate } from 'react-router-dom';
 
 interface SavedTemplate {
   id: string;
@@ -13,14 +17,28 @@ interface RegisterHeaderProps {
   register: any;
   setShareModal: (open: boolean) => void;
   handleOpenExport: () => void;
+  canDownload?: boolean;
+  canEdit?: boolean;
 }
 
-export function RegisterHeader({ register, setShareModal, handleOpenExport }: RegisterHeaderProps) {
+export function RegisterHeader({ 
+  register, 
+  setShareModal, 
+  handleOpenExport,
+  canDownload = true,
+  canEdit = true
+}: RegisterHeaderProps) {
   const [saveTemplateModal, setSaveTemplateModal] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [templateName, setTemplateName] = useState('');
+  const [requestModal, setRequestModal] = useState<{ type: 'download' | 'delete_register'; isOpen: boolean }>({ type: 'download', isOpen: false });
+  
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const templateInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const isSuperAdmin = user?.role === 'superadmin';
 
   // Focus template name input when modal opens
   useEffect(() => {
@@ -79,6 +97,23 @@ export function RegisterHeader({ register, setShareModal, handleOpenExport }: Re
     setShowMoreMenu(false);
   };
 
+  const handleDeleteClick = async () => {
+    if (isSuperAdmin) {
+      if (window.confirm(`Are you sure you want to PERMANENTLY DELETE the register "${register?.name}"? This cannot be undone.`)) {
+        try {
+          await deleteRegister(register.id);
+          toast.success('Register deleted successfully');
+          navigate('/');
+        } catch (err: any) {
+          toast.error(`Failed to delete: ${err.message}`);
+        }
+      }
+    } else {
+      setRequestModal({ type: 'delete_register', isOpen: true });
+    }
+    setShowMoreMenu(false);
+  };
+
   return (
     <div className="register-header-actions" ref={menuRef}>
       <button 
@@ -95,13 +130,31 @@ export function RegisterHeader({ register, setShareModal, handleOpenExport }: Re
             <Share2 size={16} />
             <span>Share Register</span>
           </button>
-          <button className="more-menu-item" onClick={() => { handleOpenExport(); setShowMoreMenu(false); }}>
-            <Download size={16} />
-            <span>Download Options</span>
+          
+          <button 
+            className="more-menu-item" 
+            onClick={() => { 
+              if (canDownload) handleOpenExport(); 
+              else setRequestModal({ type: 'download', isOpen: true });
+              setShowMoreMenu(false); 
+            }}
+          >
+            {canDownload ? <Download size={16} /> : <Lock size={16} color="var(--primary)" />}
+            <span style={{ color: canDownload ? 'inherit' : 'var(--primary)', fontWeight: canDownload ? 400 : 600 }}>
+              {canDownload ? 'Download Options' : 'Request Download'}
+            </span>
           </button>
+
           <button className="more-menu-item" onClick={() => { setTemplateName(register?.name || ''); setSaveTemplateModal(true); }}>
             <Bookmark size={16} />
             <span>Save as Template</span>
+          </button>
+
+          <div className="context-divider" style={{ margin: '4px 0' }} />
+          
+          <button className="more-menu-item danger" onClick={handleDeleteClick}>
+            <Trash2 size={16} />
+            <span>{isSuperAdmin ? 'Delete Register' : 'Request Deletion'}</span>
           </button>
         </div>
       )}
@@ -154,6 +207,15 @@ export function RegisterHeader({ register, setShareModal, handleOpenExport }: Re
           </div>
         </div>
       )}
+
+      {/* Approval Request Modal */}
+      <RequestModal 
+        isOpen={requestModal.isOpen}
+        onClose={() => setRequestModal(prev => ({ ...prev, isOpen: false }))}
+        type={requestModal.type}
+        registerName={register?.name || 'Unknown Register'}
+        registerId={register?.id}
+      />
     </div>
   );
 }

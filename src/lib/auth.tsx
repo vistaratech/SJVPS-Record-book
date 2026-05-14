@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { User } from './api';
-import { firebaseGetMe, ensureDefaultAdmin } from './firebaseAuth';
+import { firebaseGetMe, ensureDefaultAdmin, subscribeToMe } from './firebaseAuth';
 
 const TOKEN_KEY = 'recordbook_token';
 const USER_KEY = 'recordbook_user';
@@ -91,9 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  // Validate session with Firebase on mount — refreshes permissions and catches invalid tokens
+  // Validate session with Firebase and subscribe to real-time updates (permissions, status)
   useEffect(() => {
-    // Always ensure default admin exists
     ensureDefaultAdmin().catch(() => {});
 
     if (!token) {
@@ -101,32 +100,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    let cancelled = false;
-
-    firebaseGetMe(token)
-      .then((data) => {
-        if (cancelled) return;
-        const serverUser = data.user;
-        if (serverUser) {
-          if (serverUser.status && serverUser.status !== 'active') {
-            logout();
-            return;
-          }
-          sessionStorage.setItem(USER_KEY, JSON.stringify(serverUser));
-          localStorage.setItem(USER_KEY, JSON.stringify(serverUser));
-          setUser(serverUser as User);
+    const unsubscribe = subscribeToMe(token, (serverUser) => {
+      if (serverUser) {
+        if (serverUser.status && serverUser.status !== 'active') {
+          logout();
+          return;
         }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        // Token is invalid — force logout
-        logout();
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
+        // Sync to storage for persistence across tabs
+        sessionStorage.setItem(USER_KEY, JSON.stringify(serverUser));
+        localStorage.setItem(USER_KEY, JSON.stringify(serverUser));
+        setUser(serverUser as User);
+        setIsLoading(false);
+      }
+    }, (err) => {
+      console.error('User subscription error:', err);
+      logout();
+      setIsLoading(false);
+    });
 
-    return () => { cancelled = true; };
+    return () => { unsubscribe(); };
   }, [token, logout]);
 
   return (

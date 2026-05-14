@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../lib/auth';
-import { firebaseGetAllDownloadRequests, firebaseRespondDownloadRequest } from '../../lib/firebaseAuth';
-import { Download, CheckCircle, XCircle, Clock, RefreshCw, Filter, User, ChevronDown, Send, MessageSquare, Calendar } from 'lucide-react';
+import { firebaseGetAllDownloadRequests, firebaseRespondRequest } from '../../lib/firebaseAuth';
+import { Download, CheckCircle, XCircle, Clock, RefreshCw, Filter, User, ChevronDown, Send, MessageSquare, Calendar, Trash2, ShieldAlert } from 'lucide-react';
+import { deleteRegister } from '../../lib/api';
 
 export default function AdminDownloadRequestsPage() {
   const { user } = useAuth();
@@ -20,14 +21,32 @@ export default function AdminDownloadRequestsPage() {
   useEffect(() => { fetch_(); }, []);
 
   const handleRespond = async (id:string, status:'approved'|'rejected') => {
+    const req = requests.find(r => r.id === id);
+    if (!req) return;
+
     if (status === 'rejected' && !adminNote.trim()) {
       alert('Please provide a reason for rejection');
       return;
     }
+
     try {
-      await firebaseRespondDownloadRequest(id, status, adminNote, user?.name || user?.email || 'Admin');
+      setRespondingTo(id); // Show loading state
+      
+      // If it's a delete request and we are approving it, perform the deletion first
+      if (status === 'approved' && req.type === 'delete_register' && req.registerId) {
+        const confirmed = window.confirm(`Approving this will PERMANENTLY DELETE the register "${req.registerName}". Continue?`);
+        if (!confirmed) return;
+        
+        await deleteRegister(Number(req.registerId));
+        console.log('Register deleted successfully via request approval');
+      }
+
+      await firebaseRespondRequest(id, status, adminNote, user?.name || user?.email || 'Admin');
       setRespondingTo(null); setAdminNote(''); fetch_();
-    } catch(e:any) { alert(e.message); }
+    } catch(e:any) { 
+      alert(`Action failed: ${e.message}`); 
+      setRespondingTo(null);
+    }
   };
 
   // Unique users from requests
@@ -57,7 +76,7 @@ export default function AdminDownloadRequestsPage() {
   return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px',flexWrap:'wrap',gap:'10px'}}>
-        <h2 style={{margin:0,fontSize:'18px',fontWeight:700,color:'var(--foreground)',display:'flex',alignItems:'center',gap:'10px'}}><Download size={20} color="var(--navy)"/> Download Requests</h2>
+        <h2 style={{margin:0,fontSize:'18px',fontWeight:700,color:'var(--foreground)',display:'flex',alignItems:'center',gap:'10px'}}><ShieldAlert size={20} color="var(--navy)"/> Approval Requests</h2>
         <button onClick={fetch_} style={{background:'var(--surface)',border:'1px solid var(--border)',color:'var(--navy)',cursor:'pointer',padding:'10px',borderRadius:'8px',display:'flex',boxShadow:'var(--shadow-sm)'}}><RefreshCw size={16}/></button>
       </div>
 
@@ -116,7 +135,11 @@ export default function AdminDownloadRequestsPage() {
                   <div key={r.id} style={{background:'var(--surface)',borderRadius:'12px',border:'2px solid rgba(245,158,11,0.3)',padding:'16px 20px',boxShadow:'var(--shadow-md)'}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'12px',flexWrap:'wrap',gap:'8px'}}>
                       <div>
-                        <div style={{fontSize:'15px',color:'var(--foreground)',fontWeight:700,marginBottom:'4px'}}>{r.registerName}</div>
+                        <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
+                          {r.type === 'delete_register' ? <Trash2 size={16} color="var(--destructive)"/> : <Download size={16} color="var(--navy)"/>}
+                          <div style={{fontSize:'15px',color:'var(--foreground)',fontWeight:700}}>{r.registerName}</div>
+                          {r.type === 'delete_register' && <span style={{fontSize:'10px',background:'var(--destructive-bg)',color:'var(--destructive)',padding:'2px 6px',borderRadius:'4px',fontWeight:700}}>DELETE REQUEST</span>}
+                        </div>
                         <div style={{fontSize:'13px',color:'var(--muted)'}}>Requested by <strong style={{color:'var(--foreground)'}}>{r.userName}</strong></div>
                         <div style={{fontSize:'11px',color:'var(--muted)',marginTop:'2px',display:'flex',alignItems:'center',gap:'4px'}}>
                           <Calendar size={10}/> {new Date(r.createdAt).toLocaleString()}
@@ -125,7 +148,7 @@ export default function AdminDownloadRequestsPage() {
                       {sBadge(r.status)}
                     </div>
                     <div style={{background:'var(--background)',padding:'12px',borderRadius:'8px',fontSize:'13px',color:'var(--foreground)',marginBottom:'16px',border:'1px solid var(--border)'}}>
-                      <strong style={{color:'var(--navy)',fontSize:'11px',textTransform:'uppercase',letterSpacing:'0.03em'}}>Reason:</strong>
+                      <strong style={{color:'var(--navy)',fontSize:'11px',textTransform:'uppercase',letterSpacing:'0.03em'}}>{r.type === 'delete_register' ? 'Deletion Reason' : 'Download Reason'}:</strong>
                       <div style={{marginTop:'4px'}}>{r.description}</div>
                     </div>
                     

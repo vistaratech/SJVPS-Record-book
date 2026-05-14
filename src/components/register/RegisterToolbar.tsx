@@ -30,6 +30,8 @@ interface RegisterToolbarProps {
   undoStackCount?: number;
   redoStackCount?: number;
   entries: any[];
+  canEdit?: boolean;
+  allColumnsCount?: number;
 }
 
 export const RegisterToolbar = memo(function RegisterToolbar({
@@ -38,14 +40,22 @@ export const RegisterToolbar = memo(function RegisterToolbar({
   selectedRows, rowCount, columns, bulkDeleteMutation,
   setManageColsMenu,
   undo, redo, undoStackCount, redoStackCount,
-  entries
+  entries,
+  canEdit = true,
+  allColumnsCount
 }: RegisterToolbarProps) {
 
   return (
     <div className="pages-actions-right">
       {/* Stats */}
-      <span className="pab-stat"><Hash size={11} />{rowCount} rows</span>
-      <span className="pab-stat"><FileText size={11} />{columns.length} cols</span>
+      <span className="pab-stat" title={rowCount < entries.length ? `Showing ${rowCount} of ${entries.length} total rows` : `${rowCount} rows total`}>
+        <Hash size={11} />
+        {rowCount < entries.length ? `${rowCount} / ${entries.length}` : rowCount} rows
+      </span>
+      <span className="pab-stat" title={columns.length < (allColumnsCount || columns.length) ? `Showing ${columns.length} of ${allColumnsCount} total columns` : `${columns.length} columns total`}>
+        <FileText size={11} />
+        {columns.length < (allColumnsCount || columns.length) ? `${columns.length} / ${allColumnsCount}` : columns.length} cols
+      </span>
 
       <div className="pab-divider" />
 
@@ -91,7 +101,7 @@ export const RegisterToolbar = memo(function RegisterToolbar({
       <div className="pab-divider" />
 
       {/* Undo */}
-      {undo && (
+      {canEdit && undo && (
         <button
           className={`pab-icon-btn${undoStackCount && undoStackCount > 0 ? '' : ' disabled'}`}
           title={`Undo${undoStackCount && undoStackCount > 0 ? ` (${undoStackCount})` : ''} — Ctrl+Z`}
@@ -105,7 +115,7 @@ export const RegisterToolbar = memo(function RegisterToolbar({
       )}
 
       {/* Redo */}
-      {redo && (
+      {canEdit && redo && (
         <button
           className={`pab-icon-btn${redoStackCount && redoStackCount > 0 ? '' : ' disabled'}`}
           title={`Redo${redoStackCount && redoStackCount > 0 ? ` (${redoStackCount})` : ''} — Ctrl+Y`}
@@ -130,7 +140,7 @@ export const RegisterToolbar = memo(function RegisterToolbar({
       </button>
 
       {/* Bulk delete */}
-      {selectedRows.size > 0 && (
+      {canEdit && selectedRows.size > 0 && (
         <button className="pab-icon-btn danger" title={`Delete ${selectedRows.size} rows`}
           onClick={() => { if (confirm(`Delete ${selectedRows.size} rows?`)) bulkDeleteMutation.mutate(); }}>
           <Trash2 size={13} />

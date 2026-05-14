@@ -1,5 +1,6 @@
 import { Hash, Calendar, ChevronDown, FlaskConical, Type as TypeIcon, SortAsc, SortDesc, Pencil, ArrowLeftRight, Copy, ArrowRight, ChevronsLeftRight, Pin, Eye, EyeOff, Eraser, Trash2, FileText, FileSpreadsheet, Share2, ArrowLeft, Link as LinkIcon, Plus } from 'lucide-react';
 import { type Column } from '../../../lib/api';
+import { ColumnIcon } from '../ColumnIcon';
 
 interface RegisterContextMenusProps {
   // Column Menu
@@ -52,6 +53,7 @@ interface RegisterContextMenusProps {
   // Manage Columns Dropdown
   manageColsMenu: { rect: DOMRect } | null;
   setManageColsMenu: (v: { rect: DOMRect } | null) => void;
+  canEdit?: boolean;
 }
 
 export function RegisterContextMenus(props: RegisterContextMenusProps) {
@@ -66,7 +68,8 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
     rowMenuId, setRowMenuId, duplicateEntryMutation, deleteEntryMutation, insertEntryMutation, localEntries,
     handleRowDownloadPDF, handleRowDownloadExcel, handleRowShareText,
     calcTypes, updateCalcType,
-    manageColsMenu, setManageColsMenu
+    manageColsMenu, setManageColsMenu,
+    canEdit = true
   } = props;
 
   return (
@@ -82,13 +85,9 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
             <div className="context-title">
               {(() => {
                 const col = columns.find((c) => c.id === colMenuId);
-                const Icon = col?.type === 'number' ? Hash :
-                            col?.type === 'date' ? Calendar :
-                            col?.type === 'dropdown' ? ChevronDown :
-                            col?.type === 'formula' ? FlaskConical : TypeIcon;
                 return (
                   <>
-                    <Icon size={14} /> {col?.name || 'Column'}
+                    <ColumnIcon type={col?.type} size={14} /> {col?.name || 'Column'}
                     <span className="context-type-badge">{col?.type}</span>
                   </>
                 );
@@ -103,106 +102,114 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
               <SortDesc size={16} /> Sort Z → A
             </button>
 
-            <div className="context-divider" />
-            <div className="context-section-label">Edit</div>
-            <button className="context-item" onClick={() => {
-              setRenameColValue(columns.find((c) => c.id === colMenuId)?.name || '');
-              setActiveModalColId(colMenuId);
-              setRenameColModal(true); setColMenuId(null);
-            }}>
-              <Pencil size={16} /> Rename Column
-            </button>
-            <button className="context-item" onClick={() => {
-              const col = columns.find((c) => c.id === colMenuId);
-              setChangeTypeValue(col?.type || 'text');
-              setNewColName(col?.name || '');
-              setNewColFormula(col?.formula || '');
-              setNewColDropdownOpts(col?.dropdownOptions?.join(', ') || '');
-              setActiveModalColId(colMenuId);
-              setChangeTypeModal(true); setColMenuId(null);
-            }}>
-              <ArrowLeftRight size={16} /> Change Column Type
-            </button>
-            <button className="context-item" onClick={() => {
-              setActiveModalColId(colMenuId);
-              setLinkColumnModal(true);
-              setColMenuId(null);
-            }}>
-              <LinkIcon size={16} /> Link
-            </button>
-            <button className="context-item" onClick={() => {
-              const col = columns.find((c) => c.id === colMenuId);
-              const isMandatory = !!(col as any)?.mandatory;
-              setColumnMandatoryMutation.mutate({ colId: colMenuId!, mandatory: !isMandatory });
-            }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'space-between' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '16px', color: 'var(--primary)' }}>＊</span> Mandatory Field
-                </span>
-                {!!(columns.find((c) => c.id === colMenuId) as any)?.mandatory && (
-                  <span style={{ background: 'var(--primary)', color: 'white', borderRadius: '10px', padding: '1px 8px', fontSize: '10px', fontWeight: 700 }}>ON</span>
+            {canEdit && (
+              <>
+                <div className="context-divider" />
+                <div className="context-section-label">Edit</div>
+                <button className="context-item" onClick={() => {
+                  setRenameColValue(columns.find((c) => c.id === colMenuId)?.name || '');
+                  setActiveModalColId(colMenuId);
+                  setRenameColModal(true); setColMenuId(null);
+                }}>
+                  <Pencil size={16} /> Rename Column
+                </button>
+                <button className="context-item" onClick={() => {
+                  const col = columns.find((c) => c.id === colMenuId);
+                  setChangeTypeValue(col?.type || 'text');
+                  setNewColName(col?.name || '');
+                  setNewColFormula(col?.formula || '');
+                  setNewColDropdownOpts(col?.dropdownOptions?.join(', ') || '');
+                  setActiveModalColId(colMenuId);
+                  setChangeTypeModal(true); setColMenuId(null);
+                }}>
+                  <ArrowLeftRight size={16} /> Change Column Type
+                </button>
+                <button className="context-item" onClick={() => {
+                  setActiveModalColId(colMenuId);
+                  setLinkColumnModal(true);
+                  setColMenuId(null);
+                }}>
+                  <LinkIcon size={16} /> Link
+                </button>
+                <button className="context-item" onClick={() => {
+                  const col = columns.find((c) => c.id === colMenuId);
+                  const isMandatory = !!(col as any)?.mandatory;
+                  setColumnMandatoryMutation.mutate({ colId: colMenuId!, mandatory: !isMandatory });
+                }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'space-between' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '16px', color: 'var(--primary)' }}>＊</span> Mandatory Field
+                    </span>
+                    {!!(columns.find((c) => c.id === colMenuId) as any)?.mandatory && (
+                      <span style={{ background: 'var(--primary)', color: 'white', borderRadius: '10px', padding: '1px 8px', fontSize: '10px', fontWeight: 700 }}>ON</span>
+                    )}
+                  </span>
+                </button>
+                <button className="context-item" onClick={() => {
+                  const col = columns.find((c) => c.id === colMenuId);
+                  const isUnique = !!(col as any)?.unique;
+                  setColumnUniqueMutation.mutate({ colId: colMenuId!, unique: !isUnique });
+                }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'space-between' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '16px', color: 'var(--primary)' }}>★</span> Unique Field
+                    </span>
+                    {!!(columns.find((c) => c.id === colMenuId) as any)?.unique && (
+                      <span style={{ background: 'var(--primary)', color: 'white', borderRadius: '10px', padding: '1px 8px', fontSize: '10px', fontWeight: 700 }}>ON</span>
+                    )}
+                  </span>
+                </button>
+                {columns.find((c) => c.id === colMenuId)?.type === 'dropdown' && (
+                  <button className="context-item" onClick={() => {
+                    const col = columns.find((c) => c.id === colMenuId);
+                    setDropdownConfigOptions(col?.dropdownOptions?.join(', ') || '');
+                    setActiveModalColId(colMenuId);
+                    setDropdownConfigModal(true); setColMenuId(null);
+                  }}>
+                    <ChevronDown size={16} /> Edit Dropdown Options
+                  </button>
                 )}
-              </span>
-            </button>
-            <button className="context-item" onClick={() => {
-              const col = columns.find((c) => c.id === colMenuId);
-              const isUnique = !!(col as any)?.unique;
-              setColumnUniqueMutation.mutate({ colId: colMenuId!, unique: !isUnique });
-            }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', justifyContent: 'space-between' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '16px', color: 'var(--primary)' }}>★</span> Unique Field
-                </span>
-                {!!(columns.find((c) => c.id === colMenuId) as any)?.unique && (
-                  <span style={{ background: 'var(--primary)', color: 'white', borderRadius: '10px', padding: '1px 8px', fontSize: '10px', fontWeight: 700 }}>ON</span>
-                )}
-              </span>
-            </button>
-            {columns.find((c) => c.id === colMenuId)?.type === 'dropdown' && (
-              <button className="context-item" onClick={() => {
-                const col = columns.find((c) => c.id === colMenuId);
-                setDropdownConfigOptions(col?.dropdownOptions?.join(', ') || '');
-                setActiveModalColId(colMenuId);
-                setDropdownConfigModal(true); setColMenuId(null);
-              }}>
-                <ChevronDown size={16} /> Edit Dropdown Options
-              </button>
+              </>
             )}
 
-            <div className="context-divider" />
-            <div className="context-section-label">Insert & Copy</div>
-            <button className="context-item" onClick={() => duplicateColumnMutation.mutate(colMenuId)}>
-              <Copy size={16} /> Duplicate Column
-            </button>
-            <button className="context-item" onClick={() => {
-              setNewColName(''); setNewColType('text'); setNewColDropdownOpts(''); setNewColFormula('');
-              setActiveModalColId(colMenuId);
-              setInsertColModal('left'); setColMenuId(null);
-            }}>
-              <ArrowLeft size={16} /> Insert Column Left
-            </button>
-            <button className="context-item" onClick={() => {
-              setNewColName(''); setNewColType('text'); setNewColDropdownOpts(''); setNewColFormula('');
-              setActiveModalColId(colMenuId);
-              setInsertColModal('right'); setColMenuId(null);
-            }}>
-              <ArrowRight size={16} /> Insert Column Right
-            </button>
+            {canEdit && (
+              <>
+                <div className="context-divider" />
+                <div className="context-section-label">Insert & Copy</div>
+                <button className="context-item" onClick={() => duplicateColumnMutation.mutate(colMenuId)}>
+                  <Copy size={16} /> Duplicate Column
+                </button>
+                <button className="context-item" onClick={() => {
+                  setNewColName(''); setNewColType('text'); setNewColDropdownOpts(''); setNewColFormula('');
+                  setActiveModalColId(colMenuId);
+                  setInsertColModal('left'); setColMenuId(null);
+                }}>
+                  <ArrowLeft size={16} /> Insert Column Left
+                </button>
+                <button className="context-item" onClick={() => {
+                  setNewColName(''); setNewColType('text'); setNewColDropdownOpts(''); setNewColFormula('');
+                  setActiveModalColId(colMenuId);
+                  setInsertColModal('right'); setColMenuId(null);
+                }}>
+                  <ArrowRight size={16} /> Insert Column Right
+                </button>
 
-            <div className="context-divider" />
-            <div className="context-section-label">Arrange</div>
-            <button className="context-item"
-              disabled={columns.findIndex((c) => c.id === colMenuId) === 0}
-              onClick={() => moveColumnMutation.mutate({ colId: colMenuId, dir: 'left' })}
-            >
-              <ChevronsLeftRight size={16} /> Move Left
-            </button>
-            <button className="context-item"
-              disabled={columns.findIndex((c) => c.id === colMenuId) === columns.length - 1}
-              onClick={() => moveColumnMutation.mutate({ colId: colMenuId, dir: 'right' })}
-            >
-              <ChevronsLeftRight size={16} /> Move Right
-            </button>
+                <div className="context-divider" />
+                <div className="context-section-label">Arrange</div>
+                <button className="context-item"
+                  disabled={columns.findIndex((c) => c.id === colMenuId) === 0}
+                  onClick={() => moveColumnMutation.mutate({ colId: colMenuId, dir: 'left' })}
+                >
+                  <ChevronsLeftRight size={16} /> Move Left
+                </button>
+                <button className="context-item"
+                  disabled={columns.findIndex((c) => c.id === colMenuId) === columns.length - 1}
+                  onClick={() => moveColumnMutation.mutate({ colId: colMenuId, dir: 'right' })}
+                >
+                  <ChevronsLeftRight size={16} /> Move Right
+                </button>
+              </>
+            )}
             <button className="context-item" onClick={() => {
               const newFrozen = new Set(frozenColumns);
               const isFrozen = newFrozen.has(colMenuId);
@@ -258,13 +265,17 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
               })}
             </div>
 
-            <div className="context-divider" />
-            <button className="context-item danger" onClick={() => { if (confirm('Clear all data?')) clearColumnDataMutation.mutate(colMenuId); }}>
-              <Eraser size={16} /> Clear Column Data
-            </button>
-            <button className="context-item danger" onClick={() => { if (confirm('Delete column?')) deleteColumnMutation.mutate(colMenuId); }}>
-              <Trash2 size={16} /> Delete Column
-            </button>
+            {canEdit && (
+              <>
+                <div className="context-divider" />
+                <button className="context-item danger" onClick={() => { if (confirm('Clear all data?')) clearColumnDataMutation.mutate(colMenuId); }}>
+                  <Eraser size={16} /> Clear Column Data
+                </button>
+                <button className="context-item danger" onClick={() => { if (confirm('Delete column?')) deleteColumnMutation.mutate(colMenuId); }}>
+                  <Trash2 size={16} /> Delete Column
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -299,28 +310,32 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
 
             <div className="context-divider" />
 
-            <button className="context-item" onClick={() => duplicateEntryMutation.mutate(rowMenuId)}>
-              <Copy size={16} /> Duplicate Record
-            </button>
+            {canEdit && (
+              <>
+                <button className="context-item" onClick={() => duplicateEntryMutation.mutate(rowMenuId)}>
+                  <Copy size={16} /> Duplicate Record
+                </button>
 
-            <button className="context-item" onClick={() => {
-              const idx = localEntries.findIndex(e => e.id === rowMenuId);
-              if (idx !== -1) {
-                insertEntryMutation.mutate({ atIndex: idx + 1 });
-              }
-            }}>
-              <Plus size={16} />
-              <div className="context-item-info">
-                <span>Add Row Below</span>
-                <span className="context-item-desc">Insert empty row at #{(localEntries.findIndex(e => e.id === rowMenuId) + 2)}</span>
-              </div>
-            </button>
+                <button className="context-item" onClick={() => {
+                  const idx = localEntries.findIndex(e => e.id === rowMenuId);
+                  if (idx !== -1) {
+                    insertEntryMutation.mutate({ atIndex: idx + 1 });
+                  }
+                }}>
+                  <Plus size={16} />
+                  <div className="context-item-info">
+                    <span>Add Row Below</span>
+                    <span className="context-item-desc">Insert empty row at #{(localEntries.findIndex(e => e.id === rowMenuId) + 2)}</span>
+                  </div>
+                </button>
 
-            <div className="context-divider" />
+                <div className="context-divider" />
 
-            <button className="context-item danger" onClick={() => { if (confirm('Delete row?')) deleteEntryMutation.mutate(rowMenuId); }}>
-              <Trash2 size={16} /> Delete
-            </button>
+                <button className="context-item danger" onClick={() => { if (confirm('Delete row?')) deleteEntryMutation.mutate(rowMenuId); }}>
+                  <Trash2 size={16} /> Delete
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

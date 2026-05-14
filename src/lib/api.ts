@@ -245,8 +245,9 @@ const registersCol = () => collection(db, 'registers');
 const regDoc = (id: number) => doc(db, 'registers', id.toString());
 
 // Chunked storage: entries are split into subcollection documents of this size
-// to stay well under Firestore's 1 MiB document limit.
-const ENTRIES_PER_CHUNK = 200;
+// to stay well under Firestore's 1 MiB document limit. 
+// Reduced to 50 for safety with registers that have many columns (e.g. 100+).
+const ENTRIES_PER_CHUNK = 50;
 const chunksCol = (registerId: number) =>
   collection(db, 'registers', registerId.toString(), 'chunks');
 const chunkDoc = (registerId: number, chunkIndex: number) =>
@@ -340,10 +341,6 @@ function renumberRows(reg: RegisterDetail) {
 }
 
 async function getRegDoc(registerId: number): Promise<RegisterDetail> {
-  // Return a shallow-safe clone from cache — avoids a Firestore round-trip on every mutation
-  if (firestoreRegisterCache.has(registerId)) {
-    return structuredClone(firestoreRegisterCache.get(registerId)!);
-  }
   const snap = await getDoc(regDoc(registerId));
   if (!snap.exists()) throw new Error('Register not found');
   const data = snap.data() as RegisterDetail;
@@ -452,10 +449,7 @@ export async function listRegisters(businessId: number): Promise<RegisterSummary
   
   const results = snap.docs
     .map(d => {
-      let r = d.data() as RegisterDetail;
-      if (firestoreRegisterCache.has(r.id)) {
-        r = firestoreRegisterCache.get(r.id)!;
-      }
+      const r = d.data() as RegisterDetail;
       seenIds.add(r.id);
       return {
         id: r.id, businessId: r.businessId, folderId: r.folderId, name: r.name, icon: r.icon, iconColor: r.iconColor,
@@ -488,10 +482,7 @@ export async function listDeletedRegisters(businessId: number): Promise<Register
   
   const results = snap.docs
     .map(d => {
-      let r = d.data() as RegisterDetail;
-      if (firestoreRegisterCache.has(r.id)) {
-        r = firestoreRegisterCache.get(r.id)!;
-      }
+      const r = d.data() as RegisterDetail;
       seenIds.add(r.id);
       return {
         id: r.id, businessId: r.businessId, folderId: r.folderId, name: r.name, icon: r.icon, iconColor: r.iconColor,
@@ -551,7 +542,13 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
     seenIds.add(e.id);
   });
 
-  if (hasDuplicates) {
+  let needsSave = hasDuplicates;
+  if (reg.entryCount !== reg.entries.length) {
+    reg.entryCount = reg.entries.length;
+    needsSave = true;
+  }
+
+  if (needsSave) {
     // Save the corrected register back to Firestore immediately so it's permanently fixed
     await saveRegDocImmediate(reg);
   }

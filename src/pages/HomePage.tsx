@@ -15,6 +15,7 @@ import { Sidebar } from '../components/home/Sidebar';
 import { NotificationPanel } from '../components/common/NotificationPanel';
 import { useNotifications } from '../lib/NotificationContext';
 import { useAuth } from '../lib/auth';
+import { RequestModal } from '../components/register/modals/RequestModal';
 
 // Lazy-load heavy page components — only downloaded when navigated to
 const RegisterPage = lazy(() => import('./RegisterPage'));
@@ -50,6 +51,9 @@ export default function HomePage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const { unreadCount } = useNotifications();
+  const [requestModal, setRequestModal] = useState<{ type: 'download' | 'delete_register'; isOpen: boolean; regId?: number; regName?: string }>({ type: 'delete_register', isOpen: false });
+
+  const isSuperAdmin = user?.role === 'superadmin';
   const toggleCollapse = useCallback(() => {
     setIsSidebarCollapsed(prev => {
       const next = !prev;
@@ -335,11 +339,23 @@ export default function HomePage() {
         return true;
       }
       if (user) {
-        const viewRestr = (user as any).permissions?.viewRestrictions;
-        // Default deny: hide if restrictions are undefined, null, or empty array
-        if (!viewRestr || !viewRestr[r.id] || !Array.isArray(viewRestr[r.id]) || viewRestr[r.id].length === 0) {
-          return false;
+        const allowedRegs = (user as any).permissions?.allowedRegisters;
+        const allowedFolders = (user as any).permissions?.allowedFolders;
+        
+        // Check folder access first (if register belongs to a folder)
+        if (r.folderId) {
+          const folderIdStr = r.folderId.toString();
+          if (!Array.isArray(allowedFolders) || !allowedFolders.map(String).includes(folderIdStr)) {
+            return false;
+          }
         }
+
+        // ONLY show if register is explicitly in the approved list
+        if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(r.id.toString())) {
+          return true;
+        }
+
+        return false;
       }
       return true;
     });
@@ -435,9 +451,16 @@ export default function HomePage() {
               <Scissors size={16} />Move
             </button>
             <button className="context-item danger" onClick={() => {
-              if (confirm('Delete this register? This cannot be undone.')) deleteMutation.mutate(menuId);
+              const reg = filtered?.find((r) => r.id === menuId);
+              if (isSuperAdmin) {
+                if (confirm(`Delete this register "${reg?.name}"?`)) deleteMutation.mutate(menuId);
+              } else {
+                setRequestModal({ type: 'delete_register', isOpen: true, regId: menuId, regName: reg?.name });
+              }
+              setMenuId(null);
             }}>
-              <Trash2 size={16} />Delete
+              <Trash2 size={16} />
+              {isSuperAdmin ? 'Delete' : 'Request Deletion'}
             </button>
           </div>
         </div>
@@ -466,6 +489,14 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* Approval Request Modal */}
+      <RequestModal 
+        isOpen={requestModal.isOpen}
+        onClose={() => setRequestModal(prev => ({ ...prev, isOpen: false }))}
+        type={requestModal.type}
+        registerName={requestModal.regName || 'Unknown Register'}
+        registerId={requestModal.regId}
+      />
     </div>
   );
 }

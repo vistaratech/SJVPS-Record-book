@@ -22,6 +22,7 @@ interface UseExportParams {
   calcTypes: Record<number, CalcType>;
   colWidths: Record<number, number>;
   rowDownloadRange?: { start?: number; end?: number } | null;
+  downloadableColumnIds?: Set<number> | null;
 }
 
 /** Shared helper: compute summary value for a column across entries */
@@ -89,6 +90,7 @@ export function useExport({
   calcTypes,
   colWidths,
   rowDownloadRange,
+  downloadableColumnIds,
 }: UseExportParams) {
 
   const handleExportExcel = useCallback(async (options: ExportOptions) => {
@@ -97,7 +99,8 @@ export function useExport({
     const visibleColumns = columns.filter((col) =>
       !hiddenColumns.has(col.id) &&
       col.type !== 'image' &&
-      options.selectedColumnIds.has(col.id)
+      options.selectedColumnIds.has(col.id) &&
+      (!downloadableColumnIds || downloadableColumnIds.has(col.id))
     );
     const headerRow = ['S.No.', ...visibleColumns.map(c => c.name)];
 
@@ -269,7 +272,8 @@ export function useExport({
     const visibleCols = columns.filter((col) =>
       !hiddenColumns.has(col.id) &&
       col.type !== 'image' &&
-      options.selectedColumnIds.has(col.id)
+      options.selectedColumnIds.has(col.id) &&
+      (!downloadableColumnIds || downloadableColumnIds.has(col.id))
     );
     const headerRow = ['S.No.', ...visibleCols.map(c => c.name)];
 
@@ -412,7 +416,11 @@ export function useExport({
     if (!register) return;
     const entry = localEntries.find(e => e.id === entryId);
     if (!entry) return;
-    const visibleCols = columns.filter(col => !hiddenColumns.has(col.id) && col.type !== 'image');
+    const visibleCols = columns.filter(col => 
+      !hiddenColumns.has(col.id) && 
+      col.type !== 'image' &&
+      (!downloadableColumnIds || downloadableColumnIds.has(col.id))
+    );
     const rowIdx = entry.rowNumber;
 
     const { default: jsPDF } = await import('jspdf');
@@ -460,14 +468,18 @@ export function useExport({
       console.error('Row PDF Error:', err);
       alert('Failed to export row as PDF.');
     }
-  }, [register, localEntries, columns, hiddenColumns]);
+  }, [register, localEntries, columns, hiddenColumns, downloadableColumnIds]);
 
 
   const handleRowDownloadExcel = useCallback(async (entryId: number) => {
     if (!register) return;
     const entry = localEntries.find(e => e.id === entryId);
     if (!entry) return;
-    const visibleCols = columns.filter(col => !hiddenColumns.has(col.id) && col.type !== 'image');
+    const visibleCols = columns.filter(col => 
+      !hiddenColumns.has(col.id) && 
+      col.type !== 'image' &&
+      (!downloadableColumnIds || downloadableColumnIds.has(col.id))
+    );
     const rowIdx = entry.rowNumber;
 
     const XLSX = await import('xlsx');
@@ -502,14 +514,18 @@ export function useExport({
       console.error('Row Excel Error:', err);
       alert('Failed to export row as Excel.');
     }
-  }, [register, localEntries, columns, hiddenColumns]);
+  }, [register, localEntries, columns, hiddenColumns, downloadableColumnIds]);
 
 
   const handleRowShareText = useCallback((entryId: number) => {
     if (!register) return;
     const entry = localEntries.find(e => e.id === entryId);
     if (!entry) return;
-    const visibleCols = columns.filter(col => !hiddenColumns.has(col.id) && col.type !== 'image');
+    const visibleCols = columns.filter(col => 
+      !hiddenColumns.has(col.id) && 
+      col.type !== 'image' &&
+      (!downloadableColumnIds || downloadableColumnIds.has(col.id))
+    );
 
     const lines = visibleCols.map(c => {
       const val = c.type === 'formula'
@@ -533,7 +549,7 @@ export function useExport({
       document.body.removeChild(ta);
       alert('Row copied to clipboard!');
     });
-  }, [register, localEntries, columns, hiddenColumns]);
+  }, [register, localEntries, columns, hiddenColumns, downloadableColumnIds]);
 
 
   return {

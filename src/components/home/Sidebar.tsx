@@ -51,6 +51,7 @@ export const Sidebar = memo(function Sidebar({
   const navigate = useNavigate();
   const { id: currentRegId } = useParams();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
@@ -523,7 +524,11 @@ export const Sidebar = memo(function Sidebar({
             </>
           ) : (
             <>
-              {folders.map(folder => {
+              {folders.filter(f => {
+                if (!user || (user as any).permissions?.isAdmin || (user as any).role === 'superadmin' || (user as any).role === 'admin' || (user as any).role === 'sheet_admin') return true;
+                const allowedFolders = (user as any).permissions?.allowedFolders;
+                return Array.isArray(allowedFolders) && allowedFolders.map(String).includes(f.id.toString());
+              }).map(folder => {
                 const folderRegs = filtered?.filter(r => r.folderId === folder.id) || [];
                 const isExpanded = expandedFolders[folder.id];
 

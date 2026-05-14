@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { firebaseGetUsers, firebaseUpdatePermissions, firebaseAdminChangePassword, firebaseUpdateUser } from '../../lib/firebaseAuth';
-import { listBusinesses, listRegisters, getRegisterColumnsOnly, listFolders, type RegisterDetail, type Folder } from '../../lib/api';
+import { listBusinesses, listRegisters, getRegisterColumnsOnly, listFolders, type RegisterDetail, type Folder, setColumnMandatory, setColumnUnique } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { ArrowLeft, FileText, Shield, Eye, Edit3, Download, EyeOff, Lock, ChevronDown, ChevronRight, X, Play, Check, Search, FolderOpen, Users } from 'lucide-react';
 import { useNotifications } from '../../lib/NotificationContext';
@@ -16,116 +16,24 @@ export default function AdminUserSettingsPage() {
   const [registers, setRegisters] = useState<RegisterDetail[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [, setSaving] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [newPw, setNewPw] = useState('');
   const [showNewPw, setShowNewPw] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [viewRestrictions, setViewRestrictions] = useState<Record<string, number[]>>({});
-  const [downloadRestrictions, setDownloadRestrictions] = useState<Record<string, number[]>>({});
-  const [editRestrictions, setEditRestrictions] = useState<Record<string, number[]>>({});
-  const [createRestrictions, setCreateRestrictions] = useState<Record<string, boolean>>({});
-  const [rowViewRestrictions, setRowViewRestrictions] = useState<Record<string, { start?: number, end?: number }>>({});
-  const [rowEditRestrictions, setRowEditRestrictions] = useState<Record<string, { start?: number, end?: number }>>({});
-  const [rowDownloadRestrictions, setRowDownloadRestrictions] = useState<Record<string, { start?: number, end?: number }>>({});
-  const [globalPerms, setGlobalPerms] = useState({
-    canView: true,
-    canEdit: false,
-    canDownload: false,
-    isAdmin: false,
-    fullSheetAccess: false
-  });
-
-  const [expandedRegId, setExpandedRegId] = useState<number | null>(null);
   const [sheetAccessGranted, setSheetAccessGranted] = useState<Record<string, boolean>>({});
-  const [rangeInputs, setRangeInputs] = useState<Record<string, any>>({});
+  const [folderAccessGranted, setFolderAccessGranted] = useState<Record<string, boolean>>({});
+  const [editRestrictions, setEditRestrictions] = useState<Record<string, any>>({});
+  const [downloadRestrictions, setDownloadRestrictions] = useState<Record<string, any>>({});
   const [previewReg, setPreviewReg] = useState<RegisterDetail | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Record<number | string, boolean>>({});
   const [userRole, setUserRole] = useState<string>('user');
+  const [expandedRegId, setExpandedRegId] = useState<number | null>(null);
+
+  const [globalPerms, setGlobalPerms] = useState({ canView: true, canEdit: false, canDownload: false, isAdmin: false, fullSheetAccess: false, canCreateSheets: false });
 
 
-
-  const applyCommonRangeRow = async (regId: string | number) => {
-    const regIdStr = regId.toString();
-    const reg = registers.find(r => r.id.toString() === regIdStr);
-    const defaultEnd = reg?.entryCount || reg?.entries?.length || '';
-
-    const startStr = rangeInputs[regIdStr]?.commonStart !== undefined 
-      ? rangeInputs[regIdStr].commonStart 
-      : (rowViewRestrictions[regIdStr]?.start?.toString() || '1');
-    const endStr = rangeInputs[regIdStr]?.commonEnd !== undefined 
-      ? rangeInputs[regIdStr].commonEnd 
-      : (rowViewRestrictions[regIdStr]?.end?.toString() || defaultEnd.toString());
-    
-    const s = parseInt(startStr, 10);
-    const e = parseInt(endStr, 10);
-    
-    const rangeObj = (isNaN(s) && isNaN(e)) ? null : { start: isNaN(s) ? undefined : s, end: isNaN(e) ? undefined : e };
-
-    // Update state locally first
-    if (!rangeObj) {
-      setRowViewRestrictions(prev => { const nm = {...prev}; delete nm[regIdStr]; return nm; });
-      setRowEditRestrictions(prev => { const nm = {...prev}; delete nm[regIdStr]; return nm; });
-      setRowDownloadRestrictions(prev => { const nm = {...prev}; delete nm[regIdStr]; return nm; });
-    } else {
-      setRowViewRestrictions(prev => ({ ...prev, [regIdStr]: rangeObj }));
-      setRowEditRestrictions(prev => ({ ...prev, [regIdStr]: rangeObj }));
-      setRowDownloadRestrictions(prev => ({ ...prev, [regIdStr]: rangeObj }));
-    }
-
-    // Force an immediate save and wait for it
-    try {
-      // Create a temporary object to simulate what the save will send
-      const tempRowView = { ...rowViewRestrictions };
-      if (!rangeObj) delete tempRowView[regIdStr]; else tempRowView[regIdStr] = rangeObj;
-      
-      await handleSave(true, { 
-        overrideRowView: tempRowView,
-        overrideRowEdit: tempRowView,
-        overrideRowDownload: tempRowView
-      });
-      
-      addNotification({ 
-        title: 'Success', 
-        message: rangeObj ? `Applied row range ${s || 1} to ${e || 'end'}` : 'Cleared row range', 
-        type: 'success' 
-      });
-    } catch (err) {
-      addNotification({ title: 'Error', message: 'Failed to save changes. Please try again.', type: 'error' });
-    }
-  };
-
-  const selectAllCommonRows = async (regId: number) => {
-    setRowViewRestrictions(prev => { const nm = {...prev}; delete nm[regId]; return nm; });
-    setRowEditRestrictions(prev => { const nm = {...prev}; delete nm[regId]; return nm; });
-    setRowDownloadRestrictions(prev => { const nm = {...prev}; delete nm[regId]; return nm; });
-    setRangeInputs(prev => ({ ...prev, [regId]: { commonStart: '', commonEnd: '' } }));
-    
-    setTimeout(() => handleSave(true), 100);
-    addNotification({ title: 'Success', message: `Restricted to all rows`, type: 'success' });
-  };
-
-  const selectAllCols = (type: 'view' | 'edit' | 'download', regId: number) => {
-    if (type === 'view') {
-      setViewRestrictions(prev => { const nextMap = { ...prev }; delete nextMap[regId]; return nextMap; });
-    } else {
-      const setState = type === 'edit' ? setEditRestrictions : setDownloadRestrictions;
-      setState(prev => { const nextMap = { ...prev }; delete nextMap[regId]; return nextMap; });
-      setViewRestrictions(prev => { const nextMap = { ...prev }; delete nextMap[regId]; return nextMap; });
-    }
-  };
-
-  const clearAll = (type: 'view' | 'edit' | 'download', regId: number) => {
-    if (type === 'view') {
-      setViewRestrictions(prev => ({ ...prev, [regId]: [] }));
-      setEditRestrictions(prev => ({ ...prev, [regId]: [] }));
-      setDownloadRestrictions(prev => ({ ...prev, [regId]: [] }));
-    } else {
-      const setState = type === 'edit' ? setEditRestrictions : setDownloadRestrictions;
-      setState(prev => ({ ...prev, [regId]: [] })); // empty array means NONE are selected
-    }
-  };
 
   useEffect(() => {
     async function loadData() {
@@ -156,55 +64,39 @@ export default function AdminUserSettingsPage() {
           canEdit: p.canEdit ?? false,
           canDownload: p.canDownload ?? false,
           isAdmin: p.isAdmin ?? false,
-          fullSheetAccess: p.fullSheetAccess ?? false
+          fullSheetAccess: p.fullSheetAccess ?? false,
+          canCreateSheets: p.canCreateSheets ?? false
         });
 
-        if (p.viewRestrictions && typeof p.viewRestrictions === 'object') {
-          setViewRestrictions(p.viewRestrictions);
-          // Build initial sheetAccessGranted from saved viewRestrictions
-          const accessMap: Record<string, boolean> = {};
-          for (const key of Object.keys(p.viewRestrictions)) {
-            accessMap[key] = true;
-          }
-          setSheetAccessGranted(accessMap);
+        if (Array.isArray(p.allowedRegisters)) {
+          const sag: Record<string, boolean> = {};
+          p.allowedRegisters.forEach((rid: string) => {
+            sag[rid] = true;
+          });
+          setSheetAccessGranted(sag);
+        } else if (p.viewRestrictions && typeof p.viewRestrictions === 'object') {
+          // Backward compatibility
+          const sag: Record<string, boolean> = {};
+          Object.keys(p.viewRestrictions).forEach(rid => {
+            sag[rid] = true;
+          });
+          setSheetAccessGranted(sag);
         }
-        if (p.downloadRestrictions && typeof p.downloadRestrictions === 'object') {
-          setDownloadRestrictions(p.downloadRestrictions);
+
+        if (Array.isArray(p.allowedFolders)) {
+          const fag: Record<string, boolean> = {};
+          p.allowedFolders.forEach((fid: string) => {
+            fag[fid] = true;
+          });
+          setFolderAccessGranted(fag);
         }
+
         if (p.editRestrictions && typeof p.editRestrictions === 'object') {
           setEditRestrictions(p.editRestrictions);
         }
-        if (p.createRestrictions && typeof p.createRestrictions === 'object') {
-          setCreateRestrictions(p.createRestrictions);
-        }
-        if (p.rowViewRestrictions && typeof p.rowViewRestrictions === 'object') {
-          setRowViewRestrictions(p.rowViewRestrictions);
-        }
-        if (p.rowEditRestrictions && typeof p.rowEditRestrictions === 'object') {
-          setRowEditRestrictions(p.rowEditRestrictions);
-        }
-        if (p.rowDownloadRestrictions && typeof p.rowDownloadRestrictions === 'object') {
-          setRowDownloadRestrictions(p.rowDownloadRestrictions);
-        }
 
-        // Initialize range inputs from saved restrictions so they appear on reload
-        const initialRangeInputs: Record<string, any> = {};
-        const processRowPerms = (perms: any, startKey: string, endKey: string) => {
-          if (perms && typeof perms === 'object') {
-            for (const key of Object.keys(perms)) {
-              if (!initialRangeInputs[key]) initialRangeInputs[key] = {};
-              if (perms[key].start !== undefined) initialRangeInputs[key][startKey] = perms[key].start.toString();
-              if (perms[key].end !== undefined) initialRangeInputs[key][endKey] = perms[key].end.toString();
-            }
-          }
-        };
-        processRowPerms(p.rowViewRestrictions, 'commonStart', 'commonEnd');
-        // We still process the others just in case they differ, but we rely on common for UI now
-        processRowPerms(p.rowViewRestrictions, 'viewStart', 'viewEnd');
-        processRowPerms(p.rowEditRestrictions, 'editStart', 'editEnd');
-        processRowPerms(p.rowDownloadRestrictions, 'dlStart', 'dlEnd');
-        if (Object.keys(initialRangeInputs).length > 0) {
-          setRangeInputs(initialRangeInputs);
+        if (p.downloadRestrictions && typeof p.downloadRestrictions === 'object') {
+          setDownloadRestrictions(p.downloadRestrictions);
         }
 
         const busList = await listBusinesses();
@@ -227,44 +119,19 @@ export default function AdminUserSettingsPage() {
 
   const handleSave = async (silent = false, overrides?: any) => {
     if (!user || !token) return;
-    if (!silent) setSaving(true);
+    setSaving(true);
     try {
-      const finalViewRestrictions: Record<string, number[]> = {};
-      const finalEditRestrictions: Record<string, number[]> = {};
-      const finalDownloadRestrictions: Record<string, number[]> = {};
-      const finalCreateRestrictions: Record<string, boolean> = {};
-      const finalRowViewRestrictions: Record<string, any> = overrides?.overrideRowView || { ...rowViewRestrictions };
-      const finalRowEditRestrictions: Record<string, any> = overrides?.overrideRowEdit || { ...rowEditRestrictions };
-      const finalRowDownloadRestrictions: Record<string, any> = overrides?.overrideRowDownload || { ...rowDownloadRestrictions };
-
-      const allSheetIds = new Set([
-        ...Object.keys(sheetAccessGranted),
-        ...Object.keys(viewRestrictions),
-        ...Object.keys(rowViewRestrictions),
-        ...Object.keys(editRestrictions),
-        ...Object.keys(createRestrictions)
-      ]);
-
-      for (const regId of allSheetIds) {
-        // Only include permissions for sheets where access is granted
-        const hasAccess = sheetAccessGranted[regId] === true;
-        if (!hasAccess) continue; // Skip sheets where access was revoked
-        
-        if (viewRestrictions[regId] !== undefined) finalViewRestrictions[regId] = viewRestrictions[regId];
-        if (editRestrictions[regId] !== undefined) finalEditRestrictions[regId] = editRestrictions[regId];
-        if (downloadRestrictions[regId] !== undefined) finalDownloadRestrictions[regId] = downloadRestrictions[regId];
-        if (createRestrictions[regId] !== undefined) finalCreateRestrictions[regId] = createRestrictions[regId];
-      }
-
       const newPerms = {
         ...globalPerms,
-        viewRestrictions: finalViewRestrictions,
-        downloadRestrictions: finalDownloadRestrictions,
-        editRestrictions: finalEditRestrictions,
-        createRestrictions: finalCreateRestrictions,
-        rowViewRestrictions: finalRowViewRestrictions,
-        rowEditRestrictions: finalRowEditRestrictions,
-        rowDownloadRestrictions: finalRowDownloadRestrictions
+        viewRestrictions: {},
+        editRestrictions: editRestrictions,
+        downloadRestrictions: downloadRestrictions,
+        createRestrictions: {},
+        rowViewRestrictions: {},
+        rowEditRestrictions: {},
+        rowDownloadRestrictions: {},
+        allowedRegisters: Object.keys(sheetAccessGranted).filter(id => sheetAccessGranted[id]),
+        allowedFolders: Object.keys(folderAccessGranted).filter(id => folderAccessGranted[id])
       };
       
       console.log('[SAVE] Updating permissions for:', user.name, newPerms);
@@ -276,7 +143,7 @@ export default function AdminUserSettingsPage() {
       console.error('Save failed:', err);
       throw err;
     } finally {
-      if (!silent) setSaving(false);
+      setSaving(false);
     }
   };
 
@@ -294,9 +161,7 @@ export default function AdminUserSettingsPage() {
 
     return () => clearTimeout(timer);
   }, [
-    globalPerms, viewRestrictions, downloadRestrictions, editRestrictions, 
-    createRestrictions, rowViewRestrictions, rowEditRestrictions, 
-    rowDownloadRestrictions, sheetAccessGranted
+    globalPerms, editRestrictions, downloadRestrictions, sheetAccessGranted, folderAccessGranted
   ]);
 
   const handleChangePassword = async () => {
@@ -314,47 +179,6 @@ export default function AdminUserSettingsPage() {
     }
   };
 
-  const toggleColumn = (type: 'view' | 'edit' | 'download', regId: number, colIndex: number, allColCount: number) => {
-    if (type === 'view') {
-      setViewRestrictions(prev => {
-        const current = prev[regId] || Array.from({length: allColCount}, (_, i) => i);
-        const isSelected = current.includes(colIndex);
-        
-        if (isSelected) {
-          setEditRestrictions(prevEdit => {
-            const currentEdit = prevEdit[regId] || Array.from({length: allColCount}, (_, i) => i);
-            return { ...prevEdit, [regId]: currentEdit.filter(i => i !== colIndex) };
-          });
-          setDownloadRestrictions(prevDl => {
-            const currentDl = prevDl[regId] || Array.from({length: allColCount}, (_, i) => i);
-            return { ...prevDl, [regId]: currentDl.filter(i => i !== colIndex) };
-          });
-          return { ...prev, [regId]: current.filter(i => i !== colIndex) };
-        } else {
-          return { ...prev, [regId]: [...current, colIndex].sort((a, b) => a - b) };
-        }
-      });
-    } else {
-      const setState = type === 'edit' ? setEditRestrictions : setDownloadRestrictions;
-      setState(prev => {
-        const current = prev[regId] || Array.from({length: allColCount}, (_, i) => i);
-        const isSelected = current.includes(colIndex);
-        
-        if (!isSelected) {
-          setViewRestrictions(prevView => {
-            const currentView = prevView[regId] || Array.from({length: allColCount}, (_, i) => i);
-            if (!currentView.includes(colIndex)) {
-              return { ...prevView, [regId]: [...currentView, colIndex].sort((a, b) => a - b) };
-            }
-            return prevView;
-          });
-          return { ...prev, [regId]: [...current, colIndex].sort((a, b) => a - b) };
-        } else {
-          return { ...prev, [regId]: current.filter(i => i !== colIndex) };
-        }
-      });
-    }
-  };
 
 
 
@@ -369,7 +193,10 @@ export default function AdminUserSettingsPage() {
             <ArrowLeft size={16} /> Back
           </button>
           <div>
-            <h1 style={{ margin: 0, fontSize: '20px', color: 'var(--navy)' }}>User Settings: {user.name || user.email}</h1>
+            <h1 style={{ margin: 0, fontSize: '20px', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              User Settings: {user.name || user.email}
+              {saving && <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--brand-green)', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: '4px', animation: 'pulse 2s infinite' }}>Saving changes...</span>}
+            </h1>
             <div style={{ color: 'var(--muted)', fontSize: '13px', marginTop: '4px' }}>Configure roles, global access, and granular sheet permissions.</div>
           </div>
         </div>
@@ -386,9 +213,6 @@ export default function AdminUserSettingsPage() {
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {[
-                  { k: 'canView', l: 'View Only', icon: <Eye size={16}/>, desc: 'Can view tables' },
-                  { k: 'canEdit', l: 'Can Edit', icon: <Edit3 size={16}/>, desc: 'Can edit data' },
-                  { k: 'canDownload', l: 'Download Access', icon: <Download size={16}/>, desc: 'Can export data' },
                   { k: 'canCreateSheets', l: 'Can Create Folders & Sheets', icon: <FileText size={16}/>, desc: 'Can add new folders and sheets' },
                   { k: 'isAdmin', l: 'Admin Access', icon: <Shield size={16}/>, desc: 'Full admin access' }
                 ].map(({ k, l, icon, desc }) => (
@@ -540,9 +364,6 @@ export default function AdminUserSettingsPage() {
             const renderSheet = (reg: RegisterDetail) => {
               const cols = [...reg.columns].sort((a, b) => a.position - b.position);
               const allColIndices = cols.map((_, i) => i);
-              const viewCols = viewRestrictions[reg.id] || allColIndices;
-              const editCols = editRestrictions[reg.id] || allColIndices;
-              const dlCols = downloadRestrictions[reg.id] || allColIndices;
               const isExpanded = expandedRegId === reg.id;
               const hasAccess = globalPerms.isAdmin || sheetAccessGranted[reg.id] === true;
 
@@ -552,74 +373,105 @@ export default function AdminUserSettingsPage() {
                     {isExpanded ? <ChevronDown size={20} color="var(--muted)" /> : <ChevronRight size={20} color="var(--muted)" />}
                     <FileText size={20} color="var(--accent)" />
                     <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--navy)', flex: 1 }}>{reg.name} {!hasAccess && <span style={{fontSize: '12px', color: 'var(--destructive)', marginLeft: '8px'}}>(No Access)</span>}</h3>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <button disabled={globalPerms.isAdmin} onClick={(e) => { e.stopPropagation(); if (globalPerms.isAdmin) return; if (hasAccess) { setSheetAccessGranted(prev => ({ ...prev, [reg.id]: false })); } else { setSheetAccessGranted(prev => ({ ...prev, [reg.id]: true })); const defaultCols = cols.length > 0 ? [0] : []; if (!viewRestrictions[reg.id] || viewRestrictions[reg.id].length === 0) setViewRestrictions(prev => ({ ...prev, [reg.id]: defaultCols })); if (!editRestrictions[reg.id] || editRestrictions[reg.id].length === 0) setEditRestrictions(prev => ({ ...prev, [reg.id]: defaultCols })); if (!downloadRestrictions[reg.id] || downloadRestrictions[reg.id].length === 0) setDownloadRestrictions(prev => ({ ...prev, [reg.id]: defaultCols })); } }} style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid', fontSize: '12px', fontWeight: 600, cursor: globalPerms.isAdmin ? 'not-allowed' : 'pointer', background: hasAccess ? '#dcfce7' : 'var(--surface)', color: hasAccess ? '#16a34a' : 'var(--muted)', borderColor: hasAccess ? '#86efac' : 'var(--border)' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      {hasAccess && (
+                        <>
+                          <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#8B5CF6', cursor: 'pointer', padding: '4px 8px', background: 'rgba(139, 92, 246, 0.05)', borderRadius: '6px', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={editRestrictions[reg.id] === undefined} 
+                              onChange={() => setEditRestrictions(prev => {
+                                const next = { ...prev };
+                                if (next[reg.id] === undefined) next[reg.id] = [];
+                                else delete next[reg.id];
+                                return next;
+                              })} 
+                              style={{ width: '16px', height: '16px', accentColor: '#8B5CF6' }}
+                            />
+                            <Edit3 size={14} color="#8B5CF6" /> Edit
+                          </label>
+
+                          <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#0891b2', cursor: 'pointer', padding: '4px 8px', background: 'rgba(8, 145, 178, 0.05)', borderRadius: '6px', border: '1px solid rgba(8, 145, 178, 0.2)' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={downloadRestrictions[reg.id] === undefined} 
+                              onChange={() => setDownloadRestrictions(prev => {
+                                const next = { ...prev };
+                                if (next[reg.id] === undefined) next[reg.id] = [];
+                                else delete next[reg.id];
+                                return next;
+                              })} 
+                              style={{ width: '16px', height: '16px', accentColor: '#0891b2' }}
+                            />
+                            <Download size={14} color="#0891b2" /> Download
+                          </label>
+                        </>
+                      )}
+                      <button disabled={globalPerms.isAdmin} onClick={(e) => { e.stopPropagation(); if (globalPerms.isAdmin) return; if (hasAccess) { setSheetAccessGranted(prev => ({ ...prev, [reg.id]: false })); } else { setSheetAccessGranted(prev => ({ ...prev, [reg.id]: true })); } }} style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid', fontSize: '12px', fontWeight: 600, cursor: globalPerms.isAdmin ? 'not-allowed' : 'pointer', background: hasAccess ? '#dcfce7' : 'var(--surface)', color: hasAccess ? '#16a34a' : 'var(--muted)', borderColor: hasAccess ? '#86efac' : 'var(--border)' }}>
                         {hasAccess ? <><Check size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Access Granted</> : 'Grant Access'}
                       </button>
                       <span style={{ fontSize: '12px', color: 'var(--muted)', background: 'var(--surface)', padding: '4px 10px', borderRadius: '20px', border: '1px solid var(--border)' }}>{cols.length} Columns</span>
-                      <button onClick={(e) => { e.stopPropagation(); setPreviewReg(reg); }} style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface)', fontSize: '12px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--navy)' }}><Play size={12} /> Preview</button>
                     </div>
                   </div>
                   {isExpanded && (
                     <div style={{ padding: '20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                        <input type="checkbox" checked={createRestrictions[reg.id] === true} onChange={() => setCreateRestrictions(prev => ({ ...prev, [reg.id]: !prev[reg.id] }))} style={{ width: '18px', height: '18px', accentColor: 'var(--destructive)' }} />
-                        <span style={{ fontWeight: 600, color: 'var(--navy)', fontSize: '14px' }}>Can Create Records in this Sheet</span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px', background: 'var(--surface)', borderRadius: '10px', padding: '16px', border: '1px solid var(--border)' }}>
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)', marginBottom: '8px' }}>Row Access Range (View, Edit, Download)</div>
-                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            <input type="number" placeholder="From" min={1} value={rangeInputs[reg.id]?.commonStart !== undefined ? rangeInputs[reg.id].commonStart : (rowViewRestrictions[reg.id]?.start || 1)} onChange={e => setRangeInputs(prev => ({ ...prev, [reg.id]: { ...prev[reg.id], commonStart: e.target.value } }))} style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '13px', maxWidth: '150px' }} />
-                            <span style={{ color: 'var(--muted)', fontSize: '13px', fontWeight: 500 }}>to</span>
-                            <input type="number" placeholder="To row" min={1} value={rangeInputs[reg.id]?.commonEnd !== undefined ? rangeInputs[reg.id].commonEnd : (rowViewRestrictions[reg.id]?.end || reg.entryCount || reg.entries?.length || '')} onChange={e => setRangeInputs(prev => ({ ...prev, [reg.id]: { ...prev[reg.id], commonEnd: e.target.value } }))} style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '13px', maxWidth: '150px' }} />
-                            <button onClick={() => applyCommonRangeRow(reg.id)} style={{ padding: '0 16px', height: '35px', background: 'var(--brand-green)', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Apply</button>
-                            <button onClick={() => selectAllCommonRows(reg.id)} style={{ padding: '0 12px', height: '35px', background: 'var(--surface)', color: 'var(--navy)', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>All</button>
-                          </div>
-                          {rowViewRestrictions[reg.id] && (rowViewRestrictions[reg.id].start || rowViewRestrictions[reg.id].end) && (
-                            <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '11px', background: '#dcfce7', color: '#16a34a', padding: '3px 8px', borderRadius: '12px', fontWeight: 600, border: '1px solid #86efac' }}>
-                                Active Range: Rows {rowViewRestrictions[reg.id].start || 1} – {rowViewRestrictions[reg.id].end || '∞'}
-                              </span>
-                              <button onClick={() => selectAllCommonRows(reg.id)} style={{ fontSize: '11px', color: 'var(--destructive)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+                      <div style={{ padding: '12px', background: 'rgba(0,45,93,0.02)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <FileText size={14} /> Sheet Columns ({cols.length})
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {cols.map((col, idx) => (
+                            <div key={col.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', background: 'white', padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--border)', color: 'var(--navy)', fontWeight: 500 }}>
+                              <span style={{ color: 'var(--muted)', fontWeight: 600, width: '24px', flexShrink: 0 }}>{idx + 1}.</span> 
+                              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '20px' }}>{col.name}</span>
+                              
+                              <div style={{ display: 'flex', gap: '0px', alignItems: 'center', flexShrink: 0 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: (col as any).mandatory ? 'var(--primary)' : 'var(--muted)', cursor: 'pointer', userSelect: 'none', width: '100px', transition: 'color 0.2s' }}>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={!!(col as any).mandatory} 
+                                    onChange={async () => {
+                                      const newVal = !(col as any).mandatory;
+                                      try {
+                                        await setColumnMandatory(reg.id, col.id, newVal);
+                                        setRegisters(prev => prev.map(r => r.id === reg.id ? { ...r, columns: r.columns.map(c => c.id === col.id ? { ...c, mandatory: newVal } : c) } : r));
+                                        addNotification({ title: 'Updated', message: `Column "${col.name}" is now ${newVal ? 'mandatory' : 'optional'}`, type: 'success' });
+                                      } catch (err) {
+                                        addNotification({ title: 'Error', message: 'Failed to update column', type: 'error' });
+                                      }
+                                    }}
+                                    style={{ width: '15px', height: '15px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                                  />
+                                  Mandatory
+                                </label>
+
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: (col as any).unique ? '#0891b2' : 'var(--muted)', cursor: 'pointer', userSelect: 'none', width: '90px', transition: 'color 0.2s' }}>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={!!(col as any).unique} 
+                                    onChange={async () => {
+                                      const newVal = !(col as any).unique;
+                                      try {
+                                        await setColumnUnique(reg.id, col.id, newVal);
+                                        setRegisters(prev => prev.map(r => r.id === reg.id ? { ...r, columns: r.columns.map(c => c.id === col.id ? { ...c, unique: newVal } : c) } : r));
+                                        addNotification({ title: 'Updated', message: `Column "${col.name}" is now ${newVal ? 'unique' : 'not unique'}`, type: 'success' });
+                                      } catch (err) {
+                                        addNotification({ title: 'Error', message: 'Failed to update column', type: 'error' });
+                                      }
+                                    }}
+                                    style={{ width: '15px', height: '15px', accentColor: '#0891b2', cursor: 'pointer' }}
+                                  />
+                                  Unique
+                                </label>
+
+                                <div style={{ width: '80px', textAlign: 'right' }}>
+                                  <span style={{ fontSize: '10px', color: 'var(--muted)', background: 'var(--surface)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-light)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.02em' }}>{col.type}</span>
+                                </div>
+                              </div>
                             </div>
-                          )}
+                          ))}
                         </div>
                       </div>
-
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--navy)', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Shield size={16} /> Column-Level Access Control
-                      </div>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead><tr>
-                          <th style={{ paddingBottom: '12px', color: 'var(--muted)', fontSize: '13px', fontWeight: 600, width: '60px' }}>S.NO</th>
-                          <th style={{ paddingBottom: '12px', color: 'var(--muted)', fontSize: '13px', fontWeight: 600 }}>Column Name</th>
-                          <th style={{ paddingBottom: '12px', color: 'var(--muted)', fontSize: '13px', fontWeight: 600, width: '130px', textAlign: 'center', opacity: globalPerms.canView ? 1 : 0.4 }}>
-                            <div style={{ marginBottom: '4px' }}>Can View {!globalPerms.canView && <span style={{ fontSize: '10px', color: 'var(--destructive)' }}>OFF</span>}</div>
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}><button disabled={!globalPerms.canView} onClick={() => selectAllCols('view', reg.id)} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', border: '1px solid var(--border)', cursor: globalPerms.canView ? 'pointer' : 'not-allowed' }}>All</button><button disabled={!globalPerms.canView} onClick={() => clearAll('view', reg.id)} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', border: '1px solid var(--border)', cursor: globalPerms.canView ? 'pointer' : 'not-allowed' }}>None</button></div>
-                          </th>
-                          <th style={{ paddingBottom: '12px', color: 'var(--muted)', fontSize: '13px', fontWeight: 600, width: '130px', textAlign: 'center', opacity: globalPerms.canEdit ? 1 : 0.4 }}>
-                            <div style={{ marginBottom: '4px' }}>Can Edit {!globalPerms.canEdit && <span style={{ fontSize: '10px', color: 'var(--destructive)' }}>OFF</span>}</div>
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}><button disabled={!globalPerms.canEdit} onClick={() => selectAllCols('edit', reg.id)} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', border: '1px solid var(--border)', cursor: globalPerms.canEdit ? 'pointer' : 'not-allowed' }}>All</button><button disabled={!globalPerms.canEdit} onClick={() => clearAll('edit', reg.id)} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', border: '1px solid var(--border)', cursor: globalPerms.canEdit ? 'pointer' : 'not-allowed' }}>None</button></div>
-                          </th>
-                          <th style={{ paddingBottom: '12px', color: 'var(--muted)', fontSize: '13px', fontWeight: 600, width: '130px', textAlign: 'center', opacity: globalPerms.canDownload ? 1 : 0.4 }}>
-                            <div style={{ marginBottom: '4px' }}>Can Download {!globalPerms.canDownload && <span style={{ fontSize: '10px', color: 'var(--destructive)' }}>OFF</span>}</div>
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}><button disabled={!globalPerms.canDownload} onClick={() => selectAllCols('download', reg.id)} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', border: '1px solid var(--border)', cursor: globalPerms.canDownload ? 'pointer' : 'not-allowed' }}>All</button><button disabled={!globalPerms.canDownload} onClick={() => clearAll('download', reg.id)} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', border: '1px solid var(--border)', cursor: globalPerms.canDownload ? 'pointer' : 'not-allowed' }}>None</button></div>
-                          </th>
-                        </tr></thead>
-                        <tbody>
-                          {cols.map((col, index) => (
-                            <tr key={col.id} style={{ borderTop: '1px solid var(--border-light)' }}>
-                              <td style={{ padding: '12px 0', fontSize: '13px', color: 'var(--muted)' }}>{index + 1}</td>
-                              <td style={{ padding: '12px 0', fontWeight: 500, color: 'var(--foreground)' }}>{col.name} <span style={{ fontSize: '12px', color: 'var(--muted)', marginLeft: '8px' }}>({col.type})</span></td>
-                              <td style={{ padding: '12px 0', textAlign: 'center', opacity: globalPerms.canView ? 1 : 0.35 }}><input type="checkbox" checked={viewCols.includes(index)} disabled={!globalPerms.canView} onChange={() => toggleColumn('view', reg.id, index, cols.length)} style={{ width: '18px', height: '18px', cursor: globalPerms.canView ? 'pointer' : 'not-allowed', accentColor: 'var(--brand-green)' }} /></td>
-                              <td style={{ padding: '12px 0', textAlign: 'center', opacity: globalPerms.canEdit ? 1 : 0.35 }}><input type="checkbox" checked={editCols.includes(index)} disabled={!globalPerms.canEdit} onChange={() => toggleColumn('edit', reg.id, index, cols.length)} style={{ width: '18px', height: '18px', cursor: globalPerms.canEdit ? 'pointer' : 'not-allowed', accentColor: '#8B5CF6' }} /></td>
-                              <td style={{ padding: '12px 0', textAlign: 'center', opacity: globalPerms.canDownload ? 1 : 0.35 }}><input type="checkbox" checked={dlCols.includes(index)} disabled={!globalPerms.canDownload} onChange={() => toggleColumn('download', reg.id, index, cols.length)} style={{ width: '18px', height: '18px', cursor: globalPerms.canDownload ? 'pointer' : 'not-allowed', accentColor: '#F59E0B' }} /></td>
-                            </tr>
-                          ))}
-                          {cols.length === 0 && <tr><td colSpan={5} style={{ padding: '12px 0', color: 'var(--muted)', textAlign: 'center' }}>No columns in this sheet</td></tr>}
-                        </tbody>
-                      </table>
                     </div>
                   )}
                 </div>
@@ -658,7 +510,25 @@ export default function AdminUserSettingsPage() {
                         {isFolderOpen ? <ChevronDown size={18} color="#92400e" /> : <ChevronRight size={18} color="#92400e" />}
                         <FolderOpen size={20} color="#f59e0b" />
                         <span style={{ fontWeight: 700, fontSize: '15px', color: '#92400e', flex: 1 }}>{folder.name}</span>
-                        <span style={{ fontSize: '12px', color: '#92400e', background: '#fde68a', padding: '3px 10px', borderRadius: '12px' }}>{sheetsInFolder.length} sheet{sheetsInFolder.length !== 1 ? 's' : ''}</span>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <button 
+                            disabled={globalPerms.isAdmin} 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (globalPerms.isAdmin) return; 
+                              const hasAccess = folderAccessGranted[folder.id] === true;
+                              setFolderAccessGranted(prev => ({ ...prev, [folder.id]: !hasAccess }));
+                            }} 
+                            style={{ 
+                              padding: '6px 14px', borderRadius: '6px', border: '1px solid', fontSize: '12px', fontWeight: 600, cursor: globalPerms.isAdmin ? 'not-allowed' : 'pointer', 
+                              background: folderAccessGranted[folder.id] ? '#dcfce7' : 'var(--surface)', color: folderAccessGranted[folder.id] ? '#16a34a' : 'var(--muted)', borderColor: folderAccessGranted[folder.id] ? '#86efac' : 'var(--border)' 
+                            }}
+                          >
+                            {folderAccessGranted[folder.id] ? <><Check size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Access Granted</> : 'Grant Access'}
+                          </button>
+                          <span style={{ fontSize: '12px', color: '#92400e', background: '#fde68a', padding: '3px 10px', borderRadius: '12px' }}>{sheetsInFolder.length} sheets</span>
+                        </div>
                       </div>
                       {isFolderOpen && (
                         <div style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -700,13 +570,7 @@ export default function AdminUserSettingsPage() {
                 <div>
                   <h2 style={{ margin: 0, fontSize: '18px', color: 'var(--navy)' }}>Preview: {previewReg.name}</h2>
                   <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--muted)' }}>
-                    {(() => {
-                        const rr = rowViewRestrictions[previewReg.id];
-                        if (rr && (rr.start || rr.end)) {
-                            return `Showing permitted rows from ${rr.start || 'start'} to ${rr.end || 'end'} based on user's current permissions.`;
-                        }
-                        return `Showing the first 5 rows based on user's current permissions.`;
-                    })()}
+                     Showing the first 5 rows of this register.
                   </p>
                 </div>
                 <button onClick={() => setPreviewReg(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}><X size={24} /></button>
@@ -720,8 +584,7 @@ export default function AdminUserSettingsPage() {
                       </th>
                       {(() => {
                         const cols = [...previewReg.columns].sort((a, b) => a.position - b.position);
-                        const allowedView = viewRestrictions[previewReg.id] || cols.map((_, i) => i);
-                        return cols.filter((_, i) => allowedView.includes(i)).map(col => (
+                        return cols.map(col => (
                           <th key={col.id} style={{ padding: '10px 16px', textAlign: 'left', background: 'var(--surface)', borderBottom: '1px solid var(--border)', color: 'var(--navy)', fontWeight: 600, position: 'sticky', top: 0, zIndex: 10, minWidth: '120px' }}>
                             {col.name}
                           </th>
@@ -732,49 +595,35 @@ export default function AdminUserSettingsPage() {
                   <tbody>
                     {(() => {
                         const cols = [...previewReg.columns].sort((a, b) => a.position - b.position);
-                        const allowedView = viewRestrictions[previewReg.id] || cols.map((_, i) => i);
-                        const allowedEdit = editRestrictions[previewReg.id] || cols.map((_, i) => i);
-                        
-                        const rr = rowViewRestrictions[previewReg.id];
-                        const err = rowEditRestrictions[previewReg.id];
-                        
-                        let start = 0;
-                        let end = 5;
-                        if (rr && (rr.start || rr.end)) {
-                            start = (rr.start || 1) - 1;
-                            end = rr.end || previewReg.entries.length;
-                        }
-                        const entries = (previewReg.entries || []).slice(start, end);
+                        const entries = (previewReg.entries || []).slice(0, 5);
                         
                         if (entries.length === 0) {
-                          return <tr><td colSpan={allowedView.length + 1} style={{ padding: '30px', textAlign: 'center', color: 'var(--muted)' }}>No data available for preview.</td></tr>;
+                          return <tr><td colSpan={cols.length + 1} style={{ padding: '30px', textAlign: 'center', color: 'var(--muted)' }}>No data available for preview.</td></tr>;
                         }
 
                         return entries.map((row, i) => {
-                          const actualRowIndex = start + i;
-                          const isRowEditable = !err || ((!err.start || actualRowIndex >= err.start - 1) && (!err.end || actualRowIndex < err.end));
+                          const actualRowIndex = i;
+                          const isEditableInUserView = editRestrictions[previewReg.id] === undefined;
                           
                           return (
                             <tr key={i} style={{ background: i % 2 === 0 ? 'white' : 'var(--background)' }}>
                               <td style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-light)', color: 'var(--muted)', fontWeight: 500 }}>
                                 {actualRowIndex + 1}
                               </td>
-                              {cols.filter((_, j) => allowedView.includes(j)).map((col) => {
-                                const origIndex = cols.findIndex(c => c.id === col.id);
-                                const isColEditable = allowedEdit.includes(origIndex);
-                                const isEditable = isRowEditable && isColEditable;
+                              {cols.map((col) => {
+                                const isEditable = isEditableInUserView;
                                 return (
                                   <td key={col.id} style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-light)', color: isEditable ? 'var(--navy)' : 'var(--muted)' }}>
                                     {isEditable ? (
                                       <input 
                                         type="text" 
-                                        value={(row as any)[col.name] || ''} 
+                                        value={row.cells?.[col.id.toString()] || ''} 
                                         readOnly 
                                         style={{ width: '100%', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--accent)', background: 'white', fontSize: '13px', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}
                                         title="Editable by this user"
                                       />
                                     ) : (
-                                      <span style={{ display: 'inline-block', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(row as any)[col.name] || '-'}</span>
+                                      <span style={{ display: 'inline-block', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.6 }}>{row.cells?.[col.id.toString()] || '-'}</span>
                                     )}
                                   </td>
                                 );

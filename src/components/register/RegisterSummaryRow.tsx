@@ -20,6 +20,7 @@ interface RegisterSummaryRowProps {
   frozenLeftOffsets: Record<number, number>;
   colWidths: Record<number, number>;
   defaultColWidth: number;
+  canEdit?: boolean;
 }
 
 export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
@@ -38,7 +39,8 @@ export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
   frozenColumns,
   frozenLeftOffsets,
   colWidths,
-  defaultColWidth
+  defaultColWidth,
+  canEdit = true
 }) => {
   const hasAnyCalcValue = useMemo(() => {
     return Object.values(calcTypes).some(v => v && v !== 'none');
@@ -106,9 +108,11 @@ export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
             </div>
           ) : (
             <div className="calc-cell-inner">
-              <button className="calc-add-btn" onClick={(e) => onCalcClick(e, col.id)} title="Add calculation">
-                <Plus size={12} />
-              </button>
+              {canEdit && (
+                <button className="calc-add-btn" onClick={(e) => onCalcClick(e, col.id)} title="Add calculation">
+                  <Plus size={12} />
+                </button>
+              )}
             </div>
           )}
         </td>
@@ -133,23 +137,25 @@ export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
             maxWidth: 60
           }}
         >
-          <div className="calc-cell-inner">
-            <button 
-              className="calc-add-btn" 
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddRecord();
-              }} 
-              title="Add New Row"
-              style={{
-                borderColor: 'var(--navy)',
-                background: 'rgba(30, 45, 120, 0.04)',
-                color: 'var(--navy)'
-              }}
-            >
-              <Plus size={12} strokeWidth={3} />
-            </button>
-          </div>
+          {canEdit && (
+            <div className="calc-cell-inner">
+              <button 
+                className="calc-add-btn" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddRecord();
+                }} 
+                title="Add New Row"
+                style={{
+                  borderColor: 'var(--navy)',
+                  background: 'rgba(30, 45, 120, 0.04)',
+                  color: 'var(--navy)'
+                }}
+              >
+                <Plus size={12} strokeWidth={3} />
+              </button>
+            </div>
+          )}
         </td>
 
         {renderCells()}

@@ -4015,6 +4015,18 @@ a {
   cursor: not-allowed !important;
 }
 
+/* Column-level restriction */
+.spreadsheet td .cell-readonly,
+.spreadsheet td .cell-input.cell-readonly,
+.spreadsheet td .cell-currency.cell-readonly,
+.spreadsheet td .cell-dropdown.cell-readonly,
+.spreadsheet td .cell-rating.cell-readonly,
+.spreadsheet td .cell-checkbox-wrap.cell-readonly {
+  background-color: rgba(243, 244, 246, 0.4) !important;
+  cursor: not-allowed !important;
+  opacity: 0.7;
+}
+
 /* Empty state */
 .filter-empty-state {
   padding: 24px 16px;
@@ -8169,4 +8181,30 @@ tr.row-selected .row-select-checkbox {
 .register-header-btn:hover {
   background: var(--surface-hover);
   color: var(--navy);
+}
+
+/* Readonly Access - Dimmed Effect and Cursor */
+.spreadsheet.readonly-access {
+  opacity: 0.75;
+}
+
+.spreadsheet.readonly-access tbody {
+  background-color: rgba(0, 0, 0, 0.01);
+  cursor: not-allowed !important;
+}
+
+.spreadsheet.readonly-access .cell-inner-wrapper,
+.spreadsheet.readonly-access input,
+.spreadsheet.readonly-access select,
+.spreadsheet.readonly-access textarea,
+.spreadsheet.readonly-access button:not(.view-image-btn):not(.view-details-btn) {
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
+/* Allow scrolling and non-editing buttons */
+.spreadsheet.readonly-access .view-image-btn,
+.spreadsheet.readonly-access .view-details-btn {
+  pointer-events: auto;
+  cursor: pointer !important;
 }

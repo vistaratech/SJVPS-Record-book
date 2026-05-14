@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, X, ChevronRight, Filter, Plus, ChevronDown } from 'lucide-react';
 import { type Column } from '../../../lib/api';
-import { ColumnIcon } from '../ColumnIcon';
+import { getColumnIcon } from '../ColumnIcon';
 
 
 export interface FilterRule {
@@ -222,9 +222,10 @@ export function FilterModal({
         <div className="fdp-active-list">
           {filters.map((f, idx) => {
             const col = columns.find(c => c.id === f.columnId);
+            const Icon = getColumnIcon(col?.type || 'text');
             return (
               <div key={idx} className="fdp-chip">
-                <ColumnIcon type={col?.type || 'text'} size={12} />
+                <Icon size={12} />
                 <span className="fdp-chip-col">{col?.name}</span>
                 <span className="fdp-chip-op">{getOpLabel(f.operator, col?.type || 'text')}</span>
                 {!NO_VALUE_OPS.includes(f.operator) && !MULTI_VALUE_OPS.includes(f.operator) && (
@@ -272,9 +273,10 @@ export function FilterModal({
                 </div>
                 <div className="fdp-col-list">
                   {filteredCols.map(c => {
+                    const Icon = getColumnIcon(c.type);
                     return (
                       <button key={c.id} className="fdp-col-item" onClick={() => setSelectedColId(c.id)}>
-                        <ColumnIcon type={c.type} size={16} />
+                        <Icon size={16} />
                         <span className="fdp-col-name">{c.name}</span>
                         <ChevronRight size={14} className="fdp-col-arrow" />
                       </button>
