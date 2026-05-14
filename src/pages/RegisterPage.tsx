@@ -1082,10 +1082,11 @@ export default function RegisterPage() {
               case 'empty': condition = !val; break;
               case 'not_empty': condition = !!val; break;
               case 'multi_select': {
-                if (!val) {
+                const trimmed = val.trim();
+                if (!trimmed) {
                   condition = f.values.includes('(Blanks)');
                 } else {
-                  condition = f.values.includes(val);
+                  condition = f.values.includes(trimmed);
                 }
                 break;
               }
