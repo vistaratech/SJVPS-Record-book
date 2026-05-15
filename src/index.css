@@ -6870,6 +6870,39 @@ body.modal-open {
   background: #fef2f2;
 }
 
+.row-detail-img-btn.success {
+  color: #10b981;
+}
+
+.row-detail-img-btn.success:hover {
+  background: #ecfdf5;
+}
+
+.row-detail-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1.5px dashed #cbd5e1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.row-detail-add-btn:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: #eff6ff;
+  transform: translateY(-1px);
+}
+
 .row-detail-image-upload {
   display: flex;
   flex-direction: column;

@@ -330,15 +330,11 @@ function updateColumnSymbol(col: Column, newType: string) {
 
 /**
  * Re-calculates rowNumber for all entries in a register based on their order in the array.
- * rowNumber is page-local (starts from 1 for each pageIndex).
+ * rowNumber is absolute across all pages (1, 2, 3...).
  */
 function renumberRows(reg: RegisterDetail) {
-  const pageCounters = new Map<number, number>();
-  reg.entries.forEach((e) => {
-    const pIdx = e.pageIndex || 0;
-    const current = (pageCounters.get(pIdx) || 0) + 1;
-    e.rowNumber = current;
-    pageCounters.set(pIdx, current);
+  reg.entries.forEach((e, i) => {
+    e.rowNumber = i + 1;
   });
 }
 
@@ -367,8 +363,9 @@ async function getRegDoc(registerId: number): Promise<RegisterDetail> {
     data.entries = allEntries;
   }
 
-  // Ensure every entry has a cells object
+  // Ensure every entry has a cells object and sequential rowNumber
   data.entries.forEach(e => { if (!e.cells) e.cells = {}; });
+  renumberRows(data);
 
   // Store the raw Firestore data in cache; return a clone so mutations stay isolated
   firestoreRegisterCache.set(registerId, data);
@@ -1612,7 +1609,7 @@ export async function addEntry(registerId: number, cells: Record<string, string>
     }
 
     const entry: Entry = {
-      id: generateId(), registerId, rowNumber: pageEntries.length + 1,
+      id: generateId(), registerId, rowNumber: 0, // Assigned by renumberRows below
       cells, createdAt: new Date().toISOString(), pageIndex,
     };
     reg.entries.push(entry);
@@ -1665,27 +1662,8 @@ export async function insertEntry(registerId: number, cells: Record<string, stri
       }
     }
 
-    // Determine the rowNumber for the new entry based on its position in the page
-    // We need to find the rowNumber of the entry currently at or after this position in the page
-    const currentEntryAtPos = reg.entries[atIndex];
-    let newRowNumber = 1;
-    
-    if (currentEntryAtPos && (currentEntryAtPos.pageIndex || 0) === pageIndex) {
-      newRowNumber = currentEntryAtPos.rowNumber;
-    } else {
-      // If we're at the end or in a different page's boundary, just use the next available number for this page
-      newRowNumber = pageEntries.length + 1;
-    }
-
-    // Shift rowNumbers for all entries in the same page that have rowNumber >= newRowNumber
-    for (const e of reg.entries) {
-      if ((e.pageIndex || 0) === pageIndex && e.rowNumber >= newRowNumber) {
-        e.rowNumber += 1;
-      }
-    }
-
     const entry: Entry = {
-      id: generateId(), registerId, rowNumber: newRowNumber,
+      id: generateId(), registerId, rowNumber: 0, // Assigned by renumberRows below
       cells, createdAt: new Date().toISOString(), pageIndex,
     };
     
@@ -1902,10 +1880,11 @@ export async function duplicateEntry(registerId: number, entryId: number): Promi
     const original = reg.entries.find((e) => e.id === entryId);
     if (!original) throw new Error('Entry not found');
     const duplicate: Entry = {
-      id: generateId(), registerId, rowNumber: reg.entries.length + 1,
+      id: generateId(), registerId, rowNumber: 0,
       cells: { ...original.cells }, createdAt: new Date().toISOString(), pageIndex: original.pageIndex,
     };
     reg.entries.push(duplicate);
+    renumberRows(reg);
     reg.entryCount = reg.entries.length;
     await saveRegDocImmediate(reg);
     return duplicate;
@@ -2171,6 +2150,7 @@ export async function restoreDeletedItem(registerId: number, deletedItemId: numb
     
     // Remove from bin
     reg.deletedItems.splice(itemIndex, 1);
+    renumberRows(reg);
     await saveRegDocImmediate(reg);
   });
 }

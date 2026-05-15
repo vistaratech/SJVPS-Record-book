@@ -390,6 +390,7 @@ interface SpreadsheetRowProps {
   searchTerm?: string;
   editableColumnIds?: Set<number> | null;
   columnSuggestions?: Record<string, string[]>;
+  displayRowNumber?: number;
 }
 
 export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: SpreadsheetRowProps) {
@@ -420,6 +421,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     searchTerm,
     editableColumnIds,
     columnSuggestions,
+    displayRowNumber,
   } = props;
   const elements: { type: 'cell' | 'pad-left' | 'pad-right', vc?: { index: number } }[] = [];
   if (virtualCols && beforeVirtualCols && afterVirtualCols) {
@@ -512,7 +514,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
             onClick={(e) => e.stopPropagation()}
             tabIndex={-1}
           />
-          <span className="serial-number" onClick={handleSerialClick} title="Click to view details">{entry.rowNumber}</span>
+          <span className="serial-number" onClick={handleSerialClick} title="Click to view details">{displayRowNumber || entry.rowNumber}</span>
         </div>
       </td>
       {elements.map((el) => {

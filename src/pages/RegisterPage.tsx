@@ -965,16 +965,22 @@ export default function RegisterPage() {
   }, []);
 
   const entriesByPage = useMemo(() => {
-    const map: Record<number, Entry[]> = {};
-    const len = localEntries.length;
-    for (let i = 0; i < len; i++) {
-      const e = localEntries[i];
-      const p = e.pageIndex || 0;
-      if (!map[p]) map[p] = [];
-      map[p].push(e);
-    }
-    return map;
+    const pages: Record<number, Entry[]> = {};
+    localEntries.forEach((e) => {
+      const pIdx = e.pageIndex || 0;
+      if (!pages[pIdx]) pages[pIdx] = [];
+      pages[pIdx].push(e);
+    });
+    return pages;
   }, [localEntries]);
+
+  const pageOffset = useMemo(() => {
+    let sum = 0;
+    for (let i = 0; i < currentPageIndex; i++) {
+      sum += (entriesByPage[i] || []).length;
+    }
+    return sum;
+  }, [entriesByPage, currentPageIndex]);
 
   // Apply row-level view restrictions before any search/filter/sort
   const rowFilteredEntries = localEntries;
@@ -1974,11 +1980,11 @@ export default function RegisterPage() {
     mutationFn: (initialCells: Record<string, string> = {}) => addEntry(registerId, initialCells, currentPageIndex),
     onMutate: async (initialCells: Record<string, string> = {}) => {
       // Optimistic: add a temporary row instantly
-      const currentPageRows = localEntries.filter((e) => (e.pageIndex || 0) === currentPageIndex).length;
+      const currentPageRows = (entriesByPage[currentPageIndex] || []).length;
       const tempEntry: Entry = {
         id: Date.now(),
         registerId,
-        rowNumber: currentPageRows + 1,
+        rowNumber: pageOffset + currentPageRows + 1,
         cells: initialCells,
         createdAt: new Date().toISOString(),
         pageIndex: currentPageIndex,
@@ -2093,7 +2099,7 @@ export default function RegisterPage() {
         newEntries.splice(atIndex, 0, newEntry);
         // Update rowNumbers for entries after this index on the same page
         const updatedEntries = newEntries.map(e => {
-            if (e.id !== newEntry.id && (e.pageIndex || 0) === currentPageIndex && e.rowNumber >= newEntry.rowNumber) {
+            if (e.id !== newEntry.id && e.rowNumber >= newEntry.rowNumber) {
                 return { ...e, rowNumber: e.rowNumber + 1 };
             }
             return e;
@@ -2105,7 +2111,7 @@ export default function RegisterPage() {
         const next = [...prev];
         next.splice(atIndex, 0, newEntry);
         return next.map(e => {
-            if (e.id !== newEntry.id && (e.pageIndex || 0) === currentPageIndex && e.rowNumber >= newEntry.rowNumber) {
+            if (e.id !== newEntry.id && e.rowNumber >= newEntry.rowNumber) {
                 return { ...e, rowNumber: e.rowNumber + 1 };
             }
             return e;
@@ -3130,6 +3136,7 @@ export default function RegisterPage() {
                   key={entry.id}
                   entry={entry}
                   idx={virtualRow.index}
+                  displayRowNumber={pageOffset + virtualRow.index + 1}
                   visibleColumns={visibleColumns}
                   virtualCols={useColVirtual ? virtualCols : undefined}
                   beforeVirtualCols={useColVirtual ? beforeVirtualCols : undefined}
@@ -3594,6 +3601,31 @@ export default function RegisterPage() {
                                   {val.split('|||').length === 1 && <button className="row-detail-img-btn" onClick={() => handleImageDownload(val.split('|||')[0])}>Download</button>}
                                   <button className="row-detail-img-btn danger" onClick={() => setDetailEdits(prev => ({ ...prev, [colKey]: '' }))}>Remove All</button>
                                 </div>
+                                
+                                <label className="row-detail-add-btn">
+                                  <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    hidden 
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (rev) => {
+                                          const newImg = rev.target?.result as string;
+                                          setDetailEdits(prev => {
+                                            const current = prev[colKey] ?? detailViewEntry.cells?.[colKey] ?? '';
+                                            const updated = current ? `${current}|||${newImg}` : newImg;
+                                            return { ...prev, [colKey]: updated };
+                                          });
+                                        };
+                                        reader.readAsDataURL(file);
+                                      }
+                                    }}
+                                  />
+                                  <Plus size={14} />
+                                  <span>Add Another Image</span>
+                                </label>
                               </div>
                             ) : (
                               <label className="row-detail-image-upload">
