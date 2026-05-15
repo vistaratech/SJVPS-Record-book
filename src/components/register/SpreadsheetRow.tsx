@@ -50,6 +50,7 @@ interface SpreadsheetTextInputProps {
   placeholder?: string;
   searchTerm?: string;
   readOnly?: boolean;
+  suggestions?: string[];
 }
 
 // Currency cell: shows ₹ formatted display, edits as raw number
@@ -151,7 +152,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
   );
 });
 
-const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colIdx, totalRows, handleCellChange, type = 'text', placeholder, searchTerm, readOnly }: SpreadsheetTextInputProps) => {
+const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colIdx, totalRows, handleCellChange, type = 'text', placeholder, searchTerm, readOnly, suggestions }: SpreadsheetTextInputProps) => {
   let initialValue = entry.cells?.[col.id.toString()] || '';
   if (col.type === 'date' && initialValue.includes('/')) {
     initialValue = initialValue.replace(/\//g, '-');
@@ -290,9 +291,17 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
       placeholder={placeholder}
       inputMode={col.type === 'number' ? 'decimal' : undefined}
       autoComplete="off"
-      list={['text', 'email', 'phone', 'url'].includes(col.type) ? `datalist-${col.id}` : undefined}
       readOnly={readOnly}
+      list={suggestions && suggestions.length > 0 ? `list-${col.id}` : undefined}
     />
+    {suggestions && suggestions.length > 0 && (
+      <datalist id={`list-${col.id}`}>
+        {suggestions.map((s, i) => (
+          <option key={`${s}-${i}`} value={s} />
+        ))}
+      </datalist>
+    )}
+    </>
   );
 });
 
@@ -330,6 +339,7 @@ interface SpreadsheetRowProps {
   onCellFormatClick?: (entryId: number, colId: string, rect: DOMRect) => void;
   searchTerm?: string;
   editableColumnIds?: Set<number> | null;
+  columnSuggestions?: Record<string, string[]>;
 }
 
 export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: SpreadsheetRowProps) {
@@ -359,6 +369,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     onCellFormatClick,
     searchTerm,
     editableColumnIds,
+    columnSuggestions,
   } = props;
   const elements: { type: 'cell' | 'pad-left' | 'pad-right', vc?: { index: number } }[] = [];
   if (virtualCols && beforeVirtualCols && afterVirtualCols) {
@@ -665,6 +676,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               handleCellChange={handleCellChange}
               searchTerm={searchTerm}
               readOnly={!isEditable}
+              suggestions={columnSuggestions?.[col.id.toString()]}
             />
           )}
           {col.type !== 'formula' && col.type !== 'auto_increment' && isEditable && (

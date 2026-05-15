@@ -1125,6 +1125,26 @@ export default function RegisterPage() {
 
     return result;
   }, [localEntries, columns, deferredSearch, deferredActiveFilters, sortColId, sortDir, entriesByPage, currentPageIndex]);
+
+  // ── Column Suggestions (Autocomplete) ──
+  const columnSuggestions = useMemo(() => {
+    const suggestions: Record<string, string[]> = {};
+    columns.forEach(col => {
+      // Only for text-based or related columns where autocomplete makes sense
+      if (['text', 'email', 'phone', 'url', 'currency', 'auto_increment'].includes(col.type)) {
+        const set = new Set<string>();
+        const colIdStr = col.id.toString();
+        // Use localEntries to get the most current state (including optimistic updates)
+        localEntries.forEach(e => {
+          const val = e.cells?.[colIdStr];
+          if (val && val.trim()) set.add(val.trim());
+        });
+        // Sort alphabetically for a cleaner dropdown
+        suggestions[colIdStr] = Array.from(set).sort((a, b) => a.localeCompare(b));
+      }
+    });
+    return suggestions;
+  }, [localEntries, columns]);
   
   // ── Helpers ──
   const cleanOptions = (opts: string[]) => {
@@ -2864,21 +2884,6 @@ export default function RegisterPage() {
     return offsets;
   }, [visibleColumns, frozenColumns, colWidths, defaultColWidth]);
 
-  const uniqueTextValuesByColumn = useMemo(() => {
-    const map = new Map<number, string[]>();
-    visibleColumns.forEach(col => {
-      if (['text', 'email', 'phone', 'url'].includes(col.type)) {
-        const set = new Set<string>();
-        localEntries.forEach(e => {
-          const val = e.cells?.[col.id.toString()]?.trim();
-          if (val) set.add(val);
-        });
-        map.set(col.id, Array.from(set).sort());
-      }
-    });
-    return map;
-  }, [localEntries, visibleColumns]);
-
 
   if (isLoading) return (
     <div className="content-area">
@@ -2896,17 +2901,6 @@ export default function RegisterPage() {
 
   return (
     <div className="content-area">
-      {/* ── Data Lists for Text Auto-suggestions ── */}
-      {visibleColumns.filter(c => ['text', 'email', 'phone', 'url'].includes(c.type)).map(col => {
-        const options = uniqueTextValuesByColumn.get(col.id);
-        if (!options || options.length === 0) return null;
-        return (
-          <datalist key={`datalist-${col.id}`} id={`datalist-${col.id}`}>
-            {options.map(val => <option key={val} value={val} />)}
-          </datalist>
-        );
-      })}
-
       {/* ── Header ── */}
       <div className="register-header">
         <div className="register-header-left">
@@ -3164,6 +3158,7 @@ export default function RegisterPage() {
                   onCellFormatClick={onCellFormatClick}
                   searchTerm={deferredSearch || undefined}
                   editableColumnIds={_editableColumnIds}
+                  columnSuggestions={columnSuggestions}
                 />
               );
             })}
@@ -3663,7 +3658,15 @@ export default function RegisterPage() {
                               placeholder={`Enter ${col.name}…`}
                               type={col.type === 'email' ? 'email' : col.type === 'phone' ? 'tel' : 'text'}
                               inputMode={col.type === 'number' || col.type === 'currency' ? 'decimal' : undefined}
+                              list={`list-detail-${col.id}`}
                             />
+                            {columnSuggestions[col.id.toString()]?.length > 0 && (
+                              <datalist id={`list-detail-${col.id}`}>
+                                {columnSuggestions[col.id.toString()].map((s, i) => (
+                                  <option key={`${s}-${i}`} value={s} />
+                                ))}
+                              </datalist>
+                            )}
                             {detailErrors[colKey] && (
                               <div className="row-detail-error-msg">
                                 <AlertCircle size={10} />
