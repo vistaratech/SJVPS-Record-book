@@ -158,6 +158,23 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
     initialValue = initialValue.replace(/\//g, '-');
   }
   const [val, setVal] = useState(initialValue);
+  const [ghostText, setGhostText] = useState('');
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (val && focused && !readOnly && suggestions && suggestions.length > 0) {
+      const match = suggestions.find(s => s.toLowerCase().startsWith(val.toLowerCase()) && s.toLowerCase() !== val.toLowerCase());
+      if (match) {
+        // Find how much of the original case to keep and how much of the suggestion to add
+        // To keep it simple and clean, we'll show the suggestion's case but keep what user typed
+        setGhostText(val + match.slice(val.length));
+      } else {
+        setGhostText('');
+      }
+    } else {
+      setGhostText('');
+    }
+  }, [val, suggestions, focused, readOnly]);
 
   // Sync if the entry is replaced (e.g., after add-row optimistic swap)
   useEffect(() => {
@@ -193,9 +210,16 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
 
     if (e.key === 'Tab' || e.key === 'Enter') {
       e.preventDefault();
+      let finalVal = val;
+      if (ghostText) {
+        finalVal = ghostText;
+        setVal(finalVal);
+        setGhostText('');
+      }
+
       const prevVal = entry.cells?.[col.id.toString()] || '';
-      if (!readOnly && val !== prevVal) {
-        const success = handleCellChange(entry.id, col.id.toString(), val);
+      if (!readOnly && finalVal !== prevVal) {
+        const success = handleCellChange(entry.id, col.id.toString(), finalVal);
         if (success === false) {
           setVal(prevVal);
           return; // Stop focus change if validation failed
@@ -240,6 +264,12 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         if (lastCol) focusNext(idx - 1, lastCol.id);
       }
     } else if (e.key === 'ArrowRight') {
+      if (ghostText && e.currentTarget.selectionStart === val.length) {
+        e.preventDefault();
+        setVal(ghostText);
+        setGhostText('');
+        return;
+      }
       e.preventDefault();
       const nextCol = visibleColumns[colIdx + 1];
       if (nextCol) {
@@ -249,10 +279,10 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         if (firstCol) focusNext(idx + 1, firstCol.id);
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, ghostText]);
 
 
-  const [focused, setFocused] = useState(false);
+
   const hasHighlight = !!searchTerm && !!val && val.toLowerCase().includes(searchTerm.toLowerCase());
 
   const handleFocus = useCallback(() => !readOnly && setFocused(true), [readOnly]);
@@ -280,28 +310,41 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
 
   return (
     <>
-    <input
-      id={`cell-${idx}-${col.id}`}
-      className={`cell-input ${readOnly ? 'cell-readonly' : ''}`}
-      value={val}
-      onChange={onChange}
-      onBlur={handleBlurWrap}
-      onFocus={handleFocus}
-      onKeyDown={onKeyDown}
-      type={type}
-      placeholder={placeholder}
-      inputMode={col.type === 'number' ? 'decimal' : undefined}
-      autoComplete="off"
-      readOnly={readOnly}
-      list={suggestions && suggestions.length > 0 ? `list-${col.id}` : undefined}
-    />
-    {suggestions && suggestions.length > 0 && (
-      <datalist id={`list-${col.id}`}>
-        {suggestions.map((s, i) => (
-          <option key={`${s}-${i}`} value={s} />
-        ))}
-      </datalist>
-    )}
+    <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
+      {ghostText && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          padding: '0 10px',
+          display: 'flex',
+          alignItems: 'center',
+          fontSize: '13px',
+          color: '#cbd5e1',
+          pointerEvents: 'none',
+          whiteSpace: 'pre'
+        }}>
+          {ghostText}
+        </div>
+      )}
+      <input
+        id={`cell-${idx}-${col.id}`}
+        className={`cell-input ${readOnly ? 'cell-readonly' : ''}`}
+        style={{ position: 'relative', zIndex: 2, background: 'transparent' }}
+        value={val}
+        onChange={onChange}
+        onBlur={handleBlurWrap}
+        onFocus={handleFocus}
+        onKeyDown={onKeyDown}
+        type={type}
+        placeholder={placeholder}
+        inputMode={col.type === 'number' ? 'decimal' : undefined}
+        autoComplete="off"
+        readOnly={readOnly}
+      />
+    </div>
     </>
   );
 });
