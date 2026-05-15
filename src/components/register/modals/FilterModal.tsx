@@ -264,10 +264,10 @@ export function FilterModal({
             <button className="fdp-wizard-close" onClick={resetWizard}><X size={13} /></button>
           </div>
 
-          <div className="fdp-wizard-content" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <div className="fdp-wizard-content" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {/* Step 1: Column Selection */}
             {selectedColId === null ? (
-              <>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                 <div className="fdp-col-search">
                   <Search size={14} color="#999" />
                   <input
@@ -291,7 +291,7 @@ export function FilterModal({
                     <div className="fdp-no-options">No columns found</div>
                   )}
                 </div>
-              </>
+              </div>
             ) : (
               /* Step 2: Operator Selection OR Value Config */
               <div className="fdp-op-selection">

@@ -4281,7 +4281,7 @@ a {
 .fdp-col-arrow { color: #ccc; }
 
 /* Operator Selection */
-.fdp-op-selection { display: flex; flex-direction: column; }
+.fdp-op-selection { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
 .fdp-selection-header {
   display: flex;
