@@ -170,6 +170,7 @@ export function FilterModal({
     setFilters(updated);
     setActiveFilters(updated);
     resetWizard();
+    setFilterModal(false);
   };
 
   const handleRemoveFilter = (idx: number) => {
@@ -404,9 +405,10 @@ export function FilterModal({
                           setFilters(updated);
                           setActiveFilters(updated);
                           resetWizard();
+                          setFilterModal(false);
                         }}
                       >
-                        ADD FILTER
+                        APPLY FILTER
                       </button>
                     </div>
                   </div>
@@ -466,7 +468,7 @@ export function FilterModal({
                         }
                         onClick={handleAddFilter}
                       >
-                        ADD FILTER
+                        APPLY FILTER
                       </button>
                     </div>
                   </div>
@@ -488,12 +490,14 @@ export function FilterModal({
       )}
 
       {/* ── Footer ── */}
-      <div className="fdp-footer">
-        <button className="fdp-cancel-btn" style={{ border: 'none' }} onClick={handleClearClose}>CANCEL</button>
-        <button className="fdp-apply-btn" onClick={handleApply}>
-          APPLY {filters.length > 0 && `(${filters.length})`}
-        </button>
-      </div>
+      {!addingFilter && (
+        <div className="fdp-footer">
+          <button className="fdp-cancel-btn" style={{ border: 'none' }} onClick={handleClearClose}>CANCEL</button>
+          <button className="fdp-apply-btn" onClick={handleApply}>
+            DONE {filters.length > 0 && `(${filters.length})`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
