@@ -279,6 +279,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
   }
 
   return (
+    <>
     <input
       id={`cell-${idx}-${col.id}`}
       className={`cell-input ${readOnly ? 'cell-readonly' : ''}`}
