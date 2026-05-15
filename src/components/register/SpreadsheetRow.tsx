@@ -188,14 +188,20 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
 
   const onBlur = useCallback(() => {
     if (readOnly) return;
+    let finalVal = val;
+    if (ghostText) {
+      finalVal = ghostText;
+      setVal(finalVal);
+      setGhostText('');
+    }
     const prevVal = entry.cells?.[col.id.toString()] || '';
-    if (val !== prevVal) {
-      const success = handleCellChange(entry.id, col.id.toString(), val);
+    if (finalVal !== prevVal) {
+      const success = handleCellChange(entry.id, col.id.toString(), finalVal);
       if (success === false) {
         setVal(prevVal);
       }
     }
-  }, [val, entry, col.id, handleCellChange, readOnly]);
+  }, [val, entry, col.id, handleCellChange, readOnly, ghostText]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
