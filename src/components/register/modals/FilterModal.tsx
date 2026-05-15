@@ -168,11 +168,14 @@ export function FilterModal({
     };
     const updated = [...filters, newFilter];
     setFilters(updated);
+    setActiveFilters(updated);
     resetWizard();
   };
 
   const handleRemoveFilter = (idx: number) => {
-    setFilters(filters.filter((_, i) => i !== idx));
+    const updated = filters.filter((_, i) => i !== idx);
+    setFilters(updated);
+    setActiveFilters(updated);
   };
 
   const handleApply = () => {
@@ -212,7 +215,7 @@ export function FilterModal({
         </div>
         <div className="fdp-header-actions">
           {filters.length > 0 && (
-            <button className="fdp-clear-btn" onClick={() => setFilters([])}>CLEAR ALL</button>
+            <button className="fdp-clear-btn" onClick={() => { setFilters([]); setActiveFilters([]); }}>CLEAR ALL</button>
           )}
           <button className="fdp-close-btn" onClick={() => { setFilterModal(false); resetWizard(); }} aria-label="Close">
             <X size={14} />
@@ -299,70 +302,63 @@ export function FilterModal({
 
                 {selectedOp === null ? (
                   /* Combined Step 2: Searchable Values & List Operators */
-                  <div className="fdp-step2-combined">
-                    <div className="fdp-multi-container">
-                      <div className="fdp-search-wrapper">
-                        <Search className="fdp-search-icon" size={14} />
-                        <input 
-                          type="text" 
-                          className="fdp-search-input" 
-                          placeholder="SEARCH VALUES..."
-                          value={filterSearch}
-                          onChange={(e) => setFilterSearch(e.target.value)}
-                          autoFocus
-                        />
-                        {filterSearch && (
-                          <button className="fdp-search-clear" onClick={() => setFilterSearch('')}>
-                            <X size={14} />
+                  <div className="fdp-step2-combined" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                    <div className="fdp-step2-scroll" style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+                      <div className="fdp-multi-container">
+                        <div className="fdp-search-wrapper">
+                          <Search className="fdp-search-icon" size={14} />
+                          <input 
+                            type="text" 
+                            className="fdp-search-input" 
+                            placeholder="SEARCH VALUES..."
+                            value={filterSearch}
+                            onChange={e => setFilterSearch(e.target.value)}
+                          />
+                          {filterSearch && (
+                            <button className="fdp-search-clear" onClick={() => setFilterSearch('')}>
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="fdp-multi-actions">
+                          <button 
+                            className="fdp-multi-action-btn"
+                            onClick={() => {
+                              const all = uniqueValues.filter(v => v.toLowerCase().includes((filterSearch || '').toLowerCase()));
+                              if (!filterSearch || '(blanks)'.includes(filterSearch.toLowerCase())) {
+                                all.push('(Blanks)');
+                              }
+                              setSelectedValues(Array.from(new Set([...selectedValues, ...all])));
+                            }}
+                          >
+                            SELECT ALL
                           </button>
-                        )}
-                      </div>
+                          <button 
+                            className="fdp-multi-action-btn"
+                            onClick={() => setSelectedValues([])}
+                          >
+                            CLEAR ALL
+                          </button>
+                        </div>
 
-                      <div className="fdp-multi-actions">
-                        <button 
-                          className="fdp-multi-action-btn"
-                          onClick={() => {
-                            const baseOptions = selectedCol?.type === 'dropdown' ? (selectedCol.dropdownOptions || []) : uniqueValues;
-                            const filtered = filterSearch 
-                              ? baseOptions.filter(o => o.toLowerCase().includes(filterSearch.toLowerCase()))
-                              : baseOptions;
-                            setSelectedValues(Array.from(new Set([...selectedValues, ...filtered, '(Blanks)'])));
-                          }}
-                        >
-                          SELECT ALL
-                        </button>
-                        <button 
-                          className="fdp-multi-action-btn"
-                          onClick={() => {
-                            if (!filterSearch) {
-                              setSelectedValues([]);
-                            } else {
-                              const q = filterSearch.toLowerCase();
-                              setSelectedValues(selectedValues.filter(v => !v.toLowerCase().includes(q)));
-                            }
-                          }}
-                        >
-                          CLEAR ALL
-                        </button>
-                      </div>
-
-                      <div className="fdp-multi-list">
-                        {(!filterSearch || '(blanks)'.includes(filterSearch.toLowerCase())) && (
-                          <label className="fdp-multi-item">
-                            <input
-                              type="checkbox"
-                              checked={selectedValues.includes('(Blanks)')}
-                              onChange={(e) => {
-                                if (e.target.checked) setSelectedValues(['(Blanks)', ...selectedValues]);
-                                else setSelectedValues(selectedValues.filter(v => v !== '(Blanks)'));
-                              }}
-                            />
-                            <span>(BLANKS)</span>
-                          </label>
-                        )}
-                        {(selectedCol?.type === 'dropdown' ? (selectedCol.dropdownOptions || []) : uniqueValues)
-                          .filter(opt => !filterSearch || opt.toLowerCase().includes(filterSearch.toLowerCase()))
-                          .map(opt => (
+                        <div className="fdp-multi-list">
+                          {(!filterSearch || '(blanks)'.includes(filterSearch.toLowerCase())) && (
+                            <label className="fdp-multi-item">
+                              <input
+                                type="checkbox"
+                                checked={selectedValues.includes('(Blanks)')}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedValues(['(Blanks)', ...selectedValues]);
+                                  else setSelectedValues(selectedValues.filter(v => v !== '(Blanks)'));
+                                }}
+                              />
+                              <span>(BLANKS)</span>
+                            </label>
+                          )}
+                          {(selectedCol?.type === 'dropdown' ? (selectedCol.dropdownOptions || []) : uniqueValues)
+                            .filter(opt => !filterSearch || opt.toLowerCase().includes(filterSearch.toLowerCase()))
+                            .map(opt => (
                             <label key={opt} className="fdp-multi-item">
                               <input
                                 type="checkbox"
@@ -375,23 +371,24 @@ export function FilterModal({
                               <span>{opt.toUpperCase()}</span>
                             </label>
                           ))}
+                        </div>
+                      </div>
+
+                      <div className="fdp-section-label" style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', padding: '0 8px 8px' }}>
+                        FILTER BY CONDITION
+                      </div>
+                      {/* List Operators */}
+                      <div className="fdp-op-list">
+                        {ops.filter(o => o.key !== 'multi_select').map(op => (
+                          <button key={op.key} className="fdp-op-item" onClick={() => setSelectedOp(op.key)}>
+                            <div className="fdp-radio-circle" />
+                            <span>{op.label}</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
 
-                    <div className="fdp-section-label" style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)', padding: '0 8px 8px' }}>
-                      FILTER BY CONDITION
-                    </div>
-                    {/* List Operators */}
-                    <div className="fdp-op-list">
-                      {ops.filter(o => o.key !== 'multi_select').map(op => (
-                        <button key={op.key} className="fdp-op-item" onClick={() => setSelectedOp(op.key)}>
-                          <div className="fdp-radio-circle" />
-                          <span>{op.label}</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="fdp-wizard-actions">
+                    <div className="fdp-wizard-actions" style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', marginTop: 0, flexShrink: 0, backgroundColor: 'white' }}>
                       <button className="fdp-cancel-btn" onClick={() => { setSelectedColId(null); setSelectedValues([]); setFilterSearch(''); }}>BACK</button>
                       <button
                         className="fdp-confirm-btn"
@@ -403,7 +400,9 @@ export function FilterModal({
                             value: '',
                             values: [...selectedValues],
                           };
-                          setFilters([...filters, newFilter]);
+                          const updated = [...filters, newFilter];
+                          setFilters(updated);
+                          setActiveFilters(updated);
                           resetWizard();
                         }}
                       >
@@ -413,49 +412,51 @@ export function FilterModal({
                   </div>
                 ) : (
                   /* Step 3: Configure Value (for advanced operators) */
-                  <div className="fdp-value-config">
-                    <div className="fdp-op-display" onClick={() => setSelectedOp(null)} style={{ cursor: 'pointer' }}>
-                      <div className="fdp-radio-circle selected" />
-                      <span>{ops.find(o => o.key === selectedOp)?.label}</span>
-                    </div>
+                  <div className="fdp-value-config" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, padding: 0 }}>
+                    <div style={{ padding: '16px', overflowY: 'auto', flex: 1 }}>
+                      <div className="fdp-op-display" onClick={() => setSelectedOp(null)} style={{ cursor: 'pointer' }}>
+                        <div className="fdp-radio-circle selected" />
+                        <span>{ops.find(o => o.key === selectedOp)?.label}</span>
+                      </div>
 
-                    <div className="fdp-value-area">
-                      {selectedCol?.type === 'dropdown' ? (
-                        <select
-                          className="fdp-input"
-                          value={val1}
-                          onChange={(e) => setVal1(e.target.value)}
-                          autoFocus
-                        >
-                          <option value="">SELECT VALUE...</option>
-                          {(selectedCol.dropdownOptions || []).map(opt => (
-                            <option key={opt} value={opt}>{opt.toUpperCase()}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <>
-                          <input
+                      <div className="fdp-value-area">
+                        {selectedCol?.type === 'dropdown' ? (
+                          <select
                             className="fdp-input"
-                            type={getInputType(selectedOp, selectedCol?.type || 'text')}
-                            placeholder={BETWEEN_OPS.includes(selectedOp) ? 'FROM VALUE...' : 'ENTER VALUE...'}
                             value={val1}
                             onChange={(e) => setVal1(e.target.value)}
                             autoFocus
-                          />
-                          {BETWEEN_OPS.includes(selectedOp) && (
+                          >
+                            <option value="">SELECT VALUE...</option>
+                            {(selectedCol.dropdownOptions || []).map(opt => (
+                              <option key={opt} value={opt}>{opt.toUpperCase()}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <>
                             <input
                               className="fdp-input"
                               type={getInputType(selectedOp, selectedCol?.type || 'text')}
-                              placeholder="TO VALUE..."
-                              value={val2}
-                              onChange={(e) => setVal2(e.target.value)}
+                              placeholder={BETWEEN_OPS.includes(selectedOp) ? 'FROM VALUE...' : 'ENTER VALUE...'}
+                              value={val1}
+                              onChange={(e) => setVal1(e.target.value)}
+                              autoFocus
                             />
-                          )}
-                        </>
-                      )}
+                            {BETWEEN_OPS.includes(selectedOp) && (
+                              <input
+                                className="fdp-input"
+                                type={getInputType(selectedOp, selectedCol?.type || 'text')}
+                                placeholder="TO VALUE..."
+                                value={val2}
+                                onChange={(e) => setVal2(e.target.value)}
+                              />
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="fdp-wizard-actions">
+                    <div className="fdp-wizard-actions" style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', marginTop: 0, flexShrink: 0, backgroundColor: 'white' }}>
                       <button className="fdp-cancel-btn" onClick={() => setSelectedOp(null)}>BACK</button>
                       <button
                         className="fdp-confirm-btn"
