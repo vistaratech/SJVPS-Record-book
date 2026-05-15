@@ -2864,6 +2864,21 @@ export default function RegisterPage() {
     return offsets;
   }, [visibleColumns, frozenColumns, colWidths, defaultColWidth]);
 
+  const uniqueTextValuesByColumn = useMemo(() => {
+    const map = new Map<number, string[]>();
+    visibleColumns.forEach(col => {
+      if (['text', 'email', 'phone', 'url'].includes(col.type)) {
+        const set = new Set<string>();
+        localEntries.forEach(e => {
+          const val = e.cells?.[col.id.toString()]?.trim();
+          if (val) set.add(val);
+        });
+        map.set(col.id, Array.from(set).sort());
+      }
+    });
+    return map;
+  }, [localEntries, visibleColumns]);
+
 
   if (isLoading) return (
     <div className="content-area">
@@ -2881,6 +2896,17 @@ export default function RegisterPage() {
 
   return (
     <div className="content-area">
+      {/* ── Data Lists for Text Auto-suggestions ── */}
+      {visibleColumns.filter(c => ['text', 'email', 'phone', 'url'].includes(c.type)).map(col => {
+        const options = uniqueTextValuesByColumn.get(col.id);
+        if (!options || options.length === 0) return null;
+        return (
+          <datalist key={`datalist-${col.id}`} id={`datalist-${col.id}`}>
+            {options.map(val => <option key={val} value={val} />)}
+          </datalist>
+        );
+      })}
+
       {/* ── Header ── */}
       <div className="register-header">
         <div className="register-header-left">

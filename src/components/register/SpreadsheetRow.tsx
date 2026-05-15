@@ -290,6 +290,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
       placeholder={placeholder}
       inputMode={col.type === 'number' ? 'decimal' : undefined}
       autoComplete="off"
+      list={['text', 'email', 'phone', 'url'].includes(col.type) ? `datalist-${col.id}` : undefined}
       readOnly={readOnly}
     />
   );
