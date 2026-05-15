@@ -31,12 +31,11 @@ const TEXT_OPS = [
 ];
 
 const NUMBER_OPS = [
-  { key: 'eq', label: 'Equals To' },
+  { key: 'between', label: 'In Between Numbers' },
   { key: 'gt', label: 'Greater Than' },
   { key: 'lt', label: 'Less Than' },
-  { key: 'between', label: 'In Between' },
   { key: 'multi_select', label: 'Is Any Of' },
-  { key: 'empty', label: 'Is Empty' },
+  { key: 'empty', label: 'Blank Value' },
 ];
 
 const DATE_OPS = [
@@ -56,8 +55,12 @@ const DROPDOWN_OPS = [
 
 function getOpsForType(type: string) {
   switch (type) {
-    case 'number': return NUMBER_OPS;
-    case 'formula': return NUMBER_OPS;
+    case 'number':
+    case 'formula':
+    case 'currency':
+    case 'auto_increment':
+    case 'rating':
+      return NUMBER_OPS;
     case 'date': return DATE_OPS;
     case 'dropdown': return DROPDOWN_OPS;
     default: return TEXT_OPS;
@@ -192,7 +195,7 @@ export function FilterModal({
 
   const getInputType = (op: string, colType: string) => {
     if (colType === 'date' || op.startsWith('date_')) return 'date';
-    if (colType === 'number' || colType === 'formula') return 'number';
+    if (['number', 'formula', 'currency', 'auto_increment', 'rating'].includes(colType)) return 'number';
     return 'text';
   };
 
