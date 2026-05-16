@@ -160,13 +160,12 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
   const [val, setVal] = useState(initialValue);
   const [ghostText, setGhostText] = useState('');
   const [focused, setFocused] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (val && focused && !readOnly && suggestions && suggestions.length > 0) {
+    if (!isDeleting && val && focused && !readOnly && suggestions && suggestions.length > 0) {
       const match = suggestions.find(s => s.toLowerCase().startsWith(val.toLowerCase()) && s.toLowerCase() !== val.toLowerCase());
       if (match) {
-        // Find how much of the original case to keep and how much of the suggestion to add
-        // To keep it simple and clean, we'll show the suggestion's case but keep what user typed
         setGhostText(val + match.slice(val.length));
       } else {
         setGhostText('');
@@ -174,26 +173,34 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
     } else {
       setGhostText('');
     }
-  }, [val, suggestions, focused, readOnly]);
+  }, [val, suggestions, focused, readOnly, isDeleting]);
 
   // Sync if the entry is replaced (e.g., after add-row optimistic swap)
   useEffect(() => {
     setVal(initialValue);
+    setIsDeleting(false);
   }, [initialValue]);
 
   const onChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (readOnly) return;
-    setVal(e.target.value);
-  }, [readOnly]);
+    const newVal = e.target.value;
+    setIsDeleting(newVal.length < val.length);
+    setVal(newVal);
+  }, [readOnly, val.length]);
 
   const onBlur = useCallback(() => {
+    setFocused(false);
+    setIsDeleting(false);
     if (readOnly) return;
+    
+    // Auto-apply ghost text on blur (Excel style)
     let finalVal = val;
     if (ghostText) {
       finalVal = ghostText;
       setVal(finalVal);
       setGhostText('');
     }
+
     const prevVal = entry.cells?.[col.id.toString()] || '';
     if (finalVal !== prevVal) {
       const success = handleCellChange(entry.id, col.id.toString(), finalVal);
@@ -201,7 +208,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         setVal(prevVal);
       }
     }
-  }, [val, entry, col.id, handleCellChange, readOnly, ghostText]);
+  }, [val, ghostText, entry, col.id, handleCellChange, readOnly]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
