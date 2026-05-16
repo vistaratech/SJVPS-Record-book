@@ -193,13 +193,8 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
     setIsDeleting(false);
     if (readOnly) return;
     
-    // Auto-apply ghost text on blur (Excel style)
-    let finalVal = val;
-    if (ghostText) {
-      finalVal = ghostText;
-      setVal(finalVal);
-      setGhostText('');
-    }
+    const finalVal = val;
+    setGhostText('');
 
     const prevVal = entry.cells?.[col.id.toString()] || '';
     if (finalVal !== prevVal) {
@@ -208,7 +203,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         setVal(prevVal);
       }
     }
-  }, [val, ghostText, entry, col.id, handleCellChange, readOnly]);
+  }, [val, entry, col.id, handleCellChange, readOnly]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
@@ -223,12 +218,8 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
 
     if (e.key === 'Tab' || e.key === 'Enter') {
       e.preventDefault();
-      let finalVal = val;
-      if (ghostText) {
-        finalVal = ghostText;
-        setVal(finalVal);
-        setGhostText('');
-      }
+      const finalVal = val;
+      setGhostText('');
 
       const prevVal = entry.cells?.[col.id.toString()] || '';
       if (!readOnly && finalVal !== prevVal) {
