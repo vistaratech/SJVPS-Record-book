@@ -1708,16 +1708,44 @@ export async function updateEntry(registerId: number, entryId: number, cells: Re
       Object.entries(cells).filter(([colId]) => !autoColIds.has(colId))
     );
 
+    const oldCells = { ...entry.cells };
+
     entry.cells = { ...entry.cells, ...safeCells };
     reg.updatedAt = new Date().toISOString();
     await saveRegDocImmediate(reg);
     
-    // Log edit details
-    const changes = Object.entries(cells).map(([id, val]) => {
-      const c = reg.columns.find(col => col.id.toString() === id);
-      return `${c?.name || id}="${val}"`;
-    }).join(', ');
-    await logAction(reg.businessId, 'Edit Row', `Updated row #${entry.rowNumber} in "${reg.name}": ${changes}`, { registerId, registerName: reg.name, entryId });
+    // Log edit details with before and after values
+    const changes = Object.entries(safeCells)
+      .filter(([id, val]) => (oldCells[id] || '') !== (val || ''))
+      .map(([id, val]) => {
+        const c = reg.columns.find(col => col.id.toString() === id);
+        const colName = c?.name || id;
+        const oldVal = oldCells[id] || '';
+        const newVal = val || '';
+
+        const formatVal = (v: string, type?: string) => {
+          if (!v) return '""';
+          if (type === 'image' || v.startsWith('data:image/')) {
+            if (v.includes('|||')) {
+              const count = v.split('|||').length;
+              return `[${count} Image${count > 1 ? 's' : ''}]`;
+            }
+            return '[Image]';
+          }
+          if (v.length > 60) {
+            return `"${v.slice(0, 60)}..."`;
+          }
+          return `"${v}"`;
+        };
+
+        return `${colName} was changed from ${formatVal(oldVal, c?.type)} to ${formatVal(newVal, c?.type)}`;
+      }).join(', ');
+
+    const details = changes
+      ? `Updated row #${entry.rowNumber} in "${reg.name}": ${changes}`
+      : `Updated row #${entry.rowNumber} in "${reg.name}"`;
+
+    await logAction(reg.businessId, 'Edit Row', details, { registerId, registerName: reg.name, entryId });
     
     return { entry, reg };
   });
@@ -2039,7 +2067,11 @@ export async function logAction(
   meta?: { registerId?: number; registerName?: string; entryId?: number }
 ): Promise<void> {
   try {
-    const savedUser = JSON.parse(localStorage.getItem('rb_user') || 'null');
+    const savedUser = JSON.parse(
+      sessionStorage.getItem('recordbook_user') || 
+      localStorage.getItem('recordbook_user') || 
+      'null'
+    );
     const entry: HistoryEntry = {
       id: generateId(),
       businessId,
