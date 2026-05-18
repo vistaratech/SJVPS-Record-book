@@ -1,8 +1,9 @@
 import { evaluateFormula, type Entry, type Column } from '../../lib/api';
 import { formatCurrency } from '../../lib/formatters';
-import { Calendar, ChevronDown, Image as ImageIcon, Mail, Phone, Globe, ListOrdered, IndianRupee, Maximize2 } from 'lucide-react';
+import { Calendar, ChevronDown, Image as ImageIcon, Mail, Phone, Globe, ListOrdered, IndianRupee, Maximize2, Bell } from 'lucide-react';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { useNotifications } from '../../lib/NotificationContext';
 
 // ── Highlight matching text ──
 const HighlightedText = React.memo(function HighlightedText({ text, searchTerm }: { text: string; searchTerm?: string }) {
@@ -476,6 +477,11 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     columnSuggestions,
     displayRowNumber,
   } = props;
+  const { reminders } = useNotifications();
+  const hasPendingReminder = useMemo(() => {
+    return reminders.some(r => r.rowId === entry.id && r.status === 'Pending' && r.registerId === String(entry.registerId));
+  }, [reminders, entry.id, entry.registerId]);
+
   const elements: { type: 'cell' | 'pad-left' | 'pad-right', vc?: { index: number } }[] = [];
   if (virtualCols && beforeVirtualCols && afterVirtualCols) {
     beforeVirtualCols.forEach(vc => elements.push({ type: 'cell', vc }));
@@ -558,7 +564,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
   return (
     <tr id={`row-${entry.id}`} data-entry-id={entry.id} className={isSelected ? 'row-selected' : ''} style={rowHeight ? { height: rowHeight, maxHeight: rowHeight } : undefined}>
       <td className="serial" style={{ cursor: 'pointer' }}>
-        <div className="serial-inner">
+        <div className="serial-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', position: 'relative' }}>
           <input
             type="checkbox"
             className="row-select-checkbox"
@@ -568,6 +574,19 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
             tabIndex={-1}
           />
           <span className="serial-number" onClick={handleSerialClick} title="Click to view details">{displayRowNumber || entry.rowNumber}</span>
+          {hasPendingReminder && (
+            <Bell 
+              size={12} 
+              className="text-amber-500 fill-amber-500 animate-pulse" 
+              style={{ 
+                color: '#f59e0b',
+                fill: '#f59e0b',
+                marginLeft: '2px',
+                flexShrink: 0
+              }} 
+              title="This row has a pending reminder"
+            />
+          )}
         </div>
       </td>
       {elements.map((el) => {
@@ -613,7 +632,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
           {col.type === 'formula' ? (
             <FormulaCell idx={idx} col={col} entry={entry} registerColumns={registerColumns} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} />
           ) : col.type === 'date' ? (
-            <div className="cell-url-wrap">
+            <div className="cell-url-wrap cell-date-wrap">
               <SpreadsheetTextInput 
                 idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange}
                 placeholder="DD-MM-YYYY" searchTerm={searchTerm}
@@ -621,7 +640,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               />
               {isEditable && (
                 <button 
-                  className="cell-url-link" 
+                  className="cell-url-link cell-date-picker-btn" 
                   style={{ background: 'none', border: 'none', cursor: 'pointer' }}
                   onClick={(e) => openDatePicker(entry.id, col.id, entry.cells?.[col.id.toString()] || '', e.currentTarget.getBoundingClientRect())}
                   tabIndex={-1}

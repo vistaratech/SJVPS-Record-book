@@ -7,6 +7,7 @@ import {
   duplicateColumn, moveColumn, reorderColumn, changeColumnType, clearColumnData, insertColumn, updateColumnWidth, updateColumnSummary,
   freezeColumn, hideColumn, setColumnMandatory, setColumnUnique,
   addEntry, updateEntry, deleteEntry, duplicateEntry, bulkDeleteEntries, insertEntry,
+  listRowHistory,
   restoreEntry, bulkRestoreEntries, restoreColumn,
   renamePage, deletePage,
   evaluateFormula,
@@ -14,7 +15,7 @@ import {
   subscribeToMutationStatus, updateEntriesOrder,
   updateEntryCellStyles,
   formatDateToDDMMYYYY,
-  type Entry, type CellStyle,
+  type Entry, type CellStyle, type HistoryEntry,
 } from '../lib/api';
 // xlsx, jsPDF, and jspdf-autotable are now dynamically imported via useExport hook
 import { useExport } from '../hooks/useExport';
@@ -24,7 +25,7 @@ import {
   Hash, FlaskConical, Pin, IndianRupee,
   Mail, Phone, Globe, Star, CheckSquare, Image as ImageIcon, ArrowLeft,
   Search, FileText, Download, ListOrdered, Maximize2, AlertCircle,
-  X, Link as LinkIcon, Info, AlertTriangle, Trash2, ZoomIn, ZoomOut, Bell
+  X, Link as LinkIcon, Info, AlertTriangle, Trash2, ZoomIn, ZoomOut, Bell, Clock
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { RegisterHeader } from '../components/register/RegisterHeader';
@@ -70,7 +71,11 @@ export default function RegisterPage() {
   const location = useLocation();
   const registerId = Number(id) || 0;
   const queryClient = useQueryClient();
-  const { addNotification, scheduleReminder } = useNotifications();
+  const { addNotification, scheduleReminder, reminders, setReminders } = useNotifications();
+
+  const registerReminders = useMemo(() => {
+    return reminders.filter(r => r.registerId === String(registerId));
+  }, [reminders, registerId]);
 
   const isAdminUserTop = useMemo(() => {
     return (user as any)?.permissions?.isAdmin === true || (user as any)?.permissions?.fullSheetAccess === true || (user as any)?.role === 'admin' || (user as any)?.role === 'superadmin' || (user as any)?.role === 'sheet_admin';
@@ -345,6 +350,9 @@ export default function RegisterPage() {
   const [previewImage, setPreviewImage] = useState<{ url: string; entryId?: number; colId?: string } | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [isImgZoomed, setIsImgZoomed] = useState(false);
+  const [showRowAuditTrail, setShowRowAuditTrail] = useState(false);
+  const [rowAuditHistory, setRowAuditHistory] = useState<HistoryEntry[]>([]);
+  const [rowAuditLoading, setRowAuditLoading] = useState(false);
 
   // Cell formatting toolbar
   const [formatCell, setFormatCell] = useState<{ entryId: number; colId: string; rect: DOMRect } | null>(null);
@@ -354,6 +362,16 @@ export default function RegisterPage() {
   const [reminderDate, setReminderDate] = useState('');
   const [reminderTime, setReminderTime] = useState('');
   const [reminderMessage, setReminderMessage] = useState('');
+  const [reminderStatus, setReminderStatus] = useState<'Pending' | 'Complete'>('Pending');
+  const [showRemindersSummary, setShowRemindersSummary] = useState(false);
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
+  const [editRemMessage, setEditRemMessage] = useState('');
+  const [editRemStatus, setEditRemStatus] = useState<'Pending' | 'Complete'>('Pending');
+  const [editRemDate, setEditRemDate] = useState('');
+  const [editRemTime, setEditRemTime] = useState('');
+  const [editRemCellValue, setEditRemCellValue] = useState('');
+  const [inlineCellValues, setInlineCellValues] = useState<Record<string, string>>({});
+
 
   // New column form (shared by Add Column and Insert Column)
   const [newColName, setNewColName] = useState('');
@@ -2952,6 +2970,7 @@ export default function RegisterPage() {
             handleOpenExport={() => setShowExportModal(true)}
             canDownload={_canDownloadAny}
             canEdit={_canEditAny}
+            onViewReminders={() => setShowRemindersSummary(true)}
           />
         </div>
       </div>
@@ -3400,12 +3419,35 @@ export default function RegisterPage() {
 
       {/* Row Detail View Modal (Direct Edit Mode) */}
       {detailViewEntry && (
-        <div className="row-detail-overlay" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); }}>
+        <div className="row-detail-overlay" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }}>
           <div className="row-detail-modal" onClick={e => e.stopPropagation()}>
             <div className="row-detail-header">
               <div className="row-detail-title">
                 <span className="row-detail-badge">Row #{(localEntries.findIndex(e => e.id === detailViewEntry.id) + 1)}</span>
                 <h2>Record Details</h2>
+                <button
+                  className="row-audit-trail-btn"
+                  title="View row change history"
+                  onClick={async () => {
+                    if (showRowAuditTrail) {
+                      setShowRowAuditTrail(false);
+                      return;
+                    }
+                    setShowRowAuditTrail(true);
+                    setRowAuditLoading(true);
+                    try {
+                      const history = await listRowHistory(registerId, detailViewEntry.id);
+                      setRowAuditHistory(history);
+                    } catch (err) {
+                      console.error('Failed to load row history:', err);
+                      setRowAuditHistory([]);
+                    } finally {
+                      setRowAuditLoading(false);
+                    }
+                  }}
+                >
+                  <Clock size={15} />
+                </button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button
@@ -3424,9 +3466,76 @@ export default function RegisterPage() {
                 >
                   <Download size={14} /> Excel
                 </button>
-                <button className="row-detail-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); }} aria-label="Close">✕</button>
+                <button className="row-detail-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }} aria-label="Close">✕</button>
               </div>
             </div>
+
+            {/* Row Audit Trail Panel */}
+            {showRowAuditTrail && (
+              <div className="row-audit-trail-panel">
+                <div className="row-audit-trail-header">
+                  <div className="row-audit-trail-title">
+                    <Clock size={14} />
+                    <span>Change History</span>
+                  </div>
+                  <button className="row-audit-trail-close" onClick={() => setShowRowAuditTrail(false)}>
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="row-audit-trail-content">
+                  {rowAuditLoading ? (
+                    <div className="row-audit-trail-loading">
+                      <div className="row-audit-spinner" />
+                      <span>Loading history…</span>
+                    </div>
+                  ) : rowAuditHistory.length === 0 ? (
+                    <div className="row-audit-trail-empty">
+                      <Clock size={28} style={{ opacity: 0.25 }} />
+                      <p>No change history found for this row.</p>
+                      <span>Changes will appear here after the next edit or save.</span>
+                    </div>
+                  ) : (
+                    <div className="row-audit-timeline">
+                      {rowAuditHistory.map((h, idx) => {
+                        const dt = new Date(h.timestamp);
+                        const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                        const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                        const isFirst = idx === 0;
+                        const actionColor =
+                          h.action === 'Edit Row' ? '#3b82f6' :
+                          h.action === 'Add Row' || h.action === 'Insert Row' ? '#16a34a' :
+                          h.action === 'Delete Row' ? '#dc2626' :
+                          h.action === 'Restore Row' ? '#8b5cf6' : '#64748b';
+
+                        return (
+                          <div key={h.id} className={`row-audit-item ${isFirst ? 'latest' : ''}`}>
+                            <div className="row-audit-item-dot" style={{ borderColor: actionColor }}>
+                              <div className="row-audit-item-dot-inner" style={{ background: actionColor }} />
+                            </div>
+                            {idx < rowAuditHistory.length - 1 && <div className="row-audit-item-connector" />}
+                            <div className="row-audit-item-content">
+                              <div className="row-audit-item-top">
+                                <span className="row-audit-action-badge" style={{ background: actionColor }}>{h.action}</span>
+                                {isFirst && <span className="row-audit-latest-tag">Latest</span>}
+                              </div>
+                              <p className="row-audit-item-details">{h.details}</p>
+                              <div className="row-audit-item-meta">
+                                <span className="row-audit-meta-user">{h.userName || 'Unknown User'}</span>
+                                <span className="row-audit-meta-sep">•</span>
+                                <span className="row-audit-meta-date">{dateStr}</span>
+                                <span className="row-audit-meta-sep">•</span>
+                                <span className="row-audit-meta-time">{timeStr}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="row-detail-body">
               {(() => {
                 const handleDetailKeyDown = (e: React.KeyboardEvent, currentId: number) => {
@@ -3708,7 +3817,7 @@ export default function RegisterPage() {
             </div>
 
             <div className="row-detail-footer">
-              <button className="row-detail-btn-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setDetailErrors({}); }}>{_canEditAny ? 'Cancel' : 'Close'}</button>
+              <button className="row-detail-btn-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setDetailErrors({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }}>{_canEditAny ? 'Cancel' : 'Close'}</button>
               {_canEditAny && (
                 <button 
                   className="row-detail-btn-save" 
@@ -3824,6 +3933,8 @@ export default function RegisterPage() {
                     setDetailViewEntry(null);
                     setDetailEdits({});
                     setDetailErrors({});
+                    setShowRowAuditTrail(false);
+                    setRowAuditHistory([]);
                   }}
                 >
                   Save Changes
@@ -3986,27 +4097,53 @@ export default function RegisterPage() {
       {/* Reminder Modal */}
       {reminderModal && (
         <div className="modal-overlay" onClick={() => setReminderModal(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '400px' }}>
-            <div className="modal-header">
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '400px', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', overflow: 'hidden', background: '#fff' }}>
+            <div className="modal-header" style={{ position: 'relative', padding: '20px 20px 12px', borderBottom: 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Bell size={18} color="var(--primary)" />
-                <h3 style={{ margin: 0 }}>Set Reminder</h3>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--text-color)' }}>Set Reminder</h3>
               </div>
-              <button className="modal-close" onClick={() => setReminderModal(null)}><X size={16} /></button>
+              <button 
+                onClick={() => setReminderModal(null)} 
+                style={{ 
+                  position: 'absolute', top: '16px', right: '16px', 
+                  background: '#f3f4f6', borderRadius: '50%', width: '32px', height: '32px',
+                  cursor: 'pointer', transition: 'all 0.2s', border: 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  zIndex: 10
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = '#e5e7eb'}
+                onMouseOut={(e) => e.currentTarget.style.background = '#f3f4f6'}
+              >
+                <X size={16} color="#374151" strokeWidth={2.5} />
+              </button>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 20px 20px' }}>
               <div>
-                <label className="modal-label" style={{ marginBottom: '6px', display: 'block' }}>Reminder Date <span style={{color: 'red'}}>*</span></label>
+                <label className="modal-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-color)' }}>Reminder Date <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>(Optional)</span></label>
                 <input type="date" className="modal-input" value={reminderDate} onChange={e => setReminderDate(e.target.value)} style={{ width: '100%', marginBottom: 0 }} />
               </div>
               
               <div>
-                <label className="modal-label" style={{ marginBottom: '6px', display: 'block' }}>Reminder Time <span style={{color: 'red'}}>*</span></label>
+                <label className="modal-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-color)' }}>Reminder Time <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>(Optional)</span></label>
                 <input type="time" className="modal-input" value={reminderTime} onChange={e => setReminderTime(e.target.value)} style={{ width: '100%', marginBottom: 0 }} />
               </div>
 
               <div>
-                <label className="modal-label" style={{ marginBottom: '6px', display: 'block' }}>Message / Description <span style={{color: 'red'}}>*</span></label>
+                <label className="modal-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-color)' }}>Status <span style={{color: 'red'}}>*</span></label>
+                <select 
+                  className="modal-input" 
+                  value={reminderStatus} 
+                  onChange={e => setReminderStatus(e.target.value as 'Pending' | 'Complete')} 
+                  style={{ width: '100%', marginBottom: 0, background: '#ffffff' }}
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Complete">Complete</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="modal-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-color)' }}>Message / Description <span style={{color: 'red'}}>*</span></label>
                 <textarea 
                   className="modal-textarea" 
                   value={reminderMessage} 
@@ -4017,27 +4154,52 @@ export default function RegisterPage() {
                 />
               </div>
             </div>
-            <div className="modal-footer" style={{ marginTop: '16px' }}>
+            <div className="modal-footer" style={{ borderTop: '1px solid var(--border)', padding: '16px 20px', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#fafafa' }}>
               <button className="modal-cancel-btn" onClick={() => setReminderModal(null)}>Cancel</button>
               <button 
                 className="modal-confirm-btn" 
                 onClick={() => {
-                  if (!reminderDate || !reminderTime || !reminderMessage) {
-                    toast.error('Please fill in all fields');
+                  if (!reminderMessage) {
+                    toast.error('Please enter a reminder message');
                     return;
                   }
-                  const dt = new Date(`${reminderDate}T${reminderTime}`);
-                  if (dt.getTime() < Date.now()) {
-                    toast.error('Reminder time must be in the future');
-                    return;
+                  
+                  let triggerTime: number | undefined = undefined;
+                  if (reminderDate && reminderTime) {
+                    const dt = new Date(`${reminderDate}T${reminderTime}`);
+                    if (isNaN(dt.getTime())) {
+                      toast.error('Please enter a valid date and time');
+                      return;
+                    }
+                    if (reminderStatus === 'Pending' && dt.getTime() < Date.now()) {
+                      toast.error('Reminder time must be in the future for active/pending reminders');
+                      return;
+                    }
+                    triggerTime = dt.getTime();
                   }
-                  scheduleReminder({
-                    triggerTime: dt.getTime(),
-                    message: reminderMessage,
-                    registerId: String(registerId),
-                    rowId: reminderModal.entryId
-                  });
-                  toast.success('Reminder set successfully!');
+
+                  const existingIdx = reminders.findIndex(r => r.rowId === reminderModal.entryId && r.colId === reminderModal.colId && r.registerId === String(registerId));
+                  if (existingIdx > -1) {
+                    const updated = [...reminders];
+                    updated[existingIdx] = {
+                      ...updated[existingIdx],
+                      triggerTime: triggerTime,
+                      message: reminderMessage,
+                      status: reminderStatus
+                    };
+                    setReminders(updated);
+                    toast.success('Reminder updated successfully!');
+                  } else {
+                    scheduleReminder({
+                      triggerTime: triggerTime,
+                      message: reminderMessage,
+                      registerId: String(registerId),
+                      rowId: reminderModal.entryId,
+                      colId: reminderModal.colId,
+                      status: reminderStatus
+                    });
+                    toast.success('Reminder set successfully!');
+                  }
                   setReminderModal(null);
                 }}
               >
@@ -4046,7 +4208,7 @@ export default function RegisterPage() {
             </div>
           </div>
         </div>
-      )}
+      )}/* Reminder Modal */
 
       {/* ── Cell Format Toolbar ── */}
       {formatCell && (
@@ -4059,12 +4221,460 @@ export default function RegisterPage() {
           onClearStyle={handleClearCellStyle}
           onClose={() => setFormatCell(null)}
           onAddReminder={() => {
-            setReminderDate('');
-            setReminderTime('');
-            setReminderMessage('');
+            const existing = reminders.find(r => r.rowId === formatCell.entryId && r.colId === formatCell.colId && r.registerId === String(registerId));
+            if (existing) {
+              const dt = new Date(existing.triggerTime);
+              const yyyy = dt.getFullYear();
+              const mm = String(dt.getMonth() + 1).padStart(2, '0');
+              const dd = String(dt.getDate()).padStart(2, '0');
+              setReminderDate(`${yyyy}-${mm}-${dd}`);
+              
+              const hh = String(dt.getHours()).padStart(2, '0');
+              const min = String(dt.getMinutes()).padStart(2, '0');
+              setReminderTime(`${hh}:${min}`);
+              
+              setReminderMessage(existing.message);
+              setReminderStatus(existing.status);
+            } else {
+              setReminderDate('');
+              setReminderTime('');
+              setReminderMessage('');
+              setReminderStatus('Pending');
+            }
             setReminderModal({ entryId: formatCell.entryId, colId: formatCell.colId });
           }}
         />
+      )}
+
+      {/* Reminders Summary Modal */}
+      {showRemindersSummary && (
+        <div className="modal-overlay" onClick={() => { setShowRemindersSummary(false); setEditingReminderId(null); }}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '650px', maxWidth: '90%', position: 'relative' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Bell size={18} color="var(--primary)" />
+                <h3 style={{ margin: 0 }}>Active Reminders</h3>
+              </div>
+              <button 
+                className="modal-close" 
+                onClick={() => { setShowRemindersSummary(false); setEditingReminderId(null); }}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  background: 'var(--border-color, #f3f4f6)',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  cursor: 'pointer',
+                  zIndex: 10,
+                  transition: 'background 0.2s'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '450px', overflowY: 'auto' }}>
+              {registerReminders.length === 0 ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Bell size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
+                  <p style={{ margin: 0 }}>No reminders set for this register.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {registerReminders.map(r => {
+                    const entry = localEntries.find(e => e.id === r.rowId);
+                    const rowNum = entry ? (entry.rowNumber || localEntries.indexOf(entry) + 1) : 'Unknown Row';
+                    const column = columns.find(c => c.id === r.colId);
+                    const colName = column?.name || r.colId || 'General';
+                    const currentCellValue = entry?.cells?.[r.colId] || '';
+                    const isEditing = editingReminderId === r.id;
+                    const registerName = register?.name || 'Register';
+
+                    if (isEditing) {
+                      return (
+                        <div 
+                          key={r.id} 
+                          style={{ 
+                            border: '2px solid var(--primary)', 
+                            borderRadius: '12px', 
+                            padding: '16px', 
+                            background: '#f9fafb',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                              <span className="badge badge-primary" style={{ fontSize: '11px', padding: '2px 8px' }}>Editing {registerName} (Row #{rowNum})</span>
+                              <span className="badge badge-secondary" style={{ fontSize: '11px', padding: '2px 8px', background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)' }}>Col: {colName}</span>
+                            </div>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)' }}>Edit Mode</span>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>Reminder Date <span style={{fontSize: '10px', color: 'var(--text-muted)'}}>(Optional)</span></label>
+                              <input 
+                                type="date" 
+                                className="modal-input" 
+                                value={editRemDate} 
+                                onChange={e => setEditRemDate(e.target.value)} 
+                                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }} 
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>Reminder Time <span style={{fontSize: '10px', color: 'var(--text-muted)'}}>(Optional)</span></label>
+                              <input 
+                                type="time" 
+                                className="modal-input" 
+                                value={editRemTime} 
+                                onChange={e => setEditRemTime(e.target.value)} 
+                                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }} 
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>Reminder Message *</label>
+                              <input 
+                                type="text" 
+                                className="modal-input" 
+                                value={editRemMessage} 
+                                onChange={e => setEditRemMessage(e.target.value)} 
+                                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }} 
+                                placeholder="Reminder message"
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>Status *</label>
+                              <select 
+                                className="modal-input" 
+                                value={editRemStatus} 
+                                onChange={e => setEditRemStatus(e.target.value as 'Pending' | 'Complete')} 
+                                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }}
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="Complete">Complete</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {column && (
+                            <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '8px' }}>
+                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>
+                                Respective Cell Value ({colName})
+                              </label>
+                              {column.type === 'dropdown' ? (
+                                <select
+                                  className="modal-input"
+                                  value={editRemCellValue}
+                                  onChange={e => setEditRemCellValue(e.target.value)}
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }}
+                                >
+                                  <option value="">-- Select Option --</option>
+                                  {column.dropdownOptions?.map((opt: string) => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                              ) : column.type === 'checkbox' ? (
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '6px 0' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={editRemCellValue === 'true'}
+                                    onChange={e => setEditRemCellValue(e.target.checked ? 'true' : 'false')}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                  />
+                                  <span style={{ fontSize: '13px', color: 'var(--text-color)' }}>Checked</span>
+                                </label>
+                              ) : column.type === 'date' ? (
+                                <input
+                                  type="date"
+                                  className="modal-input"
+                                  value={parseDateString(editRemCellValue)}
+                                  onChange={e => setEditRemCellValue(e.target.value)}
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }}
+                                />
+                              ) : (
+                                <input
+                                  type="text"
+                                  className="modal-input"
+                                  value={editRemCellValue}
+                                  onChange={e => setEditRemCellValue(e.target.value)}
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }}
+                                  placeholder={`Enter cell value...`}
+                                />
+                              )}
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                            <button 
+                              onClick={() => setEditingReminderId(null)}
+                              style={{ 
+                                padding: '6px 12px', fontSize: '12px', fontWeight: 500, borderRadius: '6px', 
+                                border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer', color: 'var(--text-color)' 
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button 
+                              onClick={() => {
+                                if (!editRemMessage) {
+                                  toast.error('Please enter a reminder message');
+                                  return;
+                                }
+                                
+                                let triggerTime: number | undefined = undefined;
+                                if (editRemDate && editRemTime) {
+                                  const dt = new Date(`${editRemDate}T${editRemTime}`);
+                                  if (isNaN(dt.getTime())) {
+                                    toast.error('Please enter a valid date and time');
+                                    return;
+                                  }
+                                  if (editRemStatus === 'Pending' && dt.getTime() < Date.now()) {
+                                    toast.error('Reminder time must be in the future for active/pending reminders');
+                                    return;
+                                  }
+                                  triggerTime = dt.getTime();
+                                }
+
+                                const updated = reminders.map(rem => {
+                                  if (rem.id === r.id) {
+                                    return {
+                                      ...rem,
+                                      message: editRemMessage,
+                                      status: editRemStatus,
+                                      triggerTime: triggerTime
+                                    };
+                                  }
+                                  return rem;
+                                });
+                                setReminders(updated);
+
+                                const res = handleCellChange(r.rowId, r.colId, editRemCellValue);
+                                if (res !== false) {
+                                  toast.success('Reminder and respective cell updated successfully!');
+                                }
+                                setEditingReminderId(null);
+                              }}
+                              style={{ 
+                                padding: '6px 12px', fontSize: '12px', fontWeight: 600, borderRadius: '6px', 
+                                border: 'none', background: 'var(--primary)', cursor: 'pointer', color: '#fff' 
+                              }}
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const triggerDate = r.triggerTime ? new Date(r.triggerTime).toLocaleString() : 'No schedule set';
+                    
+                    return (
+                      <div 
+                        key={r.id} 
+                        style={{ 
+                          border: '1px solid var(--border-color)', 
+                          borderRadius: '8px', 
+                          padding: '12px', 
+                          background: 'var(--card-bg, #ffffff)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span className="badge badge-primary" style={{ fontSize: '11px', padding: '2px 8px' }}>{registerName} (Row #{rowNum})</span>
+                            <span className="badge badge-secondary" style={{ fontSize: '11px', padding: '2px 8px', background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)' }}>Col: {colName}</span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{triggerDate}</span>
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span 
+                              style={{ 
+                                fontSize: '11px', 
+                                padding: '2px 8px', 
+                                borderRadius: '4px', 
+                                background: r.status === 'Pending' ? '#fffbeb' : '#ecfdf5',
+                                color: r.status === 'Pending' ? '#d97706' : '#059669',
+                                fontWeight: 600
+                              }}
+                            >
+                              {r.status}
+                            </span>
+
+                            <button 
+                              onClick={() => {
+                                setEditingReminderId(r.id);
+                                setEditRemMessage(r.message || '');
+                                setEditRemStatus(r.status || 'Pending');
+                                if (r.triggerTime) {
+                                  const dt = new Date(r.triggerTime);
+                                  const yyyy = dt.getFullYear();
+                                  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+                                  const dd = String(dt.getDate()).padStart(2, '0');
+                                  setEditRemDate(`${yyyy}-${mm}-${dd}`);
+                                  const hh = String(dt.getHours()).padStart(2, '0');
+                                  const min = String(dt.getMinutes()).padStart(2, '0');
+                                  setEditRemTime(`${hh}:${min}`);
+                                } else {
+                                  setEditRemDate('');
+                                  setEditRemTime('');
+                                }
+                                setEditRemCellValue(currentCellValue);
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--primary)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '4px',
+                                fontSize: '12px',
+                                fontWeight: 500
+                              }}
+                              title="Edit Reminder & Cell Value"
+                            >
+                              Edit
+                            </button>
+
+                            <button 
+                              onClick={() => {
+                                if (window.confirm('Are you sure you want to delete this reminder?')) {
+                                  const updated = reminders.filter(rem => rem.id !== r.id);
+                                  setReminders(updated);
+                                  toast.success('Reminder deleted successfully');
+                                }
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--danger-color, #ef4444)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '4px'
+                              }}
+                              title="Delete Reminder"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-color)', fontWeight: 500 }}>
+                            {r.message}
+                          </p>
+                          <div style={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '6px', 
+                            marginTop: '8px', 
+                            background: '#fafafa', 
+                            padding: '8px 12px', 
+                            borderRadius: '6px', 
+                            border: '1px solid #e5e7eb' 
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                                Respective Cell Value:
+                              </span>
+                              {inlineCellValues[r.id] !== undefined && inlineCellValues[r.id] !== currentCellValue && (
+                                <span style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 600 }}>Unsaved changes</span>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              {column?.type === 'dropdown' ? (
+                                <select
+                                  value={inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue}
+                                  onChange={e => setInlineCellValues(prev => ({ ...prev, [r.id]: e.target.value }))}
+                                  style={{ flex: 1, padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #d1d5db', background: '#fff' }}
+                                >
+                                  <option value="">-- Select Option --</option>
+                                  {column.dropdownOptions?.map((opt: string) => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                              ) : column?.type === 'checkbox' ? (
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flex: 1 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={(inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue) === 'true'}
+                                    onChange={e => setInlineCellValues(prev => ({ ...prev, [r.id]: e.target.checked ? 'true' : 'false' }))}
+                                    style={{ cursor: 'pointer' }}
+                                  />
+                                  <span style={{ fontSize: '12px' }}>Checked</span>
+                                </label>
+                              ) : column?.type === 'date' ? (
+                                <input
+                                  type="date"
+                                  value={parseDateString(inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue)}
+                                  onChange={e => setInlineCellValues(prev => ({ ...prev, [r.id]: e.target.value }))}
+                                  style={{ flex: 1, padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #d1d5db', background: '#fff' }}
+                                />
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue}
+                                  onChange={e => setInlineCellValues(prev => ({ ...prev, [r.id]: e.target.value }))}
+                                  style={{ flex: 1, padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #d1d5db', background: '#fff' }}
+                                  placeholder="Enter cell value..."
+                                />
+                              )}
+                              <button
+                                onClick={() => {
+                                  const valToSave = inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue;
+                                  const res = handleCellChange(r.rowId, r.colId, valToSave);
+                                  if (res !== false) {
+                                    setInlineCellValues(prev => {
+                                      const next = { ...prev };
+                                      delete next[r.id];
+                                      return next;
+                                    });
+                                    toast.success('Cell value saved back to table successfully!');
+                                  }
+                                }}
+                                style={{
+                                  padding: '4px 12px',
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: 'var(--primary)',
+                                  color: '#fff',
+                                  cursor: 'pointer',
+                                  transition: 'background 0.2s'
+                                }}
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer" style={{ marginTop: '16px' }}>
+              <button className="modal-confirm-btn" onClick={() => { setShowRemindersSummary(false); setEditingReminderId(null); }}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

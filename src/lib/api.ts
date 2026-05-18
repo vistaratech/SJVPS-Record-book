@@ -181,6 +181,7 @@ export interface HistoryEntry {
   userName?: string;
   registerName?: string;
   registerId?: number;
+  entryId?: number;
 }
 
 export interface SearchResult {
@@ -1621,7 +1622,7 @@ export async function addEntry(registerId: number, cells: Record<string, string>
       const c = reg.columns.find(col => col.id.toString() === id);
       return `${c?.name || id}: ${val}`;
     }).join(', ');
-    await logAction(reg.businessId, 'Add Row', `Added new row to "${reg.name}"${preview ? ` (${preview}...)` : ''}`, { registerId, registerName: reg.name });
+    await logAction(reg.businessId, 'Add Row', `Added new row to "${reg.name}"${preview ? ` (${preview}...)` : ''}`, { registerId, registerName: reg.name, entryId: entry.id });
     return { entry, reg };
   });
 
@@ -1676,7 +1677,7 @@ export async function insertEntry(registerId: number, cells: Record<string, stri
       const c = reg.columns.find(col => col.id.toString() === id);
       return `${c?.name || id}: ${val}`;
     }).join(', ');
-    await logAction(reg.businessId, 'Insert Row', `Inserted row at position ${atIndex + 1} in "${reg.name}"${preview ? ` (${preview}...)` : ''}`, { registerId, registerName: reg.name });
+    await logAction(reg.businessId, 'Insert Row', `Inserted row at position ${atIndex + 1} in "${reg.name}"${preview ? ` (${preview}...)` : ''}`, { registerId, registerName: reg.name, entryId: entry.id });
     return { entry, reg };
   });
 
@@ -1716,7 +1717,7 @@ export async function updateEntry(registerId: number, entryId: number, cells: Re
       const c = reg.columns.find(col => col.id.toString() === id);
       return `${c?.name || id}="${val}"`;
     }).join(', ');
-    await logAction(reg.businessId, 'Edit Row', `Updated row #${entry.rowNumber} in "${reg.name}": ${changes}`, { registerId, registerName: reg.name });
+    await logAction(reg.businessId, 'Edit Row', `Updated row #${entry.rowNumber} in "${reg.name}": ${changes}`, { registerId, registerName: reg.name, entryId });
     
     return { entry, reg };
   });
@@ -1828,7 +1829,7 @@ export async function deleteEntry(registerId: number, entryId: number): Promise<
     renumberRows(reg);
     reg.entryCount = reg.entries.length;
     await saveRegDocImmediate(reg);
-    await logAction(reg.businessId, 'Delete Row', `Deleted row #${entry.rowNumber} from "${reg.name}"`, { registerId, registerName: reg.name });
+    await logAction(reg.businessId, 'Delete Row', `Deleted row #${entry.rowNumber} from "${reg.name}"`, { registerId, registerName: reg.name, entryId });
   });
 }
 
@@ -2035,7 +2036,7 @@ export async function logAction(
   businessId: number,
   action: string,
   details: string,
-  meta?: { registerId?: number; registerName?: string }
+  meta?: { registerId?: number; registerName?: string; entryId?: number }
 ): Promise<void> {
   try {
     const savedUser = JSON.parse(localStorage.getItem('rb_user') || 'null');
@@ -2071,6 +2072,23 @@ export async function listHistory(businessId: number): Promise<HistoryEntry[]> {
     return snap.docs
       .map(d => d.data() as HistoryEntry)
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }
+}
+
+export async function listRowHistory(registerId: number, entryId: number): Promise<HistoryEntry[]> {
+  try {
+    const q = query(
+      collection(db, 'history'),
+      where('registerId', '==', registerId),
+      where('entryId', '==', entryId)
+    );
+    const snap = await getDocs(q);
+    return snap.docs
+      .map(d => d.data() as HistoryEntry)
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  } catch (err) {
+    console.error('Failed to fetch row history:', err);
+    return [];
   }
 }
 

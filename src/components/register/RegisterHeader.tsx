@@ -1,4 +1,4 @@
-import { Bookmark, Download, Share2, X, MoreHorizontal, Trash2, Lock } from 'lucide-react';
+import { Bookmark, Download, Share2, X, MoreHorizontal, Trash2, Lock, Bell } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { RequestModal } from './modals/RequestModal';
@@ -19,6 +19,7 @@ interface RegisterHeaderProps {
   handleOpenExport: () => void;
   canDownload?: boolean;
   canEdit?: boolean;
+  onViewReminders?: () => void;
 }
 
 export function RegisterHeader({ 
@@ -26,7 +27,8 @@ export function RegisterHeader({
   setShareModal, 
   handleOpenExport,
   canDownload = true,
-  canEdit = true
+  canEdit = true,
+  onViewReminders
 }: RegisterHeaderProps) {
   const [saveTemplateModal, setSaveTemplateModal] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -143,6 +145,11 @@ export function RegisterHeader({
             <span style={{ color: canDownload ? 'inherit' : 'var(--primary)', fontWeight: canDownload ? 400 : 600 }}>
               {canDownload ? 'Download Options' : 'Request Download'}
             </span>
+          </button>
+
+          <button className="more-menu-item" onClick={() => { onViewReminders?.(); setShowMoreMenu(false); }}>
+            <Bell size={16} />
+            <span>View Reminders</span>
           </button>
 
           <button className="more-menu-item" onClick={() => { setTemplateName(register?.name || ''); setSaveTemplateModal(true); }}>

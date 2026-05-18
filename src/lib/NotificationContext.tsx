@@ -17,10 +17,12 @@ export interface AppNotification {
 
 export interface Reminder {
   id: string;
-  triggerTime: number; // Unix timestamp
+  triggerTime?: number; // Unix timestamp (optional)
   message: string;
   registerId: string;
   rowId?: string | number;
+  colId?: string;
+  status: 'Pending' | 'Complete';
 }
 
 interface NotificationContextType {
@@ -32,6 +34,8 @@ interface NotificationContextType {
   removeNotification: (id: string) => void;
   clearAll: () => void;
   scheduleReminder: (reminder: Omit<Reminder, 'id'>) => void;
+  reminders: Reminder[];
+  setReminders: React.Dispatch<React.SetStateAction<Reminder[]>>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -74,7 +78,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const now = Date.now();
       const currentReminders = remindersRef.current;
       
-      const triggered = currentReminders.filter(r => r.triggerTime <= now);
+      const triggered = currentReminders.filter(r => r.status === 'Pending' && r.triggerTime !== undefined && r.triggerTime <= now);
       
       if (triggered.length > 0) {
         // Push the notifications
@@ -91,8 +95,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           return [...newNotifs, ...curr];
         });
         
-        // Remove from reminders
-        setReminders(prev => prev.filter(r => r.triggerTime > now));
+        // Mark triggered reminders as Complete
+        setReminders(prev => prev.map(r => (r.status === 'Pending' && r.triggerTime !== undefined && r.triggerTime <= now) ? { ...r, status: 'Complete' } : r));
       }
     }, 10000); // Check every 10 seconds
 
@@ -128,7 +132,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       markAllAsRead,
       removeNotification,
       clearAll,
-      scheduleReminder
+      scheduleReminder,
+      reminders,
+      setReminders
     }}>
       {children}
     </NotificationContext.Provider>

@@ -158,8 +158,10 @@ export const CellFormatToolbar = React.memo(function CellFormatToolbar({
           <>
             <div style={{ width: '1px', height: '20px', background: '#e5e7eb', margin: '0 2px' }} />
             <button
+              type="button"
               title="Add Reminder"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 onAddReminder();
                 onClose();
               }}
