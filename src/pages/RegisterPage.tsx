@@ -4222,7 +4222,7 @@ export default function RegisterPage() {
           onClose={() => setFormatCell(null)}
           onAddReminder={() => {
             const existing = reminders.find(r => r.rowId === formatCell.entryId && r.colId === formatCell.colId && r.registerId === String(registerId));
-            if (existing) {
+            if (existing && existing.triggerTime) {
               const dt = new Date(existing.triggerTime);
               const yyyy = dt.getFullYear();
               const mm = String(dt.getMonth() + 1).padStart(2, '0');
@@ -4289,9 +4289,9 @@ export default function RegisterPage() {
                   {registerReminders.map(r => {
                     const entry = localEntries.find(e => e.id === r.rowId);
                     const rowNum = entry ? (entry.rowNumber || localEntries.indexOf(entry) + 1) : 'Unknown Row';
-                    const column = columns.find(c => c.id === r.colId);
+                    const column = columns.find(c => c.id.toString() === r.colId);
                     const colName = column?.name || r.colId || 'General';
-                    const currentCellValue = entry?.cells?.[r.colId] || '';
+                    const currentCellValue = (r.colId && entry?.cells) ? entry.cells[r.colId] : '';
                     const isEditing = editingReminderId === r.id;
                     const registerName = register?.name || 'Register';
 
@@ -4459,7 +4459,7 @@ export default function RegisterPage() {
                                 });
                                 setReminders(updated);
 
-                                const res = handleCellChange(r.rowId, r.colId, editRemCellValue);
+                                const res = handleCellChange(r.rowId as number, r.colId as string, editRemCellValue);
                                 if (res !== false) {
                                   toast.success('Reminder and respective cell updated successfully!');
                                 }
@@ -4637,7 +4637,7 @@ export default function RegisterPage() {
                               <button
                                 onClick={() => {
                                   const valToSave = inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue;
-                                  const res = handleCellChange(r.rowId, r.colId, valToSave);
+                                  const res = handleCellChange(r.rowId as number, r.colId as string, valToSave);
                                   if (res !== false) {
                                     setInlineCellValues(prev => {
                                       const next = { ...prev };

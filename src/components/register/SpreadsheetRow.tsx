@@ -575,6 +575,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
           />
           <span className="serial-number" onClick={handleSerialClick} title="Click to view details">{displayRowNumber || entry.rowNumber}</span>
           {hasPendingReminder && (
+          <span title="This row has a pending reminder">
             <Bell 
               size={12} 
               className="text-amber-500 fill-amber-500 animate-pulse" 
@@ -584,8 +585,8 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
                 marginLeft: '2px',
                 flexShrink: 0
               }} 
-              title="This row has a pending reminder"
             />
+          </span>
           )}
         </div>
       </td>
