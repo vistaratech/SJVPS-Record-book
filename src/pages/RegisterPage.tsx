@@ -4208,7 +4208,7 @@ export default function RegisterPage() {
             </div>
           </div>
         </div>
-      )}/* Reminder Modal */
+      )}
 
       {/* ── Cell Format Toolbar ── */}
       {formatCell && (
