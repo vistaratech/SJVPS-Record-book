@@ -42,12 +42,13 @@
   --border-light: #E8EDF2;
   --border: #D8DEE6;
   --border-v: rgba(13, 42, 92, 0.06);
+  --grid-line: #d0d5dd;
 
   /* Text */
-  --foreground: #002D5D;
-  --fg: #002D5D;
-  --muted: #4B5E7E;
-  --muted-light: #7E8DA6;
+  --foreground: #000000;
+  --fg: #000000;
+  --muted: #1A1A1A;
+  --muted-light: #333333;
   --placeholder: #A5B0C1;
 
   /* Sidebar / Surface */
@@ -1871,8 +1872,8 @@ a {
   top: 0;
   z-index: 10;
   background: var(--surface);
-  border-bottom: 1px solid var(--border-light);
-  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--grid-line);
+  border-right: 1px solid var(--grid-line);
   padding: 0;
   height: 44px;
   text-align: left;
@@ -1902,8 +1903,8 @@ a {
   z-index: 12;
   background: var(--surface);
   padding: 0 4px;
-  border-right: 1px solid var(--border-light);
-  border-bottom: 1px solid var(--border-light);
+  border-right: 1px solid var(--grid-line);
+  border-bottom: 1px solid var(--grid-line);
 }
 
 .spreadsheet th.serial-header-checkbox {
@@ -2011,8 +2012,8 @@ a {
 }
 
 .spreadsheet td {
-  border-bottom: 1px solid var(--border-light);
-  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--grid-line) !important;
+  border-right: 1px solid var(--grid-line) !important;
   padding: 0;
   height: 46px;
   font-size: 13px;
@@ -2075,16 +2076,168 @@ a {
   box-sizing: border-box;
 }
 
+/* ── Cell Autocomplete Suggestions Dropdown ── */
+.cell-suggestions-dropdown {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 2px 8px -2px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  max-height: 240px;
+  overflow-y: auto;
+  animation: suggestionsReveal 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes suggestionsReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cell-suggestion-item {
+  padding: 7px 12px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid #f8fafc;
+}
+
+.cell-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.cell-suggestion-item:hover,
+.cell-suggestion-item.highlighted {
+  background: #f1f5ff;
+  color: #1e40af;
+}
+
+.cell-suggestion-item.highlighted {
+  background: #e8efff;
+}
+
+.cell-suggestion-item strong {
+  font-weight: 700;
+  color: #2563eb;
+}
+
+/* ── Register Page Black & White High Contrast Overrides ── */
+.spreadsheet-wrapper,
+.spreadsheet,
+.spreadsheet td,
+.cell-input,
+.cell-date,
+.cell-dropdown,
+.cell-formula,
+.cell-auto-increment,
+.cell-currency,
+.calc-value,
+.col-header-name,
+.col-type-text-icon,
+.sort-indicator {
+  --navy: #000000 !important;
+  --foreground: #000000 !important;
+  --fg: #000000 !important;
+  --muted: #000000 !important;
+  --muted-light: #000000 !important;
+  --placeholder: #666666 !important;
+  
+  color: #000000 !important;
+  background-color: #ffffff !important;
+}
+
+.spreadsheet th,
+.spreadsheet th.serial,
+.spreadsheet th.serial-header-checkbox,
+.spreadsheet th.actions {
+  --navy: #000000 !important;
+  --foreground: #000000 !important;
+  --fg: #000000 !important;
+  color: #000000 !important;
+  background-color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.spreadsheet tr:hover td,
+.spreadsheet th:hover,
+.spreadsheet tr.mock:hover td {
+  background-color: #f3f4f6 !important;
+}
+
+.cell-input:focus,
+.cell-date:focus,
+.cell-dropdown:focus,
+.cell-formula:focus,
+.cell-currency:focus {
+  background-color: #ffffff !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: #000000 !important;
+}
+
+.cell-checkbox {
+  accent-color: #000000 !important;
+}
+
+.pab-tab-action-btn:not(.primary),
+.pab-icon-btn,
+.pab-filter-btn:not(.active) {
+  color: #000000 !important;
+  border-color: #000000 !important;
+  background-color: #ffffff !important;
+}
+
+.pab-tab-action-btn.primary,
+.pab-btn-primary,
+.pab-filter-btn.active {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border-color: #000000 !important;
+}
+
 .cell-input:focus,
 .cell-date:focus,
 .cell-dropdown:focus,
 .cell-formula:focus,
 .cell-currency:focus {
   background: #ffffff;
+  box-shadow: none;
+  outline: none;
+}
+
+/* ── Full-cell focus highlight (td-level) ── */
+.spreadsheet td:focus-within {
   box-shadow: inset 0 0 0 2px var(--accent);
   z-index: 5;
   position: relative;
-  outline: none;
+  background: #eef4ff !important;
+}
+
+/* ── Subtle row tint when editing a cell ── */
+.spreadsheet tr:focus-within td {
+  background: #f8faff !important;
+}
+
+.spreadsheet tr:focus-within td:focus-within {
+  background: #eef4ff !important;
+}
+
+/* Keep sticky columns above the focused cell */
+.spreadsheet tr:focus-within td.serial {
+  z-index: 11;
+}
+
+.spreadsheet tr:focus-within td.serial-header-checkbox {
+  z-index: 11;
 }
 
 .cell-date,
@@ -2453,9 +2606,8 @@ a {
 }
 
 .cell-currency:focus {
-  background: #ffffff;
-  outline: 2px solid #217346;
-  outline-offset: -2px;
+  background: transparent;
+  outline: none;
   z-index: 2;
   position: relative;
 }
@@ -6085,6 +6237,74 @@ body.modal-open {
   font-weight: 500;
 }
 
+.calendar-year-clickable {
+  cursor: pointer;
+  padding: 1px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.calendar-year-clickable:hover {
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+/* Year Picker Grid */
+.year-picker-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.year-picker-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  margin-bottom: 4px;
+}
+
+.year-picker-range {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.year-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.year-picker-item {
+  padding: 8px 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.year-picker-item:hover {
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+.year-picker-item.selected {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.year-picker-item.current-year:not(.selected) {
+  color: #2563eb;
+  font-weight: 700;
+}
+
 .calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -7542,7 +7762,6 @@ body.modal-open {
   padding: 0 !important;
   vertical-align: middle !important;
   white-space: nowrap !important;
-  contain: strict !important;
 }
 
 /* Spacer cells must be unconstrained for virtualizer scroll height */

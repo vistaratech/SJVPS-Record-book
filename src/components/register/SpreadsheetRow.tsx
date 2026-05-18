@@ -1,7 +1,8 @@
 import { evaluateFormula, type Entry, type Column } from '../../lib/api';
 import { formatCurrency } from '../../lib/formatters';
 import { Calendar, ChevronDown, Image as ImageIcon, Mail, Phone, Globe, ListOrdered, IndianRupee, Maximize2 } from 'lucide-react';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 // ── Highlight matching text ──
 const HighlightedText = React.memo(function HighlightedText({ text, searchTerm }: { text: string; searchTerm?: string }) {
@@ -158,22 +159,35 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
     initialValue = initialValue.replace(/\//g, '-');
   }
   const [val, setVal] = useState(initialValue);
-  const [ghostText, setGhostText] = useState('');
   const [focused, setFocused] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  useEffect(() => {
-    if (!isDeleting && val && focused && !readOnly && suggestions && suggestions.length > 0) {
-      const match = suggestions.find(s => s.toLowerCase().startsWith(val.toLowerCase()) && s.toLowerCase() !== val.toLowerCase());
-      if (match) {
-        setGhostText(val + match.slice(val.length));
-      } else {
-        setGhostText('');
-      }
-    } else {
-      setGhostText('');
-    }
+  // Compute filtered suggestions
+  const filteredSuggestions = useMemo(() => {
+    if (!focused || !val || val.length < 3 || readOnly || isDeleting || !suggestions || suggestions.length === 0) return [];
+    const lower = val.toLowerCase();
+    return suggestions.filter(s => s.toLowerCase().includes(lower) && s.toLowerCase() !== lower);
   }, [val, suggestions, focused, readOnly, isDeleting]);
+
+  const showDropdown = filteredSuggestions.length > 0 && focused;
+
+  // Update dropdown position when it should be shown
+  useEffect(() => {
+    if (showDropdown && inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(rect.width, 160) });
+    } else {
+      setDropdownPos(null);
+    }
+  }, [showDropdown, val]);
+
+  // Reset highlight when suggestions change
+  useEffect(() => {
+    setHighlightIdx(-1);
+  }, [filteredSuggestions.length, val]);
 
   // Sync if the entry is replaced (e.g., after add-row optimistic swap)
   useEffect(() => {
@@ -188,25 +202,41 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
     setVal(newVal);
   }, [readOnly, val.length]);
 
-  const onBlur = useCallback(() => {
+  const selectSuggestion = useCallback((suggestion: string) => {
+    setVal(suggestion);
     setFocused(false);
-    setIsDeleting(false);
-    if (readOnly) return;
-    
-    const finalVal = val;
-    setGhostText('');
-
+    setHighlightIdx(-1);
     const prevVal = entry.cells?.[col.id.toString()] || '';
-    if (finalVal !== prevVal) {
-      const success = handleCellChange(entry.id, col.id.toString(), finalVal);
-      if (success === false) {
-        setVal(prevVal);
-      }
+    if (suggestion !== prevVal) {
+      handleCellChange(entry.id, col.id.toString(), suggestion);
     }
+    // Re-focus input after selecting
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, [entry, col.id, handleCellChange]);
+
+  const onBlur = useCallback(() => {
+    // Delay to allow click on dropdown item
+    setTimeout(() => {
+      setFocused(false);
+      setIsDeleting(false);
+      setHighlightIdx(-1);
+      if (readOnly) return;
+
+      const finalVal = val;
+      const prevVal = entry.cells?.[col.id.toString()] || '';
+      if (finalVal !== prevVal) {
+        const success = handleCellChange(entry.id, col.id.toString(), finalVal);
+        if (success === false) {
+          setVal(prevVal);
+        }
+      }
+    }, 150);
   }, [val, entry, col.id, handleCellChange, readOnly]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
+      setFocused(false);
+      setHighlightIdx(-1);
       e.currentTarget.blur();
       return;
     }
@@ -216,36 +246,53 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
       if (el) el.focus();
     };
 
+    // If dropdown is showing, ArrowDown/ArrowUp navigate suggestions
+    if (showDropdown && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      e.stopPropagation();
+      setHighlightIdx(prev => {
+        const max = filteredSuggestions.length;
+        if (e.key === 'ArrowDown') return prev < max - 1 ? prev + 1 : 0;
+        return prev > 0 ? prev - 1 : max - 1;
+      });
+      return;
+    }
+
     if (e.key === 'Tab' || e.key === 'Enter') {
       e.preventDefault();
-      const finalVal = val;
-      setGhostText('');
 
+      // If a suggestion is highlighted, select it instead of navigating
+      if (showDropdown && highlightIdx >= 0 && highlightIdx < filteredSuggestions.length) {
+        selectSuggestion(filteredSuggestions[highlightIdx]);
+        return;
+      }
+
+      const finalVal = val;
       const prevVal = entry.cells?.[col.id.toString()] || '';
       if (!readOnly && finalVal !== prevVal) {
         const success = handleCellChange(entry.id, col.id.toString(), finalVal);
         if (success === false) {
           setVal(prevVal);
-          return; // Stop focus change if validation failed
+          return;
         }
       }
+      setFocused(false);
+      setHighlightIdx(-1);
       if (e.shiftKey) {
-        // Shift+Enter/Tab: Move left, wrap to previous row
         const prevCol = visibleColumns[colIdx - 1];
         if (prevCol) {
           focusNext(idx, prevCol.id);
-        } else if (idx > 0) {
+        } else {
           const lastCol = visibleColumns[visibleColumns.length - 1];
-          if (lastCol) focusNext(idx - 1, lastCol.id);
+          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id);
         }
       } else {
-        // Enter/Tab: Move right, wrap to next row
         const nextCol = visibleColumns[colIdx + 1];
         if (nextCol) {
           focusNext(idx, nextCol.id);
         } else {
           const firstCol = visibleColumns[0];
-          if (firstCol) focusNext(idx + 1, firstCol.id);
+          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id);
         }
       }
     } else if (e.key === 'ArrowDown') {
@@ -268,12 +315,6 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         if (lastCol) focusNext(idx - 1, lastCol.id);
       }
     } else if (e.key === 'ArrowRight') {
-      if (ghostText && e.currentTarget.selectionStart === val.length) {
-        e.preventDefault();
-        setVal(ghostText);
-        setGhostText('');
-        return;
-      }
       e.preventDefault();
       const nextCol = visibleColumns[colIdx + 1];
       if (nextCol) {
@@ -283,17 +324,13 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         if (firstCol) focusNext(idx + 1, firstCol.id);
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, ghostText]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion]);
 
 
 
   const hasHighlight = !!searchTerm && !!val && val.toLowerCase().includes(searchTerm.toLowerCase());
 
   const handleFocus = useCallback(() => !readOnly && setFocused(true), [readOnly]);
-  const handleBlurWrap = useCallback(() => {
-    setFocused(false);
-    onBlur();
-  }, [onBlur]);
 
   // Show highlighted overlay when search matches and not focused
   if (hasHighlight && !focused) {
@@ -315,31 +352,13 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
   return (
     <>
     <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}>
-      {ghostText && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          padding: '0 10px',
-          display: 'flex',
-          alignItems: 'center',
-          fontSize: '13px',
-          color: '#cbd5e1',
-          pointerEvents: 'none',
-          whiteSpace: 'pre'
-        }}>
-          {ghostText}
-        </div>
-      )}
       <input
+        ref={inputRef}
         id={`cell-${idx}-${col.id}`}
         className={`cell-input ${readOnly ? 'cell-readonly' : ''}`}
-        style={{ position: 'relative', zIndex: 2, background: 'transparent' }}
         value={val}
         onChange={onChange}
-        onBlur={handleBlurWrap}
+        onBlur={onBlur}
         onFocus={handleFocus}
         onKeyDown={onKeyDown}
         type={type}
@@ -348,6 +367,42 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         autoComplete="off"
         readOnly={readOnly}
       />
+      {showDropdown && dropdownPos && createPortal(
+        <div
+          className="cell-suggestions-dropdown"
+          style={{
+            position: 'fixed',
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+            zIndex: 10010,
+          }}
+        >
+          {filteredSuggestions.slice(0, 8).map((s, i) => {
+            const matchIdx = s.toLowerCase().indexOf(val.toLowerCase());
+            return (
+              <div
+                key={s}
+                className={`cell-suggestion-item ${i === highlightIdx ? 'highlighted' : ''}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectSuggestion(s);
+                }}
+                onMouseEnter={() => setHighlightIdx(i)}
+              >
+                {matchIdx >= 0 ? (
+                  <>
+                    {s.slice(0, matchIdx)}
+                    <strong>{s.slice(matchIdx, matchIdx + val.length)}</strong>
+                    {s.slice(matchIdx + val.length)}
+                  </>
+                ) : s}
+              </div>
+            );
+          })}
+        </div>,
+        document.body
+      )}
     </div>
     </>
   );
@@ -450,9 +505,9 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
         const prevCol = visibleColumns[colIdx - 1];
         if (prevCol) {
           focusNext(idx, prevCol.id);
-        } else if (idx > 0) {
+        } else {
           const lastCol = visibleColumns[visibleColumns.length - 1];
-          if (lastCol) focusNext(idx - 1, lastCol.id);
+          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id);
         }
       } else {
         const nextCol = visibleColumns[colIdx + 1];
@@ -460,7 +515,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
           focusNext(idx, nextCol.id);
         } else {
           const firstCol = visibleColumns[0];
-          if (firstCol) focusNext(idx + 1, firstCol.id);
+          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id);
         }
       }
     } else if (e.key === 'ArrowDown') {

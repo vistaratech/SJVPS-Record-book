@@ -51,14 +51,18 @@ export function OtherModals(props: OtherModalsProps) {
   const [dropdownSearch, setDropdownSearch] = useState('');
   const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
+  const [showYearPicker, setShowYearPicker] = useState(false);
+  const [yearPageOffset, setYearPageOffset] = useState(0);
 
   useEffect(() => {
     if (dateModal) {
-      // Use defaults if props are not provided
-      const m = (new Date().getMonth() + 1);
-      const y = new Date().getFullYear();
+      // Initialize from existing date props if available, otherwise use today
+      const m = dateMonth && !isNaN(Number(dateMonth)) ? Number(dateMonth) : (new Date().getMonth() + 1);
+      const y = dateYear && !isNaN(Number(dateYear)) ? Number(dateYear) : new Date().getFullYear();
       setViewMonth(m);
       setViewYear(y);
+      setShowYearPicker(false);
+      setYearPageOffset(0);
     }
   }, [dateModal]);
 
@@ -207,7 +211,13 @@ export function OtherModals(props: OtherModalsProps) {
               
               <div className="calendar-title">
                 <span className="calendar-month">{monthNames[viewMonth - 1]}</span>
-                <span className="calendar-year">{viewYear}</span>
+                <span 
+                  className="calendar-year calendar-year-clickable" 
+                  onClick={() => { setShowYearPicker(!showYearPicker); setYearPageOffset(0); }}
+                  title="Click to select year"
+                >
+                  {viewYear} ▾
+                </span>
               </div>
 
               <button className="calendar-nav-btn" onClick={() => {
@@ -220,34 +230,71 @@ export function OtherModals(props: OtherModalsProps) {
               }}><ChevronRight size={16} /></button>
             </div>
 
-            <div className="calendar-weekdays">
-              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-                <div key={d} className="calendar-weekday">{d}</div>
-              ))}
-            </div>
-
-            <div className="calendar-grid">
-              {Array.from({ length: firstDayOfMonth(viewMonth, viewYear) }).map((_, i) => (
-                <div key={`empty-${i}`} className="calendar-day empty" />
-              ))}
-              {Array.from({ length: daysInMonth(viewMonth, viewYear) }).map((_, i) => {
-                const d = i + 1;
-                const isSelected = d.toString() === dateDay && viewMonth.toString() === dateMonth && viewYear.toString() === dateYear;
-                const isToday = d === new Date().getDate() && viewMonth === (new Date().getMonth() + 1) && viewYear === new Date().getFullYear();
-                
-                return (
-                  <button 
-                    key={d} 
-                    className={`calendar-day ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
-                    onClick={() => {
-                      handleDateSelect(d.toString(), viewMonth.toString(), viewYear.toString());
-                    }}
-                  >
-                    {d}
+            {showYearPicker ? (
+              <div className="year-picker-container">
+                <div className="year-picker-nav">
+                  <button className="calendar-nav-btn" onClick={() => setYearPageOffset(yearPageOffset - 1)}>
+                    <ChevronLeft size={14} />
                   </button>
-                );
-              })}
-            </div>
+                  <span className="year-picker-range">
+                    {viewYear - 6 + yearPageOffset * 12} – {viewYear + 5 + yearPageOffset * 12}
+                  </span>
+                  <button className="calendar-nav-btn" onClick={() => setYearPageOffset(yearPageOffset + 1)}>
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+                <div className="year-picker-grid">
+                  {Array.from({ length: 12 }).map((_, i) => {
+                    const yr = viewYear - 6 + i + yearPageOffset * 12;
+                    const isCurrent = yr === viewYear;
+                    const isThisYear = yr === new Date().getFullYear();
+                    return (
+                      <button
+                        key={yr}
+                        className={`year-picker-item ${isCurrent ? 'selected' : ''} ${isThisYear ? 'current-year' : ''}`}
+                        onClick={() => {
+                          setViewYear(yr);
+                          setShowYearPicker(false);
+                        }}
+                      >
+                        {yr}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="calendar-weekdays">
+                  {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                    <div key={d} className="calendar-weekday">{d}</div>
+                  ))}
+                </div>
+
+                <div className="calendar-grid">
+                  {Array.from({ length: firstDayOfMonth(viewMonth, viewYear) }).map((_, i) => (
+                    <div key={`empty-${i}`} className="calendar-day empty" />
+                  ))}
+                  {Array.from({ length: daysInMonth(viewMonth, viewYear) }).map((_, i) => {
+                    const d = i + 1;
+                    const isSelected = d.toString() === dateDay && viewMonth.toString() === dateMonth && viewYear.toString() === dateYear;
+                    const isToday = d === new Date().getDate() && viewMonth === (new Date().getMonth() + 1) && viewYear === new Date().getFullYear();
+                    
+                    return (
+                      <button 
+                        key={d} 
+                        className={`calendar-day ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                        onClick={() => {
+                          handleDateSelect(d.toString(), viewMonth.toString(), viewYear.toString());
+                        }}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
 
             <div className="calendar-footer">
               <button 

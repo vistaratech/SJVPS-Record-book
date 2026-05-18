@@ -2680,15 +2680,8 @@ export default function RegisterPage() {
     return 240; 
   }, [wrapperSize.w]);
 
-  // Row height: fit 9 rows exactly into available height (minus header row)
-  const dynamicRowHeight = useMemo(() => {
-    if (wrapperSize.h > 0) {
-      const available = wrapperSize.h - HEADER_OVERHEAD;
-      const h = Math.floor(available / TARGET_ROWS);
-      return Math.max(36, Math.min(h, 60)); // clamp between 36–60px
-    }
-    return 42; // default
-  }, [wrapperSize.h]);
+  // Row height: fixed compact height (27px)
+  const dynamicRowHeight = 27;
 
 
   // stats recalculation depends directly on displayEntries for live updates
