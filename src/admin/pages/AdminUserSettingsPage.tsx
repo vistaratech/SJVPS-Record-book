@@ -25,6 +25,7 @@ export default function AdminUserSettingsPage() {
   const [sheetAccessGranted, setSheetAccessGranted] = useState<Record<string, boolean>>({});
   const [folderAccessGranted, setFolderAccessGranted] = useState<Record<string, boolean>>({});
   const [editRestrictions, setEditRestrictions] = useState<Record<string, any>>({});
+  const [viewRestrictions, setViewRestrictions] = useState<Record<string, any>>({});
   const [downloadRestrictions, setDownloadRestrictions] = useState<Record<string, any>>({});
   const [previewReg, setPreviewReg] = useState<RegisterDetail | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Record<number | string, boolean>>({});
@@ -94,6 +95,16 @@ export default function AdminUserSettingsPage() {
           setEditRestrictions(p.editRestrictions);
         }
 
+        if (p.viewRestrictions && typeof p.viewRestrictions === 'object') {
+          const viewRestObj: Record<string, any> = {};
+          Object.entries(p.viewRestrictions).forEach(([rid, val]) => {
+            if (Array.isArray(val)) {
+              viewRestObj[rid] = val;
+            }
+          });
+          setViewRestrictions(viewRestObj);
+        }
+
         if (p.downloadRestrictions && typeof p.downloadRestrictions === 'object') {
           setDownloadRestrictions(p.downloadRestrictions);
         }
@@ -122,7 +133,7 @@ export default function AdminUserSettingsPage() {
     try {
       const newPerms = {
         ...globalPerms,
-        viewRestrictions: {},
+        viewRestrictions: viewRestrictions,
         editRestrictions: editRestrictions,
         downloadRestrictions: downloadRestrictions,
         createRestrictions: {},
@@ -160,7 +171,7 @@ export default function AdminUserSettingsPage() {
 
     return () => clearTimeout(timer);
   }, [
-    globalPerms, editRestrictions, downloadRestrictions, sheetAccessGranted, folderAccessGranted
+    globalPerms, editRestrictions, viewRestrictions, downloadRestrictions, sheetAccessGranted, folderAccessGranted
   ]);
 
   const handleChangePassword = async () => {
@@ -366,6 +377,108 @@ export default function AdminUserSettingsPage() {
               const isExpanded = expandedRegId === reg.id;
               const hasAccess = globalPerms.isAdmin || sheetAccessGranted[reg.id] === true;
 
+              const isColumnEditable = (colId: number) => {
+                const rest = editRestrictions[reg.id];
+                if (rest === undefined) return true; // By default, all columns are editable
+                if (Array.isArray(rest)) {
+                  return rest.map(Number).includes(Number(colId));
+                }
+                return false;
+              };
+
+              const toggleColumnEditable = (colId: number) => {
+                setEditRestrictions(prev => {
+                  const next = { ...prev };
+                  let currentAllowed = next[reg.id];
+                  
+                  if (currentAllowed === undefined) {
+                    currentAllowed = cols.map(c => c.id).filter(id => id !== colId);
+                  } else {
+                    currentAllowed = currentAllowed.map(Number);
+                    if (currentAllowed.includes(colId)) {
+                      currentAllowed = currentAllowed.filter((id: number) => id !== colId);
+                    } else {
+                      currentAllowed = [...currentAllowed, colId];
+                    }
+                  }
+                  
+                  // If all columns are allowed, delete key to keep DB clean
+                  const allColIds = cols.map(c => c.id);
+                  const hasAll = allColIds.every(id => currentAllowed.includes(id));
+                  if (hasAll) {
+                    delete next[reg.id];
+                  } else {
+                    next[reg.id] = currentAllowed;
+                  }
+                  return next;
+                });
+              };
+
+              const isAllEditable = editRestrictions[reg.id] === undefined || (Array.isArray(editRestrictions[reg.id]) && cols.every(c => editRestrictions[reg.id].map(Number).includes(Number(c.id))));
+
+              const toggleAllColumns = () => {
+                setEditRestrictions(prev => {
+                  const next = { ...prev };
+                  if (isAllEditable) {
+                    next[reg.id] = [];
+                  } else {
+                    delete next[reg.id];
+                  }
+                  return next;
+                });
+              };
+
+              const isColumnVisible = (colId: number) => {
+                const rest = viewRestrictions[reg.id];
+                if (rest === undefined) return true; // By default, all columns are visible
+                if (Array.isArray(rest)) {
+                  return rest.map(Number).includes(Number(colId));
+                }
+                return false;
+              };
+
+              const toggleColumnVisible = (colId: number) => {
+                setViewRestrictions(prev => {
+                  const next = { ...prev };
+                  let currentAllowed = next[reg.id];
+                  
+                  if (currentAllowed === undefined) {
+                    currentAllowed = cols.map(c => c.id).filter(id => id !== colId);
+                  } else {
+                    currentAllowed = currentAllowed.map(Number);
+                    if (currentAllowed.includes(colId)) {
+                      currentAllowed = currentAllowed.filter((id: number) => id !== colId);
+                    } else {
+                      currentAllowed = [...currentAllowed, colId];
+                    }
+                  }
+                  
+                  // If all columns are allowed, delete key to keep DB clean
+                  const allColIds = cols.map(c => c.id);
+                  const hasAll = allColIds.every(id => currentAllowed.includes(id));
+                  if (hasAll) {
+                    delete next[reg.id];
+                  } else {
+                    next[reg.id] = currentAllowed;
+                  }
+                  return next;
+                });
+              };
+
+              const isAllVisible = viewRestrictions[reg.id] === undefined || (Array.isArray(viewRestrictions[reg.id]) && cols.every(c => viewRestrictions[reg.id].map(Number).includes(Number(c.id))));
+
+              const toggleAllVisibleColumns = () => {
+                setViewRestrictions(prev => {
+                  const next = { ...prev };
+                  if (isAllVisible) {
+                    next[reg.id] = [];
+                  } else {
+                    delete next[reg.id];
+                  }
+                  return next;
+                });
+              };
+
               return (
                 <div key={reg.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden', opacity: hasAccess ? 1 : 0.6 }}>
                   <div onClick={() => setExpandedRegId(isExpanded ? null : reg.id)} style={{ padding: '16px 20px', borderBottom: isExpanded ? '1px solid var(--border)' : 'none', cursor: 'pointer', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -375,14 +488,37 @@ export default function AdminUserSettingsPage() {
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                       {hasAccess && (
                         <>
+                          <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#10B981', cursor: 'pointer', padding: '4px 8px', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={viewRestrictions[reg.id] === undefined || (Array.isArray(viewRestrictions[reg.id]) && viewRestrictions[reg.id].length > 0)} 
+                              onChange={() => setViewRestrictions(prev => {
+                                const next = { ...prev };
+                                const isCurrentlyChecked = next[reg.id] === undefined || (Array.isArray(next[reg.id]) && next[reg.id].length > 0);
+                                if (isCurrentlyChecked) {
+                                  next[reg.id] = [];
+                                } else {
+                                  delete next[reg.id];
+                                }
+                                return next;
+                              })} 
+                              style={{ width: '16px', height: '16px', accentColor: '#10B981' }}
+                            />
+                            <Eye size={14} color="#10B981" /> View
+                          </label>
+
                           <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#8B5CF6', cursor: 'pointer', padding: '4px 8px', background: 'rgba(139, 92, 246, 0.05)', borderRadius: '6px', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
                             <input 
                               type="checkbox" 
-                              checked={editRestrictions[reg.id] === undefined} 
+                              checked={editRestrictions[reg.id] === undefined || (Array.isArray(editRestrictions[reg.id]) && editRestrictions[reg.id].length > 0)} 
                               onChange={() => setEditRestrictions(prev => {
                                 const next = { ...prev };
-                                if (next[reg.id] === undefined) next[reg.id] = [];
-                                else delete next[reg.id];
+                                const isCurrentlyChecked = next[reg.id] === undefined || (Array.isArray(next[reg.id]) && next[reg.id].length > 0);
+                                if (isCurrentlyChecked) {
+                                  next[reg.id] = [];
+                                } else {
+                                  delete next[reg.id];
+                                }
                                 return next;
                               })} 
                               style={{ width: '16px', height: '16px', accentColor: '#8B5CF6' }}
@@ -415,8 +551,32 @@ export default function AdminUserSettingsPage() {
                   {isExpanded && (
                     <div style={{ padding: '20px' }}>
                       <div style={{ padding: '12px', background: 'rgba(0,45,93,0.02)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <FileText size={14} /> Sheet Columns ({cols.length})
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <FileText size={14} /> Sheet Columns ({cols.length})
+                          </span>
+                          {hasAccess && (
+                            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', textTransform: 'none', fontWeight: 600, color: '#10B981' }}>
+                                <input 
+                                  type="checkbox"
+                                  checked={isAllVisible}
+                                  onChange={toggleAllVisibleColumns}
+                                  style={{ width: '15px', height: '15px', accentColor: '#10B981', cursor: 'pointer' }}
+                                />
+                                Select All (View Access)
+                              </label>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', textTransform: 'none', fontWeight: 600, color: '#8B5CF6' }}>
+                                <input 
+                                  type="checkbox"
+                                  checked={isAllEditable}
+                                  onChange={toggleAllColumns}
+                                  style={{ width: '15px', height: '15px', accentColor: '#8B5CF6', cursor: 'pointer' }}
+                                />
+                                Select All (Edit Access)
+                              </label>
+                            </div>
+                          )}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {cols.map((col, idx) => (
@@ -425,6 +585,30 @@ export default function AdminUserSettingsPage() {
                               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '20px' }}>{col.name}</span>
                               
                               <div style={{ display: 'flex', gap: '0px', alignItems: 'center', flexShrink: 0 }}>
+                                {hasAccess && (
+                                  <>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: isColumnVisible(col.id) ? '#10B981' : 'var(--muted)', cursor: 'pointer', userSelect: 'none', width: '95px', transition: 'color 0.2s' }}>
+                                      <input 
+                                        type="checkbox" 
+                                        checked={isColumnVisible(col.id)} 
+                                        onChange={() => toggleColumnVisible(col.id)}
+                                        style={{ width: '15px', height: '15px', accentColor: '#10B981', cursor: 'pointer' }}
+                                      />
+                                      Visible
+                                    </label>
+
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: isColumnEditable(col.id) ? '#8B5CF6' : 'var(--muted)', cursor: 'pointer', userSelect: 'none', width: '95px', transition: 'color 0.2s' }}>
+                                      <input 
+                                        type="checkbox" 
+                                        checked={isColumnEditable(col.id)} 
+                                        onChange={() => toggleColumnEditable(col.id)}
+                                        style={{ width: '15px', height: '15px', accentColor: '#8B5CF6', cursor: 'pointer' }}
+                                      />
+                                      Editable
+                                    </label>
+                                  </>
+                                )}
+
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: (col as any).mandatory ? 'var(--primary)' : 'var(--muted)', cursor: 'pointer', userSelect: 'none', width: '100px', transition: 'color 0.2s' }}>
                                   <input 
                                     type="checkbox" 
@@ -582,7 +766,14 @@ export default function AdminUserSettingsPage() {
                         Row #
                       </th>
                       {(() => {
-                        const cols = [...previewReg.columns].sort((a, b) => a.position - b.position);
+                        const viewRest = viewRestrictions[previewReg.id];
+                        const cols = [...previewReg.columns]
+                          .sort((a, b) => a.position - b.position)
+                          .filter(col => {
+                            if (viewRest === undefined) return true;
+                            if (Array.isArray(viewRest)) return viewRest.map(Number).includes(Number(col.id));
+                            return false;
+                          });
                         return cols.map(col => (
                           <th key={col.id} style={{ padding: '10px 16px', textAlign: 'left', background: 'var(--surface)', borderBottom: '1px solid var(--border)', color: 'var(--navy)', fontWeight: 600, position: 'sticky', top: 0, zIndex: 10, minWidth: '120px' }}>
                             {col.name}
@@ -593,7 +784,14 @@ export default function AdminUserSettingsPage() {
                   </thead>
                   <tbody>
                     {(() => {
-                        const cols = [...previewReg.columns].sort((a, b) => a.position - b.position);
+                        const viewRest = viewRestrictions[previewReg.id];
+                        const cols = [...previewReg.columns]
+                          .sort((a, b) => a.position - b.position)
+                          .filter(col => {
+                            if (viewRest === undefined) return true;
+                            if (Array.isArray(viewRest)) return viewRest.map(Number).includes(Number(col.id));
+                            return false;
+                          });
                         const entries = (previewReg.entries || []).slice(0, 5);
                         
                         if (entries.length === 0) {
@@ -602,7 +800,7 @@ export default function AdminUserSettingsPage() {
 
                         return entries.map((row, i) => {
                           const actualRowIndex = i;
-                          const isEditableInUserView = editRestrictions[previewReg.id] === undefined;
+                          const rest = editRestrictions[previewReg.id];
                           
                           return (
                             <tr key={i} style={{ background: i % 2 === 0 ? 'white' : 'var(--background)' }}>
@@ -610,7 +808,7 @@ export default function AdminUserSettingsPage() {
                                 {actualRowIndex + 1}
                               </td>
                               {cols.map((col) => {
-                                const isEditable = isEditableInUserView;
+                                const isEditable = rest === undefined || (Array.isArray(rest) && rest.map(Number).includes(Number(col.id)));
                                 return (
                                   <td key={col.id} style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-light)', color: isEditable ? 'var(--navy)' : 'var(--muted)' }}>
                                     {isEditable ? (
