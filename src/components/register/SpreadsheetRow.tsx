@@ -697,7 +697,10 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               className={`cell-dropdown ${!isEditable ? 'cell-readonly' : ''}`} 
               onClick={isEditable ? (e) => openDropdown(entry.id, col.id, col.dropdownOptions || [], e.currentTarget.getBoundingClientRect()) : undefined} 
               onKeyDown={(e) => { 
-                if (!isEditable) return;
+                if (!isEditable) {
+                  handleCellKeyDown(e, col.id, colIdx);
+                  return;
+                }
                 if (e.key === ' ' || e.key === 'Enter' && e.ctrlKey) { 
                   e.preventDefault(); 
                   openDropdown(entry.id, col.id, col.dropdownOptions || [], e.currentTarget.getBoundingClientRect()); 
@@ -707,9 +710,14 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               {entry.cells?.[col.id.toString()] ? <HighlightedText text={entry.cells[col.id.toString()]} searchTerm={searchTerm} /> : <span className="cell-placeholder"><ChevronDown size={12} /> {isEditable ? 'Select' : '—'}</span>}
             </div>
           ) : col.type === 'checkbox' ? (
-            <div className={`cell-checkbox-wrap ${!isEditable ? 'cell-readonly' : ''}`}>
+            <div 
+              data-cell={`cell-${idx}-${col.id}`} 
+              className={`cell-checkbox-wrap ${!isEditable ? 'cell-readonly' : ''}`}
+              tabIndex={isEditable ? -1 : 0}
+              onKeyDown={(e) => { if (e.key !== ' ') handleCellKeyDown(e, col.id, colIdx); }}
+            >
               <input
-                id={`cell-${idx}-${col.id}`}
+                id={isEditable ? `cell-${idx}-${col.id}` : `cell-input-${idx}-${col.id}`}
                 type="checkbox"
                 className="cell-checkbox"
                 disabled={!isEditable}

@@ -2979,7 +2979,7 @@ export default function RegisterPage() {
             scrollEl.scrollLeft -= visibleLeft - cellRect.left + 4;
           }
         }
-      } else if (attempt < 8) {
+      } else if (attempt < 20) {
         // Cell may not be rendered yet; retry after a frame
         requestAnimationFrame(() => tryFocus(attempt + 1));
       }
