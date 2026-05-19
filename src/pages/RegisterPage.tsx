@@ -2921,9 +2921,31 @@ export default function RegisterPage() {
     const scrollEl = parentRef.current;
 
     // Scroll column virtualizer to bring target column into the viewport
-    if (colIdx !== -1 && colVirtualizerRef.current) {
-      // Use 'auto' alignment: only scrolls if the target is outside the visible window
-      colVirtualizerRef.current.scrollToIndex(colIdx, { align: 'auto', behavior: 'auto' });
+    // Calculate dynamic widths for frozen zones and manually adjust scroll to clear them
+    if (colIdx !== -1 && scrollEl) {
+      let totalFrozenWidth = 60; // S.NO column + checkbox padding
+      for (const vc of visibleColumns) {
+        if (frozenColumns.has(vc.id)) {
+          totalFrozenWidth += colWidths[vc.id] || defaultColWidth;
+        }
+      }
+      const actionsColWidth = 50;
+
+      let colLeftOffset = 0;
+      for (let i = 0; i < colIdx; i++) {
+        colLeftOffset += colWidths[visibleColumns[i].id] || defaultColWidth;
+      }
+      const colWidth = colWidths[visibleColumns[colIdx].id] || defaultColWidth;
+
+      const currentScrollLeft = scrollEl.scrollLeft;
+      const visibleLeftBound = currentScrollLeft + totalFrozenWidth;
+      const visibleRightBound = currentScrollLeft + scrollEl.clientWidth - actionsColWidth;
+
+      if (colLeftOffset < visibleLeftBound) {
+        scrollEl.scrollLeft = Math.max(0, colLeftOffset - totalFrozenWidth - 4);
+      } else if (colLeftOffset + colWidth > visibleRightBound) {
+        scrollEl.scrollLeft = (colLeftOffset + colWidth) - (scrollEl.clientWidth - actionsColWidth) + 4;
+      }
     }
 
     // Scroll row virtualizer only when actually navigating to a different row
