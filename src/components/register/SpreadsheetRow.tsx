@@ -64,7 +64,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
   useEffect(() => { setVal(rawValue); }, [rawValue]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape' || e.key === 'Enter') { 
+    if (e.key === 'Escape') { 
       setEditing(false); 
       e.currentTarget.blur(); 
       return;
@@ -74,6 +74,38 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
       const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
       if (el) el.focus();
     };
+
+    if (e.key === 'Tab' || e.key === 'Enter') {
+      e.preventDefault();
+      const finalVal = val;
+      if (finalVal !== rawValue) {
+        const success = handleCellChange(entry.id, col.id.toString(), finalVal);
+        if (success === false) {
+          setVal(rawValue);
+          return;
+        }
+      }
+      setEditing(false);
+
+      if (e.shiftKey) {
+        const prevCol = visibleColumns[colIdx - 1];
+        if (prevCol) {
+          focusNext(idx, prevCol.id);
+        } else {
+          const lastCol = visibleColumns[visibleColumns.length - 1];
+          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id);
+        }
+      } else {
+        const nextCol = visibleColumns[colIdx + 1];
+        if (nextCol) {
+          focusNext(idx, nextCol.id);
+        } else {
+          const firstCol = visibleColumns[0];
+          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id);
+        }
+      }
+      return;
+    }
 
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
@@ -108,7 +140,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
         focusNext(idx + 1, col.id);
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, val, rawValue, entry.id, handleCellChange]);
 
   if (editing && !readOnly) {
     return (
@@ -126,14 +158,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
             handleCellChange(entry.id, col.id.toString(), val);
           }
         }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === 'Tab') {
-            if (val !== rawValue) {
-              handleCellChange(entry.id, col.id.toString(), val);
-            }
-          }
-          handleKeyDown(e);
-        }}
+        onKeyDown={handleKeyDown}
         placeholder="0.00"
       />
     );
@@ -789,7 +814,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               <span><HighlightedText text={entry.cells?.[col.id.toString()] || '–'} searchTerm={searchTerm} /></span>
             </div>
           ) : col.type === 'currency' ? (
-            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} />
+            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} />
           ) : (
             <SpreadsheetTextInput 
               idx={idx}
