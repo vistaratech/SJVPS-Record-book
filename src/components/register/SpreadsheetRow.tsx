@@ -170,7 +170,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
   return (
     <div
       data-cell={`cell-${idx}-${col.id}`}
-      tabIndex={readOnly ? -1 : 0}
+      tabIndex={0}
       className={`cell-currency ${readOnly ? 'cell-readonly' : ''}`}
       onClick={() => !readOnly && setEditing(true)}
       onFocus={() => !readOnly && setEditing(true)}
@@ -368,7 +368,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         id={`cell-${idx}-${col.id}`}
         data-cell={`cell-${idx}-${col.id}`}
         className={`cell-input cell-input-highlight-wrap ${readOnly ? 'cell-readonly' : ''}`}
-        tabIndex={readOnly ? -1 : 0}
+        tabIndex={0}
         onFocus={handleFocus}
         onKeyDown={onKeyDown}
         style={{ cursor: readOnly ? 'default' : 'text' }}
@@ -693,7 +693,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
           ) : col.type === 'dropdown' ? (
             <div 
               data-cell={`cell-${idx}-${col.id}`} 
-              tabIndex={isEditable ? 0 : -1} 
+              tabIndex={0} 
               className={`cell-dropdown ${!isEditable ? 'cell-readonly' : ''}`} 
               onClick={isEditable ? (e) => openDropdown(entry.id, col.id, col.dropdownOptions || [], e.currentTarget.getBoundingClientRect()) : undefined} 
               onKeyDown={(e) => { 
@@ -728,7 +728,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               />
             </div>
           ) : col.type === 'rating' ? (
-            <div data-cell={`cell-${idx}-${col.id}`} tabIndex={isEditable ? 0 : -1} className={`cell-rating ${!isEditable ? 'cell-readonly' : ''}`} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}>
+            <div data-cell={`cell-${idx}-${col.id}`} tabIndex={0} className={`cell-rating ${!isEditable ? 'cell-readonly' : ''}`} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}>
               {[1, 2, 3, 4, 5].map(star => (
                 <button 
                   key={star} 
