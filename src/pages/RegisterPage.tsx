@@ -3159,6 +3159,7 @@ export default function RegisterPage() {
                   afterVirtualCols={useColVirtual ? afterVirtualCols : undefined}
                   paddingLeft={useColVirtual ? paddingLeft : 0}
                   paddingRight={useColVirtual ? paddingRight : 0}
+                  scrollToColumn={useColVirtual ? (colIdx) => colVirtualizer.scrollToIndex(colIdx, { align: 'auto' }) : undefined}
                   isSelected={selectedRows.has(entry.id)}
                   toggleSelectRow={toggleSelectRow}
                   handleCellChange={(eid, cid, val) => {
