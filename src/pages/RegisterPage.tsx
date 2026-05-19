@@ -2737,27 +2737,33 @@ export default function RegisterPage() {
     },
   });
 
+  const stateRef = useRef<any>({});
+
   // ── Navigation helpers powered by TanStack Table's ordered column list ──
   // getNextCell / getPrevCell calculate the exact (rowIdx, colId) for Tab / Shift+Tab,
   // wrapping seamlessly across rows and cycling from last to first.
   const getNextCell = useCallback((rowIdx: number, colId: number | string): { row: number; col: number } | null => {
-    const orderedCols = table.getVisibleLeafColumns();
-    const colIndex = orderedCols.findIndex(c => c.id === String(colId));
+    const { table: currentTable, displayEntries: currentEntries } = stateRef.current;
+    if (!currentTable || !currentEntries) return null;
+    const orderedCols = currentTable.getVisibleLeafColumns();
+    const colIndex = orderedCols.findIndex((c: any) => c.id === String(colId));
     if (colIndex === -1) return null;
     if (colIndex < orderedCols.length - 1) {
       return { row: rowIdx, col: Number(orderedCols[colIndex + 1].id) };
     }
     // Wrap to first column of next row
-    if (rowIdx < displayEntries.length - 1) {
+    if (rowIdx < currentEntries.length - 1) {
       return { row: rowIdx + 1, col: Number(orderedCols[0].id) };
     }
     // Cycle to very first cell
     return { row: 0, col: Number(orderedCols[0].id) };
-  }, [table, displayEntries.length]);
+  }, []);
 
   const getPrevCell = useCallback((rowIdx: number, colId: number | string): { row: number; col: number } | null => {
-    const orderedCols = table.getVisibleLeafColumns();
-    const colIndex = orderedCols.findIndex(c => c.id === String(colId));
+    const { table: currentTable, displayEntries: currentEntries } = stateRef.current;
+    if (!currentTable || !currentEntries) return null;
+    const orderedCols = currentTable.getVisibleLeafColumns();
+    const colIndex = orderedCols.findIndex((c: any) => c.id === String(colId));
     if (colIndex === -1) return null;
     if (colIndex > 0) {
       return { row: rowIdx, col: Number(orderedCols[colIndex - 1].id) };
@@ -2767,8 +2773,8 @@ export default function RegisterPage() {
       return { row: rowIdx - 1, col: Number(orderedCols[orderedCols.length - 1].id) };
     }
     // Cycle to very last cell
-    return { row: displayEntries.length - 1, col: Number(orderedCols[orderedCols.length - 1].id) };
-  }, [table, displayEntries.length]);
+    return { row: currentEntries.length - 1, col: Number(orderedCols[orderedCols.length - 1].id) };
+  }, []);
 
 
   // ── Virtualization ──
@@ -2913,29 +2919,54 @@ export default function RegisterPage() {
   });
   colVirtualizerRef.current = colVirtualizer;
 
+  stateRef.current = {
+    table,
+    visibleColumns,
+    displayEntries,
+    rowVirtualizer,
+    colVirtualizer,
+    useVirtual,
+    frozenColumns,
+    colWidths,
+    defaultColWidth,
+    parentRef,
+    handleCellChange
+  };
+
+  const stableHandleCellChange = useCallback((eid: number, cid: string, val: string) => {
+    const { handleCellChange: currentHandleCellChange } = stateRef.current;
+    if (currentHandleCellChange) {
+      currentHandleCellChange(eid, cid, val);
+    }
+  }, []);
+
   // ── focusCell: virtualizer-aware cell focus (Google-Sheets-style) ──
   // Uses preventScroll to stop the browser from shifting the page, then
   // lets only the column/row virtualizers handle precise scrolling.
   const focusCell = useCallback((rowIdx: number, colId: number | string) => {
-    const colIdx = visibleColumns.findIndex(c => c.id === Number(colId));
-    const scrollEl = parentRef.current;
+    const { visibleColumns: currentCols, rowVirtualizer: currentRowVirtualizer, useVirtual: currentUseVirtual, frozenColumns: currentFrozen, colWidths: currentWidths, defaultColWidth: currentDefaultWidth, parentRef: currentParentRef } = stateRef.current;
+    
+    if (!currentCols) return;
+    
+    const colIdx = currentCols.findIndex((c: any) => c.id === Number(colId));
+    const scrollEl = currentParentRef.current;
 
     // Scroll column virtualizer to bring target column into the viewport
     // Calculate dynamic widths for frozen zones and manually adjust scroll to clear them
     if (colIdx !== -1 && scrollEl) {
       let totalFrozenWidth = 60; // S.NO column + checkbox padding
-      for (const vc of visibleColumns) {
-        if (frozenColumns.has(vc.id)) {
-          totalFrozenWidth += colWidths[vc.id] || defaultColWidth;
+      for (const vc of currentCols) {
+        if (currentFrozen.has(vc.id)) {
+          totalFrozenWidth += currentWidths[vc.id] || currentDefaultWidth;
         }
       }
       const actionsColWidth = 50;
 
       let colLeftOffset = 0;
       for (let i = 0; i < colIdx; i++) {
-        colLeftOffset += colWidths[visibleColumns[i].id] || defaultColWidth;
+        colLeftOffset += currentWidths[currentCols[i].id] || currentDefaultWidth;
       }
-      const colWidth = colWidths[visibleColumns[colIdx].id] || defaultColWidth;
+      const colWidth = currentWidths[currentCols[colIdx].id] || currentDefaultWidth;
 
       const currentScrollLeft = scrollEl.scrollLeft;
       const visibleLeftBound = currentScrollLeft + totalFrozenWidth;
@@ -2949,8 +2980,8 @@ export default function RegisterPage() {
     }
 
     // Scroll row virtualizer only when actually navigating to a different row
-    if (rowIdx >= 0 && useVirtual) {
-      rowVirtualizer.scrollToIndex(rowIdx, { align: 'auto', behavior: 'auto' });
+    if (rowIdx >= 0 && currentUseVirtual && currentRowVirtualizer) {
+      currentRowVirtualizer.scrollToIndex(rowIdx, { align: 'auto', behavior: 'auto' });
     }
 
     // After virtualizer scroll + React render, focus the cell with preventScroll
@@ -2965,9 +2996,9 @@ export default function RegisterPage() {
           const cellRect = el.getBoundingClientRect();
           const wrapperRect = scrollEl.getBoundingClientRect();
           let totalFrozenWidth = 60; // S.NO column + checkbox padding
-          for (const vc of visibleColumns) {
-            if (frozenColumns.has(vc.id)) {
-              totalFrozenWidth += colWidths[vc.id] || defaultColWidth;
+          for (const vc of currentCols) {
+            if (currentFrozen.has(vc.id)) {
+              totalFrozenWidth += currentWidths[vc.id] || currentDefaultWidth;
             }
           }
           const actionsColWidth = 50; // actions column
@@ -2986,7 +3017,7 @@ export default function RegisterPage() {
     };
     // Use rAF to allow the virtualizer to flush its scroll and React to re-render
     requestAnimationFrame(() => tryFocus(0));
-  }, [visibleColumns, rowVirtualizer, useVirtual, frozenColumns, colWidths, defaultColWidth]);
+  }, []);
 
   const virtualRows = useVirtual ? rowVirtualizer.getVirtualItems() : displayEntries.map((_, i) => ({ index: i, start: i * dynamicRowHeight, end: (i + 1) * dynamicRowHeight, size: dynamicRowHeight, key: i, lane: 0 }));
   const virtualCols = useColVirtual ? colVirtualizer.getVirtualItems() : visibleColumns.map((_, i) => ({ index: i, start: 0, end: 0, size: colWidths[visibleColumns[i]?.id] || defaultColWidth, key: i, lane: 0 }));
@@ -3291,10 +3322,7 @@ export default function RegisterPage() {
                   paddingRight={useColVirtual ? paddingRight : 0}
                   isSelected={selectedRows.has(entry.id)}
                   toggleSelectRow={toggleSelectRow}
-                  handleCellChange={(eid, cid, val) => {
-                    if (_editableColumnIds && !_editableColumnIds.has(Number(cid))) return;
-                    handleCellChange(eid, cid, val);
-                  }}
+                  handleCellChange={stableHandleCellChange}
                   openDatePicker={openDatePicker}
                   openDropdown={openDropdown}
                   isMenuOpen={rowMenuId === entry.id}
