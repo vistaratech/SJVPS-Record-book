@@ -460,6 +460,152 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
   );
 });
 
+const DateCell = React.memo(({
+  idx, col, entry, isEditable, visibleColumns, colIdx, totalRows, handleCellChange, searchTerm, focusCell, getNextCell, getPrevCell, openDatePicker
+}: {
+  idx: number;
+  col: Column;
+  entry: Entry;
+  isEditable: boolean;
+  visibleColumns: Column[];
+  colIdx: number;
+  totalRows: number;
+  handleCellChange: (entryId: number, columnId: string, value: string) => void | boolean;
+  searchTerm?: string;
+  focusCell?: (rowIdx: number, colId: number | string) => void;
+  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+  openDatePicker: (entryId: number, colId: number, currentVal: string, rect?: DOMRect) => void;
+}) => {
+  const value = entry.cells?.[col.id.toString()] || '';
+
+  const handleDatePickerClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    openDatePicker(entry.id, col.id, value, e.currentTarget.getBoundingClientRect());
+  }, [entry.id, col.id, value, openDatePicker]);
+
+  return (
+    <div className="cell-url-wrap cell-date-wrap">
+      <SpreadsheetTextInput 
+        idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange}
+        placeholder="DD-MM-YYYY" searchTerm={searchTerm}
+        readOnly={!isEditable}
+        focusCell={focusCell}
+        getNextCell={getNextCell} getPrevCell={getPrevCell}
+      />
+      {isEditable && (
+        <button 
+          className="cell-url-link cell-date-picker-btn" 
+          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+          onClick={handleDatePickerClick}
+          tabIndex={-1}
+        >
+          <Calendar size={12} />
+        </button>
+      )}
+    </div>
+  );
+});
+
+const EmailCell = React.memo(({
+  idx, col, entry, isEditable, visibleColumns, colIdx, totalRows, handleCellChange, searchTerm, focusCell, getNextCell, getPrevCell
+}: {
+  idx: number;
+  col: Column;
+  entry: Entry;
+  isEditable: boolean;
+  visibleColumns: Column[];
+  colIdx: number;
+  totalRows: number;
+  handleCellChange: (entryId: number, columnId: string, value: string) => void | boolean;
+  searchTerm?: string;
+  focusCell?: (rowIdx: number, colId: number | string) => void;
+  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+}) => {
+  const value = entry.cells?.[col.id.toString()] || '';
+  return (
+    <div className="cell-url-wrap">
+      <SpreadsheetTextInput 
+        idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} 
+        type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} 
+        focusCell={focusCell} getNextCell={getNextCell} getPrevCell={getPrevCell} 
+      />
+      {value && (
+        <a href={`mailto:${value}`} className="cell-url-link" title="Send email" tabIndex={-1}>
+          <Mail size={11} />
+        </a>
+      )}
+    </div>
+  );
+});
+
+const PhoneCell = React.memo(({
+  idx, col, entry, isEditable, visibleColumns, colIdx, totalRows, handleCellChange, searchTerm, focusCell, getNextCell, getPrevCell
+}: {
+  idx: number;
+  col: Column;
+  entry: Entry;
+  isEditable: boolean;
+  visibleColumns: Column[];
+  colIdx: number;
+  totalRows: number;
+  handleCellChange: (entryId: number, columnId: string, value: string) => void | boolean;
+  searchTerm?: string;
+  focusCell?: (rowIdx: number, colId: number | string) => void;
+  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+}) => {
+  const value = entry.cells?.[col.id.toString()] || '';
+  return (
+    <div className="cell-url-wrap">
+      <SpreadsheetTextInput 
+        idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} 
+        type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} 
+        focusCell={focusCell} getNextCell={getNextCell} getPrevCell={getPrevCell} 
+      />
+      {value && (
+        <a href={`tel:${value}`} className="cell-url-link" title="Call" tabIndex={-1}>
+          <Phone size={11} />
+        </a>
+      )}
+    </div>
+  );
+});
+
+const UrlCell = React.memo(({
+  idx, col, entry, isEditable, visibleColumns, colIdx, totalRows, handleCellChange, searchTerm, focusCell, getNextCell, getPrevCell
+}: {
+  idx: number;
+  col: Column;
+  entry: Entry;
+  isEditable: boolean;
+  visibleColumns: Column[];
+  colIdx: number;
+  totalRows: number;
+  handleCellChange: (entryId: number, columnId: string, value: string) => void | boolean;
+  searchTerm?: string;
+  focusCell?: (rowIdx: number, colId: number | string) => void;
+  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+}) => {
+  const value = entry.cells?.[col.id.toString()] || '';
+  return (
+    <div className="cell-url-wrap">
+      <SpreadsheetTextInput 
+        idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} 
+        type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} 
+        focusCell={focusCell} getNextCell={getNextCell} getPrevCell={getPrevCell} 
+      />
+      {value && (
+        <a href={value} target="_blank" rel="noreferrer" className="cell-url-link" title="Open" tabIndex={-1}>
+          <Globe size={11} />
+        </a>
+      )}
+    </div>
+  );
+});
+
 const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colIdx, totalRows, handleCellChange, type = 'text', placeholder, searchTerm, readOnly, suggestions, focusCell, getNextCell, getPrevCell }: SpreadsheetTextInputProps) => {
   let initialValue = entry.cells?.[col.id.toString()] || '';
   if (col.type === 'date' && initialValue.includes('/')) {
@@ -949,25 +1095,21 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
           {col.type === 'formula' ? (
             <FormulaCell idx={idx} col={col} entry={entry} registerColumns={registerColumns} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} />
           ) : col.type === 'date' ? (
-            <div className="cell-url-wrap cell-date-wrap">
-              <SpreadsheetTextInput 
-                idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange}
-                placeholder="DD-MM-YYYY" searchTerm={searchTerm}
-                readOnly={!isEditable}
-                focusCell={focusCellProp}
-                getNextCell={getNextCell} getPrevCell={getPrevCell}
-              />
-              {isEditable && (
-                <button 
-                  className="cell-url-link cell-date-picker-btn" 
-                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                  onClick={(e) => openDatePicker(entry.id, col.id, entry.cells?.[col.id.toString()] || '', e.currentTarget.getBoundingClientRect())}
-                  tabIndex={-1}
-                >
-                  <Calendar size={12} />
-                </button>
-              )}
-            </div>
+            <DateCell
+              idx={idx}
+              col={col}
+              entry={entry}
+              isEditable={isEditable}
+              visibleColumns={visibleColumns}
+              colIdx={colIdx}
+              totalRows={totalRows}
+              handleCellChange={handleCellChange}
+              searchTerm={searchTerm}
+              focusCell={focusCellProp}
+              getNextCell={getNextCell}
+              getPrevCell={getPrevCell}
+              openDatePicker={openDatePicker}
+            />
           ) : col.type === 'dropdown' ? (
             <DropdownCell
               idx={idx}
@@ -1007,20 +1149,50 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}
             />
           ) : col.type === 'email' ? (
-            <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
-              {entry.cells?.[col.id.toString()] && <a href={`mailto:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Send email" tabIndex={-1}><Mail size={11} /></a>}
-            </div>
+            <EmailCell
+              idx={idx}
+              col={col}
+              entry={entry}
+              isEditable={isEditable}
+              visibleColumns={visibleColumns}
+              colIdx={colIdx}
+              totalRows={totalRows}
+              handleCellChange={handleCellChange}
+              searchTerm={searchTerm}
+              focusCell={focusCellProp}
+              getNextCell={getNextCell}
+              getPrevCell={getPrevCell}
+            />
           ) : col.type === 'phone' ? (
-            <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
-              {entry.cells?.[col.id.toString()] && <a href={`tel:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Call" tabIndex={-1}><Phone size={11} /></a>}
-            </div>
+            <PhoneCell
+              idx={idx}
+              col={col}
+              entry={entry}
+              isEditable={isEditable}
+              visibleColumns={visibleColumns}
+              colIdx={colIdx}
+              totalRows={totalRows}
+              handleCellChange={handleCellChange}
+              searchTerm={searchTerm}
+              focusCell={focusCellProp}
+              getNextCell={getNextCell}
+              getPrevCell={getPrevCell}
+            />
           ) : col.type === 'url' ? (
-            <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
-              {entry.cells?.[col.id.toString()] && <a href={entry.cells[col.id.toString()]} target="_blank" rel="noreferrer" className="cell-url-link" title="Open" tabIndex={-1}><Globe size={11} /></a>}
-            </div>
+            <UrlCell
+              idx={idx}
+              col={col}
+              entry={entry}
+              isEditable={isEditable}
+              visibleColumns={visibleColumns}
+              colIdx={colIdx}
+              totalRows={totalRows}
+              handleCellChange={handleCellChange}
+              searchTerm={searchTerm}
+              focusCell={focusCellProp}
+              getNextCell={getNextCell}
+              getPrevCell={getPrevCell}
+            />
           ) : col.type === 'auto_increment' ? (
             <AutoIncrementCell
               idx={idx}
