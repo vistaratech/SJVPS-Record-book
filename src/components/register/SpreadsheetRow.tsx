@@ -53,10 +53,11 @@ interface SpreadsheetTextInputProps {
   searchTerm?: string;
   readOnly?: boolean;
   suggestions?: string[];
+  focusCell?: (rowIdx: number, colId: number | string) => void;
 }
 
 // Currency cell: shows ₹ formatted display, edits as raw number
-const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleColumns, handleCellChange, onKeyDown, readOnly }: SpreadsheetTextInputProps & { onKeyDown?: (e: React.KeyboardEvent) => void }) => {
+const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleColumns, handleCellChange, onKeyDown, readOnly, focusCell }: SpreadsheetTextInputProps & { onKeyDown?: (e: React.KeyboardEvent) => void }) => {
   const rawValue = entry.cells?.[col.id.toString()] || '';
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(rawValue);
@@ -70,10 +71,10 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
       return;
     }
 
-    const focusNext = (rowI: number, cId: number | string) => {
+    const focusNext = focusCell || ((rowI: number, cId: number | string) => {
       const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
       if (el) el.focus();
-    };
+    });
 
     if (e.key === 'Tab' || e.key === 'Enter') {
       e.preventDefault();
@@ -140,7 +141,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
         focusNext(idx + 1, col.id);
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows, val, rawValue, entry.id, handleCellChange]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, val, rawValue, entry.id, handleCellChange, focusCell]);
 
   if (editing && !readOnly) {
     return (
@@ -179,7 +180,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
   );
 });
 
-const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colIdx, totalRows, handleCellChange, type = 'text', placeholder, searchTerm, readOnly, suggestions }: SpreadsheetTextInputProps) => {
+const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colIdx, totalRows, handleCellChange, type = 'text', placeholder, searchTerm, readOnly, suggestions, focusCell }: SpreadsheetTextInputProps) => {
   let initialValue = entry.cells?.[col.id.toString()] || '';
   if (col.type === 'date' && initialValue.includes('/')) {
     initialValue = initialValue.replace(/\//g, '-');
@@ -267,10 +268,10 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
       return;
     }
 
-    const focusNext = (rowI: number, cId: number | string) => {
+    const focusNext = focusCell || ((rowI: number, cId: number | string) => {
       const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
       if (el) el.focus();
-    };
+    });
 
     // If dropdown is showing, ArrowDown/ArrowUp navigate suggestions
     if (showDropdown && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
@@ -350,7 +351,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         if (firstCol) focusNext(idx + 1, firstCol.id);
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion, focusCell]);
 
 
 
@@ -469,6 +470,7 @@ interface SpreadsheetRowProps {
   searchTerm?: string;
   editableColumnIds?: Set<number> | null;
   columnSuggestions?: Record<string, string[]>;
+  focusCell?: (rowIdx: number, colId: number | string) => void;
   displayRowNumber?: number;
 }
 
@@ -501,6 +503,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     editableColumnIds,
     columnSuggestions,
     displayRowNumber,
+    focusCell: focusCellProp,
   } = props;
   const { reminders } = useNotifications();
   const hasPendingReminder = useMemo(() => {
@@ -525,10 +528,10 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
       return;
     }
 
-    const focusNext = (rowI: number, cId: number | string) => {
+    const focusNext = focusCellProp || ((rowI: number, cId: number | string) => {
       const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
       if (el) el.focus();
-    };
+    });
 
     if (e.key === 'Tab' || e.key === 'Enter') {
       e.preventDefault();
@@ -574,7 +577,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
         if (firstCol) focusNext(idx + 1, firstCol.id);
       }
     }
-  }, [idx, visibleColumns, totalRows]);
+  }, [idx, visibleColumns, totalRows, focusCellProp]);
 
   const handleSerialClick = useCallback(() => {
     onRowDetail?.(entry);
@@ -663,6 +666,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
                 idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange}
                 placeholder="DD-MM-YYYY" searchTerm={searchTerm}
                 readOnly={!isEditable}
+                focusCell={focusCellProp}
               />
               {isEditable && (
                 <button 
@@ -778,17 +782,17 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
             </div>
           ) : col.type === 'email' ? (
             <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} />
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} />
               {entry.cells?.[col.id.toString()] && <a href={`mailto:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Send email" tabIndex={-1}><Mail size={11} /></a>}
             </div>
           ) : col.type === 'phone' ? (
             <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} />
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} />
               {entry.cells?.[col.id.toString()] && <a href={`tel:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Call" tabIndex={-1}><Phone size={11} /></a>}
             </div>
           ) : col.type === 'url' ? (
             <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} />
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} />
               {entry.cells?.[col.id.toString()] && <a href={entry.cells[col.id.toString()]} target="_blank" rel="noreferrer" className="cell-url-link" title="Open" tabIndex={-1}><Globe size={11} /></a>}
             </div>
           ) : col.type === 'auto_increment' ? (
@@ -814,7 +818,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               <span><HighlightedText text={entry.cells?.[col.id.toString()] || '–'} searchTerm={searchTerm} /></span>
             </div>
           ) : col.type === 'currency' ? (
-            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} />
+            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} focusCell={focusCellProp} />
           ) : (
             <SpreadsheetTextInput 
               idx={idx}
@@ -827,6 +831,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               searchTerm={searchTerm}
               readOnly={!isEditable}
               suggestions={columnSuggestions?.[col.id.toString()]}
+              focusCell={focusCellProp}
             />
           )}
           {col.type !== 'formula' && col.type !== 'auto_increment' && isEditable && (

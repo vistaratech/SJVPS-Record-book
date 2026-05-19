@@ -2850,12 +2850,42 @@ export default function RegisterPage() {
       return col ? (colWidths[col.id] || defaultColWidth) : defaultColWidth;
     }, [visibleColumns, colWidths, defaultColWidth]),
     horizontal: true,
-    overscan: 5,
+    overscan: 8,
     enabled: useColVirtual,
     initialOffset: initialScrollRef.current?.left || 0,
     initialRect,
   });
   colVirtualizerRef.current = colVirtualizer;
+
+  // ── focusCell: virtualizer-aware cell focus ──
+  // When column virtualization is active, off-screen cells are unmounted from the DOM.
+  // This callback scrolls the virtualizer first, waits for the cell to render, then focuses it.
+  const focusCell = useCallback((rowIdx: number, colId: number | string) => {
+    const colIdx = visibleColumns.findIndex(c => c.id === Number(colId));
+
+    // Scroll column virtualizer to bring target column into the viewport
+    if (colIdx !== -1 && colVirtualizerRef.current) {
+      colVirtualizerRef.current.scrollToIndex(colIdx, { align: 'auto' });
+    }
+    // Scroll row virtualizer to bring target row into the viewport
+    if (rowIdx >= 0 && useVirtual) {
+      rowVirtualizer.scrollToIndex(rowIdx, { align: 'auto' });
+    }
+
+    // After virtualizer scroll + React render, focus the cell
+    const tryFocus = (attempt: number) => {
+      const el = document.getElementById(`cell-${rowIdx}-${colId}`) ||
+                 document.querySelector(`[data-cell="cell-${rowIdx}-${colId}"]`) as HTMLElement;
+      if (el) {
+        el.focus();
+      } else if (attempt < 6) {
+        // Cell may not be rendered yet; retry after a frame
+        requestAnimationFrame(() => tryFocus(attempt + 1));
+      }
+    };
+    // Use rAF to allow the virtualizer to flush its scroll and React to re-render
+    requestAnimationFrame(() => tryFocus(0));
+  }, [visibleColumns, rowVirtualizer, useVirtual]);
 
   const virtualRows = useVirtual ? rowVirtualizer.getVirtualItems() : displayEntries.map((_, i) => ({ index: i, start: i * dynamicRowHeight, end: (i + 1) * dynamicRowHeight, size: dynamicRowHeight, key: i, lane: 0 }));
   const virtualCols = useColVirtual ? colVirtualizer.getVirtualItems() : visibleColumns.map((_, i) => ({ index: i, start: 0, end: 0, size: colWidths[visibleColumns[i]?.id] || defaultColWidth, key: i, lane: 0 }));
@@ -2888,6 +2918,9 @@ export default function RegisterPage() {
       }
     });
   }
+  // Guard against negative padding from frozen column width subtraction
+  if (paddingLeft < 0) paddingLeft = 0;
+  if (paddingRight < 0) paddingRight = 0;
 
   const frozenLeftOffsets = useMemo(() => {
     const offsets: Record<number, number> = {};
@@ -3178,6 +3211,7 @@ export default function RegisterPage() {
                   searchTerm={deferredSearch || undefined}
                   editableColumnIds={_editableColumnIds}
                   columnSuggestions={columnSuggestions}
+                  focusCell={focusCell}
                 />
               );
             })}
