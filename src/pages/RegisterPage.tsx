@@ -2942,9 +2942,14 @@ export default function RegisterPage() {
         if (scrollEl) {
           const cellRect = el.getBoundingClientRect();
           const wrapperRect = scrollEl.getBoundingClientRect();
-          const serialColWidth = 60; // S.NO column
+          let totalFrozenWidth = 60; // S.NO column + checkbox padding
+          for (const vc of visibleColumns) {
+            if (frozenColumns.has(vc.id)) {
+              totalFrozenWidth += colWidths[vc.id] || defaultColWidth;
+            }
+          }
           const actionsColWidth = 50; // actions column
-          const visibleLeft = wrapperRect.left + serialColWidth;
+          const visibleLeft = wrapperRect.left + totalFrozenWidth;
           const visibleRight = wrapperRect.right - actionsColWidth;
           if (cellRect.right > visibleRight) {
             scrollEl.scrollLeft += cellRect.right - visibleRight + 4;
@@ -2959,7 +2964,7 @@ export default function RegisterPage() {
     };
     // Use rAF to allow the virtualizer to flush its scroll and React to re-render
     requestAnimationFrame(() => tryFocus(0));
-  }, [visibleColumns, rowVirtualizer, useVirtual]);
+  }, [visibleColumns, rowVirtualizer, useVirtual, frozenColumns, colWidths, defaultColWidth]);
 
   const virtualRows = useVirtual ? rowVirtualizer.getVirtualItems() : displayEntries.map((_, i) => ({ index: i, start: i * dynamicRowHeight, end: (i + 1) * dynamicRowHeight, size: dynamicRowHeight, key: i, lane: 0 }));
   const virtualCols = useColVirtual ? colVirtualizer.getVirtualItems() : visibleColumns.map((_, i) => ({ index: i, start: 0, end: 0, size: colWidths[visibleColumns[i]?.id] || defaultColWidth, key: i, lane: 0 }));
