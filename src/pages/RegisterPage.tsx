@@ -28,6 +28,7 @@ import {
   X, Link as LinkIcon, Info, AlertTriangle, Trash2, ZoomIn, ZoomOut, Bell, Clock
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useReactTable, getCoreRowModel, type ColumnDef } from '@tanstack/react-table';
 import { RegisterHeader } from '../components/register/RegisterHeader';
 import { SpreadsheetRow } from '../components/register/SpreadsheetRow';
 import { CellFormatToolbar } from '../components/register/CellFormatToolbar';
@@ -2714,6 +2715,61 @@ export default function RegisterPage() {
     calcTypes,
   });
 
+  // ── TanStack Table: structured cell navigation model ──
+  // Column definitions derived from the visible columns
+  const tableColumns = useMemo<ColumnDef<Entry>[]>(
+    () => visibleColumns.map((col) => ({
+      id: String(col.id),
+      accessorFn: (row: Entry) => row.cells?.[col.id.toString()] ?? '',
+      header: col.name,
+      size: colWidths[col.id] || defaultColWidth,
+    })),
+    [visibleColumns, colWidths, defaultColWidth]
+  );
+
+  const table = useReactTable({
+    data: displayEntries,
+    columns: tableColumns,
+    getCoreRowModel: getCoreRowModel(),
+    // Keep column order synced with visibleColumns (frozen-first ordering)
+    state: {
+      columnOrder: visibleColumns.map(c => String(c.id)),
+    },
+  });
+
+  // ── Navigation helpers powered by TanStack Table's ordered column list ──
+  // getNextCell / getPrevCell calculate the exact (rowIdx, colId) for Tab / Shift+Tab,
+  // wrapping seamlessly across rows and cycling from last to first.
+  const getNextCell = useCallback((rowIdx: number, colId: number | string): { row: number; col: number } | null => {
+    const orderedCols = table.getVisibleLeafColumns();
+    const colIndex = orderedCols.findIndex(c => c.id === String(colId));
+    if (colIndex === -1) return null;
+    if (colIndex < orderedCols.length - 1) {
+      return { row: rowIdx, col: Number(orderedCols[colIndex + 1].id) };
+    }
+    // Wrap to first column of next row
+    if (rowIdx < displayEntries.length - 1) {
+      return { row: rowIdx + 1, col: Number(orderedCols[0].id) };
+    }
+    // Cycle to very first cell
+    return { row: 0, col: Number(orderedCols[0].id) };
+  }, [table, displayEntries.length]);
+
+  const getPrevCell = useCallback((rowIdx: number, colId: number | string): { row: number; col: number } | null => {
+    const orderedCols = table.getVisibleLeafColumns();
+    const colIndex = orderedCols.findIndex(c => c.id === String(colId));
+    if (colIndex === -1) return null;
+    if (colIndex > 0) {
+      return { row: rowIdx, col: Number(orderedCols[colIndex - 1].id) };
+    }
+    // Wrap to last column of previous row
+    if (rowIdx > 0) {
+      return { row: rowIdx - 1, col: Number(orderedCols[orderedCols.length - 1].id) };
+    }
+    // Cycle to very last cell
+    return { row: displayEntries.length - 1, col: Number(orderedCols[orderedCols.length - 1].id) };
+  }, [table, displayEntries.length]);
+
 
   // ── Virtualization ──
   // Always-on virtualization for both rows AND columns.
@@ -3230,6 +3286,8 @@ export default function RegisterPage() {
                   editableColumnIds={_editableColumnIds}
                   columnSuggestions={columnSuggestions}
                   focusCell={focusCell}
+                  getNextCell={getNextCell}
+                  getPrevCell={getPrevCell}
                 />
               );
             })}

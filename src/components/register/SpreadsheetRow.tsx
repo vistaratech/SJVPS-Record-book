@@ -54,10 +54,12 @@ interface SpreadsheetTextInputProps {
   readOnly?: boolean;
   suggestions?: string[];
   focusCell?: (rowIdx: number, colId: number | string) => void;
+  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
 }
 
 // Currency cell: shows ₹ formatted display, edits as raw number
-const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleColumns, handleCellChange, onKeyDown, readOnly, focusCell }: SpreadsheetTextInputProps & { onKeyDown?: (e: React.KeyboardEvent) => void }) => {
+const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleColumns, handleCellChange, onKeyDown, readOnly, focusCell, getNextCell, getPrevCell }: SpreadsheetTextInputProps & { onKeyDown?: (e: React.KeyboardEvent) => void }) => {
   const rawValue = entry.cells?.[col.id.toString()] || '';
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(rawValue);
@@ -89,20 +91,20 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
       setEditing(false);
 
       if (e.shiftKey) {
-        const prevCol = visibleColumns[colIdx - 1];
-        if (prevCol) {
-          focusNext(idx, prevCol.id);
-        } else {
-          const lastCol = visibleColumns[visibleColumns.length - 1];
-          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id);
+        const prev = getPrevCell?.(idx, col.id);
+        if (prev) { focusNext(prev.row, prev.col); }
+        else {
+          const prevCol = visibleColumns[colIdx - 1];
+          if (prevCol) focusNext(idx, prevCol.id);
+          else { const lastCol = visibleColumns[visibleColumns.length - 1]; if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id); }
         }
       } else {
-        const nextCol = visibleColumns[colIdx + 1];
-        if (nextCol) {
-          focusNext(idx, nextCol.id);
-        } else {
-          const firstCol = visibleColumns[0];
-          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id);
+        const next = getNextCell?.(idx, col.id);
+        if (next) { focusNext(next.row, next.col); }
+        else {
+          const nextCol = visibleColumns[colIdx + 1];
+          if (nextCol) focusNext(idx, nextCol.id);
+          else { const firstCol = visibleColumns[0]; if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id); }
         }
       }
       return;
@@ -111,22 +113,22 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
       setEditing(false);
-      const prevCol = visibleColumns[colIdx - 1];
-      if (prevCol) {
-        focusNext(idx, prevCol.id);
-      } else if (idx > 0) {
-        const lastCol = visibleColumns[visibleColumns.length - 1];
-        if (lastCol) focusNext(idx - 1, lastCol.id);
+      const prev = getPrevCell?.(idx, col.id);
+      if (prev) { focusNext(prev.row, prev.col); }
+      else {
+        const prevCol = visibleColumns[colIdx - 1];
+        if (prevCol) focusNext(idx, prevCol.id);
+        else if (idx > 0) { const lastCol = visibleColumns[visibleColumns.length - 1]; if (lastCol) focusNext(idx - 1, lastCol.id); }
       }
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       setEditing(false);
-      const nextCol = visibleColumns[colIdx + 1];
-      if (nextCol) {
-        focusNext(idx, nextCol.id);
-      } else if (idx < totalRows - 1) {
-        const firstCol = visibleColumns[0];
-        if (firstCol) focusNext(idx + 1, firstCol.id);
+      const next = getNextCell?.(idx, col.id);
+      if (next) { focusNext(next.row, next.col); }
+      else {
+        const nextCol = visibleColumns[colIdx + 1];
+        if (nextCol) focusNext(idx, nextCol.id);
+        else if (idx < totalRows - 1) { const firstCol = visibleColumns[0]; if (firstCol) focusNext(idx + 1, firstCol.id); }
       }
     } else if (e.key === 'ArrowUp') {
       if (idx > 0) {
@@ -141,7 +143,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
         focusNext(idx + 1, col.id);
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows, val, rawValue, entry.id, handleCellChange, focusCell]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, val, rawValue, entry.id, handleCellChange, focusCell, getNextCell, getPrevCell]);
 
   if (editing && !readOnly) {
     return (
@@ -180,7 +182,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
   );
 });
 
-const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colIdx, totalRows, handleCellChange, type = 'text', placeholder, searchTerm, readOnly, suggestions, focusCell }: SpreadsheetTextInputProps) => {
+const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colIdx, totalRows, handleCellChange, type = 'text', placeholder, searchTerm, readOnly, suggestions, focusCell, getNextCell, getPrevCell }: SpreadsheetTextInputProps) => {
   let initialValue = entry.cells?.[col.id.toString()] || '';
   if (col.type === 'date' && initialValue.includes('/')) {
     initialValue = initialValue.replace(/\//g, '-');
@@ -306,20 +308,20 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
       setFocused(false);
       setHighlightIdx(-1);
       if (e.shiftKey) {
-        const prevCol = visibleColumns[colIdx - 1];
-        if (prevCol) {
-          focusNext(idx, prevCol.id);
-        } else {
-          const lastCol = visibleColumns[visibleColumns.length - 1];
-          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id);
+        const prev = getPrevCell?.(idx, col.id);
+        if (prev) { focusNext(prev.row, prev.col); }
+        else {
+          const prevCol = visibleColumns[colIdx - 1];
+          if (prevCol) focusNext(idx, prevCol.id);
+          else { const lastCol = visibleColumns[visibleColumns.length - 1]; if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id); }
         }
       } else {
-        const nextCol = visibleColumns[colIdx + 1];
-        if (nextCol) {
-          focusNext(idx, nextCol.id);
-        } else {
-          const firstCol = visibleColumns[0];
-          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id);
+        const next = getNextCell?.(idx, col.id);
+        if (next) { focusNext(next.row, next.col); }
+        else {
+          const nextCol = visibleColumns[colIdx + 1];
+          if (nextCol) focusNext(idx, nextCol.id);
+          else { const firstCol = visibleColumns[0]; if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id); }
         }
       }
     } else if (e.key === 'ArrowDown') {
@@ -334,24 +336,24 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
       }
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
-      const prevCol = visibleColumns[colIdx - 1];
-      if (prevCol) {
-        focusNext(idx, prevCol.id);
-      } else if (idx > 0) {
-        const lastCol = visibleColumns[visibleColumns.length - 1];
-        if (lastCol) focusNext(idx - 1, lastCol.id);
+      const prev = getPrevCell?.(idx, col.id);
+      if (prev) { focusNext(prev.row, prev.col); }
+      else {
+        const prevCol = visibleColumns[colIdx - 1];
+        if (prevCol) focusNext(idx, prevCol.id);
+        else if (idx > 0) { const lastCol = visibleColumns[visibleColumns.length - 1]; if (lastCol) focusNext(idx - 1, lastCol.id); }
       }
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      const nextCol = visibleColumns[colIdx + 1];
-      if (nextCol) {
-        focusNext(idx, nextCol.id);
-      } else if (idx < totalRows - 1) {
-        const firstCol = visibleColumns[0];
-        if (firstCol) focusNext(idx + 1, firstCol.id);
+      const next = getNextCell?.(idx, col.id);
+      if (next) { focusNext(next.row, next.col); }
+      else {
+        const nextCol = visibleColumns[colIdx + 1];
+        if (nextCol) focusNext(idx, nextCol.id);
+        else if (idx < totalRows - 1) { const firstCol = visibleColumns[0]; if (firstCol) focusNext(idx + 1, firstCol.id); }
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion, focusCell]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion, focusCell, getNextCell, getPrevCell]);
 
 
 
@@ -471,6 +473,8 @@ interface SpreadsheetRowProps {
   editableColumnIds?: Set<number> | null;
   columnSuggestions?: Record<string, string[]>;
   focusCell?: (rowIdx: number, colId: number | string) => void;
+  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
+  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
   displayRowNumber?: number;
 }
 
@@ -504,6 +508,8 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     columnSuggestions,
     displayRowNumber,
     focusCell: focusCellProp,
+    getNextCell,
+    getPrevCell,
   } = props;
   const { reminders } = useNotifications();
   const hasPendingReminder = useMemo(() => {
@@ -536,48 +542,52 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     if (e.key === 'Tab' || e.key === 'Enter') {
       e.preventDefault();
       if (e.shiftKey) {
-        const prevCol = visibleColumns[colIdx - 1];
-        if (prevCol) {
-          focusNext(idx, prevCol.id);
+        // Use TanStack Table's getPrevCell if available, otherwise manual fallback
+        const prev = getPrevCell?.(idx, colId);
+        if (prev) {
+          focusNext(prev.row, prev.col);
         } else {
-          const lastCol = visibleColumns[visibleColumns.length - 1];
-          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id);
+          const prevCol = visibleColumns[colIdx - 1];
+          if (prevCol) { focusNext(idx, prevCol.id); }
+          else { const lastCol = visibleColumns[visibleColumns.length - 1]; if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id); }
         }
       } else {
-        const nextCol = visibleColumns[colIdx + 1];
-        if (nextCol) {
-          focusNext(idx, nextCol.id);
+        // Use TanStack Table's getNextCell if available, otherwise manual fallback
+        const next = getNextCell?.(idx, colId);
+        if (next) {
+          focusNext(next.row, next.col);
         } else {
-          const firstCol = visibleColumns[0];
-          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id);
+          const nextCol = visibleColumns[colIdx + 1];
+          if (nextCol) { focusNext(idx, nextCol.id); }
+          else { const firstCol = visibleColumns[0]; if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id); }
         }
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      focusNext(idx + 1, colId);
+      if (idx < totalRows - 1) focusNext(idx + 1, colId);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      focusNext(idx - 1, colId);
+      if (idx > 0) focusNext(idx - 1, colId);
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
-      const prevCol = visibleColumns[colIdx - 1];
-      if (prevCol) {
-        focusNext(idx, prevCol.id);
-      } else if (idx > 0) {
-        const lastCol = visibleColumns[visibleColumns.length - 1];
-        if (lastCol) focusNext(idx - 1, lastCol.id);
+      const prev = getPrevCell?.(idx, colId);
+      if (prev) { focusNext(prev.row, prev.col); }
+      else {
+        const prevCol = visibleColumns[colIdx - 1];
+        if (prevCol) focusNext(idx, prevCol.id);
+        else if (idx > 0) { const lastCol = visibleColumns[visibleColumns.length - 1]; if (lastCol) focusNext(idx - 1, lastCol.id); }
       }
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      const nextCol = visibleColumns[colIdx + 1];
-      if (nextCol) {
-        focusNext(idx, nextCol.id);
-      } else if (idx < totalRows - 1) {
-        const firstCol = visibleColumns[0];
-        if (firstCol) focusNext(idx + 1, firstCol.id);
+      const next = getNextCell?.(idx, colId);
+      if (next) { focusNext(next.row, next.col); }
+      else {
+        const nextCol = visibleColumns[colIdx + 1];
+        if (nextCol) focusNext(idx, nextCol.id);
+        else if (idx < totalRows - 1) { const firstCol = visibleColumns[0]; if (firstCol) focusNext(idx + 1, firstCol.id); }
       }
     }
-  }, [idx, visibleColumns, totalRows, focusCellProp]);
+  }, [idx, visibleColumns, totalRows, focusCellProp, getNextCell, getPrevCell]);
 
   const handleSerialClick = useCallback(() => {
     onRowDetail?.(entry);
@@ -667,6 +677,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
                 placeholder="DD-MM-YYYY" searchTerm={searchTerm}
                 readOnly={!isEditable}
                 focusCell={focusCellProp}
+                getNextCell={getNextCell} getPrevCell={getPrevCell}
               />
               {isEditable && (
                 <button 
@@ -782,17 +793,17 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
             </div>
           ) : col.type === 'email' ? (
             <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} />
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
               {entry.cells?.[col.id.toString()] && <a href={`mailto:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Send email" tabIndex={-1}><Mail size={11} /></a>}
             </div>
           ) : col.type === 'phone' ? (
             <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} />
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
               {entry.cells?.[col.id.toString()] && <a href={`tel:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Call" tabIndex={-1}><Phone size={11} /></a>}
             </div>
           ) : col.type === 'url' ? (
             <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} />
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
               {entry.cells?.[col.id.toString()] && <a href={entry.cells[col.id.toString()]} target="_blank" rel="noreferrer" className="cell-url-link" title="Open" tabIndex={-1}><Globe size={11} /></a>}
             </div>
           ) : col.type === 'auto_increment' ? (
@@ -818,7 +829,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               <span><HighlightedText text={entry.cells?.[col.id.toString()] || '–'} searchTerm={searchTerm} /></span>
             </div>
           ) : col.type === 'currency' ? (
-            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} focusCell={focusCellProp} />
+            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
           ) : (
             <SpreadsheetTextInput 
               idx={idx}
@@ -832,6 +843,8 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               readOnly={!isEditable}
               suggestions={columnSuggestions?.[col.id.toString()]}
               focusCell={focusCellProp}
+              getNextCell={getNextCell}
+              getPrevCell={getPrevCell}
             />
           )}
           {col.type !== 'formula' && col.type !== 'auto_increment' && isEditable && (
