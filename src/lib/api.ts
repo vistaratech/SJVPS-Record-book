@@ -357,10 +357,24 @@ async function getRegDoc(registerId: number): Promise<RegisterDetail> {
     // Use getDocsFromServer to always bypass Firestore SDK cache and get fresh chunk data
     const chunkSnap = await getDocsFromServer(chunksCol(registerId));
     const allEntries: Entry[] = [];
-    chunkSnap.docs.forEach(d => {
-      const chunkData = d.data() as { entries: Entry[] };
-      if (chunkData.entries) allEntries.push(...chunkData.entries);
+    
+    // Parse, sort numerically, and ensure unique chunk IDs to guarantee stable ordering
+    const sortedDocs = [...chunkSnap.docs]
+      .map(d => ({ idNum: parseInt(d.id, 10), doc: d }))
+      .filter(item => !isNaN(item.idNum))
+      .sort((a, b) => a.idNum - b.idNum);
+
+    const seenChunkIds = new Set<number>();
+    sortedDocs.forEach(({ idNum, doc }) => {
+      if (seenChunkIds.has(idNum)) return;
+      seenChunkIds.add(idNum);
+      
+      const chunkData = doc.data() as { entries: Entry[] };
+      if (chunkData.entries) {
+        allEntries.push(...chunkData.entries);
+      }
     });
+    
     data.entries = allEntries;
   }
 
@@ -530,6 +544,17 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
   if (!reg.entries) reg.entries = [];
   if (!reg.columns) reg.columns = [];
   reg.columns.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+  // Deduplicate entries by ID to prevent duplication bugs and keep clean state
+  const uniqueEntries: Entry[] = [];
+  const seenEntryIds = new Set<number>();
+  reg.entries.forEach((e) => {
+    if (!seenEntryIds.has(e.id)) {
+      seenEntryIds.add(e.id);
+      uniqueEntries.push(e);
+    }
+  });
+  reg.entries = uniqueEntries;
 
   // MIGRATION: Fix duplicate IDs caused by precision loss in older Excel imports
   let hasDuplicates = false;

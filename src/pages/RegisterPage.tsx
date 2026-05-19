@@ -2752,6 +2752,10 @@ export default function RegisterPage() {
     enabled: useVirtual,
     initialOffset: initialScrollRef.current?.top || 0,
     initialRect,
+    getItemKey: useCallback((index: number) => {
+      const entry = displayEntries[index];
+      return entry ? entry.id : index;
+    }, [displayEntries]),
   });
 
   // ── Scroll to row from ?row= URL parameter (global search navigation) ──
@@ -2857,7 +2861,7 @@ export default function RegisterPage() {
   });
   colVirtualizerRef.current = colVirtualizer;
 
-  const virtualRows = useVirtual ? rowVirtualizer.getVirtualItems() : displayEntries.map((_, i) => ({ index: i, start: i * dynamicRowHeight, end: (i + 1) * dynamicRowHeight, size: dynamicRowHeight, key: i, lane: 0 }));
+  const virtualRows = useVirtual ? rowVirtualizer.getVirtualItems() : displayEntries.map((e, i) => ({ index: i, start: i * dynamicRowHeight, end: (i + 1) * dynamicRowHeight, size: dynamicRowHeight, key: e?.id ?? i, lane: 0 }));
   const virtualCols = useColVirtual ? colVirtualizer.getVirtualItems() : visibleColumns.map((_, i) => ({ index: i, start: 0, end: 0, size: colWidths[visibleColumns[i]?.id] || defaultColWidth, key: i, lane: 0 }));
 
   const totalVirtualHeight = useVirtual ? rowVirtualizer.getTotalSize() : displayEntries.length * dynamicRowHeight;
@@ -3145,7 +3149,7 @@ export default function RegisterPage() {
               
               return (
                 <SpreadsheetRow
-                  key={entry.id}
+                  key={virtualRow.key}
                   entry={entry}
                   idx={virtualRow.index}
                   displayRowNumber={pageOffset + virtualRow.index + 1}
