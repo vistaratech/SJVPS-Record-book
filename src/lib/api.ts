@@ -547,18 +547,40 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
 
 
 
-  // MIGRATION: Fix duplicate IDs caused by precision loss in older Excel imports
-  let hasDuplicates = false;
+  // MIGRATION 1: Restore sequential order by ID
+  // Due to a legacy chunk-loading bug, entries could be saved out of order.
+  // Since IDs are generated chronologically (or via strict sequential offsets during import),
+  // sorting by ID perfectly restores the original un-scrambled state.
+  let needsSave = false;
+  let isOutOfOrder = false;
+  for (let i = 1; i < reg.entries.length; i++) {
+    if (reg.entries[i].id < reg.entries[i - 1].id) {
+      isOutOfOrder = true;
+      break;
+    }
+  }
+
+  if (isOutOfOrder) {
+    reg.entries.sort((a, b) => a.id - b.id);
+    needsSave = true;
+  }
+
+  // MIGRATION 2: Fix duplicate IDs caused by precision loss in older Excel imports
+  // We do this AFTER sorting so that duplicate resolution preserves the restored chronological order.
   const seenIds = new Set<number>();
   reg.entries.forEach((e, idx) => {
     if (seenIds.has(e.id)) {
-      hasDuplicates = true;
+      needsSave = true;
       e.id = reg.id + 10000 + idx; // Reassign a unique ID based on safe offset logic
     }
     seenIds.add(e.id);
   });
 
-  let needsSave = hasDuplicates;
+  // Ensure rowNumbers match the true restored array sequence
+  if (needsSave) {
+    reg.entries.forEach((e, i) => { e.rowNumber = i + 1; });
+  }
+
   if (reg.entryCount !== reg.entries.length) {
     reg.entryCount = reg.entries.length;
     needsSave = true;
