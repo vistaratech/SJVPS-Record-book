@@ -30,289 +30,12 @@ const FormulaCell = React.memo(({ idx, col, entry, registerColumns, onKeyDown }:
   const result = evaluateFormula(col.formula || '', entry, registerColumns);
   return (
     <div
-      id={`cell-${idx}-${col.id}`}
       data-cell={`cell-${idx}-${col.id}`}
       tabIndex={0}
       className="cell-formula"
       onKeyDown={onKeyDown}
     >
       {result || '–'}
-    </div>
-  );
-});
-
-const DropdownCell = React.memo(({
-  idx, col, entry, isEditable, searchTerm, openDropdown, onKeyDown
-}: {
-  idx: number;
-  col: Column;
-  entry: Entry;
-  isEditable: boolean;
-  searchTerm?: string;
-  openDropdown: (entryId: number, colId: number, options: string[], rect?: DOMRect) => void;
-  onKeyDown: (e: React.KeyboardEvent) => void;
-}) => {
-  const value = entry.cells?.[col.id.toString()] || '';
-  
-  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (isEditable) {
-      openDropdown(entry.id, col.id, col.dropdownOptions || [], e.currentTarget.getBoundingClientRect());
-    }
-  }, [entry.id, col.id, col.dropdownOptions, isEditable, openDropdown]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!isEditable) {
-      onKeyDown(e);
-      return;
-    }
-    if (e.key === ' ' || (e.key === 'Enter' && e.ctrlKey)) {
-      e.preventDefault();
-      openDropdown(entry.id, col.id, col.dropdownOptions || [], e.currentTarget.getBoundingClientRect());
-    } else {
-      onKeyDown(e);
-    }
-  }, [entry.id, col.id, col.dropdownOptions, isEditable, openDropdown, onKeyDown]);
-
-  return (
-    <div 
-      data-cell={`cell-${idx}-${col.id}`} 
-      tabIndex={0} 
-      className={`cell-dropdown ${!isEditable ? 'cell-readonly' : ''}`} 
-      onClick={handleClick} 
-      onKeyDown={handleKeyDown}
-    >
-      {value ? (
-        <HighlightedText text={value} searchTerm={searchTerm} />
-      ) : (
-        <span className="cell-placeholder">
-          <ChevronDown size={12} /> {isEditable ? 'Select' : '—'}
-        </span>
-      )}
-    </div>
-  );
-});
-
-const CheckboxCell = React.memo(({
-  idx, col, entry, isEditable, handleCellChange, onKeyDown
-}: {
-  idx: number;
-  col: Column;
-  entry: Entry;
-  isEditable: boolean;
-  handleCellChange: (entryId: number, columnId: string, value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent) => void;
-}) => {
-  const isChecked = entry.cells?.[col.id.toString()] === 'true';
-
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    handleCellChange(entry.id, col.id.toString(), e.target.checked ? 'true' : 'false');
-  }, [entry.id, col.id, handleCellChange]);
-
-  const handleContainerKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== ' ') {
-      onKeyDown(e);
-    }
-  }, [onKeyDown]);
-
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== ' ') {
-      onKeyDown(e);
-    }
-  }, [onKeyDown]);
-
-  return (
-    <div 
-      id={!isEditable ? `cell-${idx}-${col.id}` : undefined}
-      data-cell={`cell-${idx}-${col.id}`} 
-      className={`cell-checkbox-wrap ${!isEditable ? 'cell-readonly' : ''}`}
-      tabIndex={isEditable ? -1 : 0}
-      onKeyDown={handleContainerKeyDown}
-    >
-      <input
-        id={isEditable ? `cell-${idx}-${col.id}` : `cell-input-${idx}-${col.id}`}
-        type="checkbox"
-        className="cell-checkbox"
-        disabled={!isEditable}
-        checked={isChecked}
-        onChange={handleChange}
-        onKeyDown={handleInputKeyDown}
-        title={col.name}
-      />
-    </div>
-  );
-});
-
-const RatingCell = React.memo(({
-  idx, col, entry, isEditable, handleCellChange, onKeyDown
-}: {
-  idx: number;
-  col: Column;
-  entry: Entry;
-  isEditable: boolean;
-  handleCellChange: (entryId: number, columnId: string, value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent) => void;
-}) => {
-  const rating = parseInt(entry.cells?.[col.id.toString()] || '0');
-
-  return (
-    <div 
-      id={`cell-${idx}-${col.id}`} 
-      data-cell={`cell-${idx}-${col.id}`} 
-      tabIndex={0} 
-      className={`cell-rating ${!isEditable ? 'cell-readonly' : ''}`} 
-      onKeyDown={onKeyDown}
-    >
-      {[1, 2, 3, 4, 5].map(star => {
-        const handleClick = () => {
-          handleCellChange(entry.id, col.id.toString(), star.toString());
-        };
-        return (
-          <button 
-            key={star} 
-            disabled={!isEditable}
-            className={`star-btn ${rating >= star ? 'active' : ''}`} 
-            onClick={handleClick} 
-            title={isEditable ? `Rate ${star}` : `Rating: ${rating}`} 
-            tabIndex={-1}
-          >
-            ★
-          </button>
-        );
-      })}
-    </div>
-  );
-});
-
-const ImageCell = React.memo(({
-  idx, col, entry, isEditable, onImagePreview, handleCellChange, onKeyDown
-}: {
-  idx: number;
-  col: Column;
-  entry: Entry;
-  isEditable: boolean;
-  onImagePreview?: (data: { url: string; entryId: number; colId: string }) => void;
-  handleCellChange: (entryId: number, columnId: string, value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent) => void;
-}) => {
-  const val = entry.cells?.[col.id.toString()] || '';
-  
-  // Memoize splitting of images to prevent high CPU garbage collection
-  const images = useMemo(() => {
-    return val.split('|||').filter(Boolean);
-  }, [val]);
-
-  const firstImage = images[0];
-  const extraCount = images.length - 1;
-
-  const handleClick = useCallback(() => {
-    if (val && onImagePreview) {
-      onImagePreview({ url: val, entryId: entry.id, colId: col.id.toString() });
-    }
-  }, [val, entry.id, col.id, onImagePreview]);
-
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = (ev) => {
-      handleCellChange(entry.id, col.id.toString(), ev.target?.result as string);
-    };
-    r.readAsDataURL(f);
-  }, [entry.id, col.id, handleCellChange]);
-
-  return (
-    <div 
-      id={`cell-${idx}-${col.id}`}
-      data-cell={`cell-${idx}-${col.id}`} 
-      tabIndex={0} 
-      className="cell-image-wrap" 
-      onKeyDown={onKeyDown}
-      onClick={handleClick}
-      title={val ? "Click to view full image" : (isEditable ? "No image" : "")}
-    >
-      {val ? (
-        <div className="cell-image-inner" style={{ position: 'relative' }}>
-          <img 
-            src={firstImage} 
-            alt="img" 
-            className="cell-image-thumb" 
-          />
-          {extraCount > 0 && (
-            <div className="cell-image-badge" style={{
-              position: 'absolute',
-              top: '-4px',
-              right: '-4px',
-              background: 'var(--navy)',
-              color: 'white',
-              fontSize: '10px',
-              fontWeight: 'bold',
-              padding: '2px 4px',
-              borderRadius: '4px',
-              zIndex: 2,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
-            }}>
-              +{extraCount}
-            </div>
-          )}
-          <div className="cell-image-overlay">
-            <Maximize2 size={12} />
-          </div>
-        </div>
-      ) : (
-        isEditable ? (
-          <label className="cell-image-upload" title="Upload image" onClick={(e) => e.stopPropagation()}>
-            <ImageIcon size={11} /> Add
-            <input 
-              type="file" 
-              accept="image/*" 
-              className="hidden-file-input" 
-              tabIndex={-1} 
-              onChange={handleFileChange} 
-            />
-          </label>
-        ) : (
-          <span className="cell-placeholder" style={{ fontSize: '10px', opacity: 0.5 }}>—</span>
-        )
-      )}
-    </div>
-  );
-});
-
-const AutoIncrementCell = React.memo(({
-  idx, col, entry, searchTerm, onKeyDown
-}: {
-  idx: number;
-  col: Column;
-  entry: Entry;
-  searchTerm?: string;
-  onKeyDown: (e: React.KeyboardEvent) => void;
-}) => {
-  const val = entry.cells?.[col.id.toString()] || '–';
-
-  return (
-    <div 
-      id={`cell-${idx}-${col.id}`}
-      data-cell={`cell-${idx}-${col.id}`} 
-      className="cell-auto-increment-cell-readonly" 
-      tabIndex={0} 
-      title="Auto-generated ID (Read-only)" 
-      onKeyDown={onKeyDown}
-      style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '6px', 
-        padding: '0 8px', 
-        color: '#64748b', 
-        background: 'var(--table-bg)',
-        height: '100%',
-        fontSize: '12px',
-        fontWeight: 500
-      }}
-    >
-      <ListOrdered size={12} style={{ opacity: 0.6 }} />
-      <span>
-        <HighlightedText text={val} searchTerm={searchTerm} />
-      </span>
     </div>
   );
 });
@@ -446,9 +169,8 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
 
   return (
     <div
-      id={`cell-${idx}-${col.id}`}
       data-cell={`cell-${idx}-${col.id}`}
-      tabIndex={0}
+      tabIndex={readOnly ? -1 : 0}
       className={`cell-currency ${readOnly ? 'cell-readonly' : ''}`}
       onClick={() => !readOnly && setEditing(true)}
       onFocus={() => !readOnly && setEditing(true)}
@@ -456,152 +178,6 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
       title={readOnly ? "" : "Click to edit"}
     >
       {rawValue ? formatCurrency(rawValue) : <span className="cell-placeholder"><IndianRupee size={11} /> Amount</span>}
-    </div>
-  );
-});
-
-const DateCell = React.memo(({
-  idx, col, entry, isEditable, visibleColumns, colIdx, totalRows, handleCellChange, searchTerm, focusCell, getNextCell, getPrevCell, openDatePicker
-}: {
-  idx: number;
-  col: Column;
-  entry: Entry;
-  isEditable: boolean;
-  visibleColumns: Column[];
-  colIdx: number;
-  totalRows: number;
-  handleCellChange: (entryId: number, columnId: string, value: string) => void | boolean;
-  searchTerm?: string;
-  focusCell?: (rowIdx: number, colId: number | string) => void;
-  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
-  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
-  openDatePicker: (entryId: number, colId: number, currentVal: string, rect?: DOMRect) => void;
-}) => {
-  const value = entry.cells?.[col.id.toString()] || '';
-
-  const handleDatePickerClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    openDatePicker(entry.id, col.id, value, e.currentTarget.getBoundingClientRect());
-  }, [entry.id, col.id, value, openDatePicker]);
-
-  return (
-    <div className="cell-url-wrap cell-date-wrap">
-      <SpreadsheetTextInput 
-        idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange}
-        placeholder="DD-MM-YYYY" searchTerm={searchTerm}
-        readOnly={!isEditable}
-        focusCell={focusCell}
-        getNextCell={getNextCell} getPrevCell={getPrevCell}
-      />
-      {isEditable && (
-        <button 
-          className="cell-url-link cell-date-picker-btn" 
-          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-          onClick={handleDatePickerClick}
-          tabIndex={-1}
-        >
-          <Calendar size={12} />
-        </button>
-      )}
-    </div>
-  );
-});
-
-const EmailCell = React.memo(({
-  idx, col, entry, isEditable, visibleColumns, colIdx, totalRows, handleCellChange, searchTerm, focusCell, getNextCell, getPrevCell
-}: {
-  idx: number;
-  col: Column;
-  entry: Entry;
-  isEditable: boolean;
-  visibleColumns: Column[];
-  colIdx: number;
-  totalRows: number;
-  handleCellChange: (entryId: number, columnId: string, value: string) => void | boolean;
-  searchTerm?: string;
-  focusCell?: (rowIdx: number, colId: number | string) => void;
-  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
-  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
-}) => {
-  const value = entry.cells?.[col.id.toString()] || '';
-  return (
-    <div className="cell-url-wrap">
-      <SpreadsheetTextInput 
-        idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} 
-        type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} 
-        focusCell={focusCell} getNextCell={getNextCell} getPrevCell={getPrevCell} 
-      />
-      {value && (
-        <a href={`mailto:${value}`} className="cell-url-link" title="Send email" tabIndex={-1}>
-          <Mail size={11} />
-        </a>
-      )}
-    </div>
-  );
-});
-
-const PhoneCell = React.memo(({
-  idx, col, entry, isEditable, visibleColumns, colIdx, totalRows, handleCellChange, searchTerm, focusCell, getNextCell, getPrevCell
-}: {
-  idx: number;
-  col: Column;
-  entry: Entry;
-  isEditable: boolean;
-  visibleColumns: Column[];
-  colIdx: number;
-  totalRows: number;
-  handleCellChange: (entryId: number, columnId: string, value: string) => void | boolean;
-  searchTerm?: string;
-  focusCell?: (rowIdx: number, colId: number | string) => void;
-  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
-  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
-}) => {
-  const value = entry.cells?.[col.id.toString()] || '';
-  return (
-    <div className="cell-url-wrap">
-      <SpreadsheetTextInput 
-        idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} 
-        type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} 
-        focusCell={focusCell} getNextCell={getNextCell} getPrevCell={getPrevCell} 
-      />
-      {value && (
-        <a href={`tel:${value}`} className="cell-url-link" title="Call" tabIndex={-1}>
-          <Phone size={11} />
-        </a>
-      )}
-    </div>
-  );
-});
-
-const UrlCell = React.memo(({
-  idx, col, entry, isEditable, visibleColumns, colIdx, totalRows, handleCellChange, searchTerm, focusCell, getNextCell, getPrevCell
-}: {
-  idx: number;
-  col: Column;
-  entry: Entry;
-  isEditable: boolean;
-  visibleColumns: Column[];
-  colIdx: number;
-  totalRows: number;
-  handleCellChange: (entryId: number, columnId: string, value: string) => void | boolean;
-  searchTerm?: string;
-  focusCell?: (rowIdx: number, colId: number | string) => void;
-  getNextCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
-  getPrevCell?: (rowIdx: number, colId: number | string) => { row: number; col: number } | null;
-}) => {
-  const value = entry.cells?.[col.id.toString()] || '';
-  return (
-    <div className="cell-url-wrap">
-      <SpreadsheetTextInput 
-        idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} 
-        type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} 
-        focusCell={focusCell} getNextCell={getNextCell} getPrevCell={getPrevCell} 
-      />
-      {value && (
-        <a href={value} target="_blank" rel="noreferrer" className="cell-url-link" title="Open" tabIndex={-1}>
-          <Globe size={11} />
-        </a>
-      )}
     </div>
   );
 });
@@ -792,7 +368,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         id={`cell-${idx}-${col.id}`}
         data-cell={`cell-${idx}-${col.id}`}
         className={`cell-input cell-input-highlight-wrap ${readOnly ? 'cell-readonly' : ''}`}
-        tabIndex={0}
+        tabIndex={readOnly ? -1 : 0}
         onFocus={handleFocus}
         onKeyDown={onKeyDown}
         style={{ cursor: readOnly ? 'default' : 'text' }}
@@ -1095,112 +671,163 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
           {col.type === 'formula' ? (
             <FormulaCell idx={idx} col={col} entry={entry} registerColumns={registerColumns} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} />
           ) : col.type === 'date' ? (
-            <DateCell
-              idx={idx}
-              col={col}
-              entry={entry}
-              isEditable={isEditable}
-              visibleColumns={visibleColumns}
-              colIdx={colIdx}
-              totalRows={totalRows}
-              handleCellChange={handleCellChange}
-              searchTerm={searchTerm}
-              focusCell={focusCellProp}
-              getNextCell={getNextCell}
-              getPrevCell={getPrevCell}
-              openDatePicker={openDatePicker}
-            />
+            <div className="cell-url-wrap cell-date-wrap">
+              <SpreadsheetTextInput 
+                idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange}
+                placeholder="DD-MM-YYYY" searchTerm={searchTerm}
+                readOnly={!isEditable}
+                focusCell={focusCellProp}
+                getNextCell={getNextCell} getPrevCell={getPrevCell}
+              />
+              {isEditable && (
+                <button 
+                  className="cell-url-link cell-date-picker-btn" 
+                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                  onClick={(e) => openDatePicker(entry.id, col.id, entry.cells?.[col.id.toString()] || '', e.currentTarget.getBoundingClientRect())}
+                  tabIndex={-1}
+                >
+                  <Calendar size={12} />
+                </button>
+              )}
+            </div>
           ) : col.type === 'dropdown' ? (
-            <DropdownCell
-              idx={idx}
-              col={col}
-              entry={entry}
-              isEditable={isEditable}
-              searchTerm={searchTerm}
-              openDropdown={openDropdown}
-              onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}
-            />
+            <div 
+              data-cell={`cell-${idx}-${col.id}`} 
+              tabIndex={isEditable ? 0 : -1} 
+              className={`cell-dropdown ${!isEditable ? 'cell-readonly' : ''}`} 
+              onClick={isEditable ? (e) => openDropdown(entry.id, col.id, col.dropdownOptions || [], e.currentTarget.getBoundingClientRect()) : undefined} 
+              onKeyDown={(e) => { 
+                if (!isEditable) return;
+                if (e.key === ' ' || e.key === 'Enter' && e.ctrlKey) { 
+                  e.preventDefault(); 
+                  openDropdown(entry.id, col.id, col.dropdownOptions || [], e.currentTarget.getBoundingClientRect()); 
+                } else handleCellKeyDown(e, col.id, colIdx); 
+              }}
+            >
+              {entry.cells?.[col.id.toString()] ? <HighlightedText text={entry.cells[col.id.toString()]} searchTerm={searchTerm} /> : <span className="cell-placeholder"><ChevronDown size={12} /> {isEditable ? 'Select' : '—'}</span>}
+            </div>
           ) : col.type === 'checkbox' ? (
-            <CheckboxCell
-              idx={idx}
-              col={col}
-              entry={entry}
-              isEditable={isEditable}
-              handleCellChange={handleCellChange}
-              onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}
-            />
+            <div className={`cell-checkbox-wrap ${!isEditable ? 'cell-readonly' : ''}`}>
+              <input
+                id={`cell-${idx}-${col.id}`}
+                type="checkbox"
+                className="cell-checkbox"
+                disabled={!isEditable}
+                checked={entry.cells?.[col.id.toString()] === 'true'}
+                onChange={(e) => handleCellChange(entry.id, col.id.toString(), e.target.checked ? 'true' : 'false')}
+                onKeyDown={(e) => { if (e.key !== ' ') handleCellKeyDown(e, col.id, colIdx); }}
+                title={col.name}
+              />
+            </div>
           ) : col.type === 'rating' ? (
-            <RatingCell
-              idx={idx}
-              col={col}
-              entry={entry}
-              isEditable={isEditable}
-              handleCellChange={handleCellChange}
-              onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}
-            />
+            <div data-cell={`cell-${idx}-${col.id}`} tabIndex={isEditable ? 0 : -1} className={`cell-rating ${!isEditable ? 'cell-readonly' : ''}`} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}>
+              {[1, 2, 3, 4, 5].map(star => (
+                <button 
+                  key={star} 
+                  disabled={!isEditable}
+                  className={`star-btn ${(parseInt(entry.cells?.[col.id.toString()] || '0') >= star) ? 'active' : ''}`} 
+                  onClick={() => handleCellChange(entry.id, col.id.toString(), star.toString())} 
+                  title={isEditable ? `Rate ${star}` : `Rating: ${entry.cells?.[col.id.toString()] || '0'}`} 
+                  tabIndex={-1}
+                >★</button>
+              ))}
+            </div>
           ) : col.type === 'image' ? (
-            <ImageCell
-              idx={idx}
-              col={col}
-              entry={entry}
-              isEditable={isEditable}
-              onImagePreview={onImagePreview}
-              handleCellChange={handleCellChange}
+            <div 
+              data-cell={`cell-${idx}-${col.id}`} 
+              tabIndex={0} 
+              className="cell-image-wrap" 
               onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}
-            />
+              onClick={() => {
+                const val = entry.cells?.[col.id.toString()];
+                if (val) onImagePreview?.({ url: val, entryId: entry.id, colId: col.id.toString() });
+              }}
+              title={entry.cells?.[col.id.toString()] ? "Click to view full image" : (isEditable ? "No image" : "")}
+            >
+              {entry.cells?.[col.id.toString()] ? (
+                (() => {
+                  const val = entry.cells[col.id.toString()];
+                  const images = val.split('|||').filter(Boolean);
+                  const firstImage = images[0];
+                  const extraCount = images.length - 1;
+                  return (
+                    <div className="cell-image-inner" style={{ position: 'relative' }}>
+                      <img 
+                        src={firstImage} 
+                        alt="img" 
+                        className="cell-image-thumb" 
+                      />
+                      {extraCount > 0 && (
+                        <div className="cell-image-badge" style={{
+                          position: 'absolute',
+                          top: '-4px',
+                          right: '-4px',
+                          background: 'var(--navy)',
+                          color: 'white',
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                          padding: '2px 4px',
+                          borderRadius: '4px',
+                          zIndex: 2,
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                        }}>
+                          +{extraCount}
+                        </div>
+                      )}
+                      <div className="cell-image-overlay">
+                        <Maximize2 size={12} />
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                isEditable ? (
+                  <label className="cell-image-upload" title="Upload image" onClick={(e) => e.stopPropagation()}>
+                    <ImageIcon size={11} /> Add
+                    <input type="file" accept="image/*" className="hidden-file-input" tabIndex={-1} onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => handleCellChange(entry.id, col.id.toString(), ev.target?.result as string); r.readAsDataURL(f); }} />
+                  </label>
+                ) : (
+                  <span className="cell-placeholder" style={{ fontSize: '10px', opacity: 0.5 }}>—</span>
+                )
+              )}
+            </div>
           ) : col.type === 'email' ? (
-            <EmailCell
-              idx={idx}
-              col={col}
-              entry={entry}
-              isEditable={isEditable}
-              visibleColumns={visibleColumns}
-              colIdx={colIdx}
-              totalRows={totalRows}
-              handleCellChange={handleCellChange}
-              searchTerm={searchTerm}
-              focusCell={focusCellProp}
-              getNextCell={getNextCell}
-              getPrevCell={getPrevCell}
-            />
+            <div className="cell-url-wrap">
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
+              {entry.cells?.[col.id.toString()] && <a href={`mailto:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Send email" tabIndex={-1}><Mail size={11} /></a>}
+            </div>
           ) : col.type === 'phone' ? (
-            <PhoneCell
-              idx={idx}
-              col={col}
-              entry={entry}
-              isEditable={isEditable}
-              visibleColumns={visibleColumns}
-              colIdx={colIdx}
-              totalRows={totalRows}
-              handleCellChange={handleCellChange}
-              searchTerm={searchTerm}
-              focusCell={focusCellProp}
-              getNextCell={getNextCell}
-              getPrevCell={getPrevCell}
-            />
+            <div className="cell-url-wrap">
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
+              {entry.cells?.[col.id.toString()] && <a href={`tel:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Call" tabIndex={-1}><Phone size={11} /></a>}
+            </div>
           ) : col.type === 'url' ? (
-            <UrlCell
-              idx={idx}
-              col={col}
-              entry={entry}
-              isEditable={isEditable}
-              visibleColumns={visibleColumns}
-              colIdx={colIdx}
-              totalRows={totalRows}
-              handleCellChange={handleCellChange}
-              searchTerm={searchTerm}
-              focusCell={focusCellProp}
-              getNextCell={getNextCell}
-              getPrevCell={getPrevCell}
-            />
+            <div className="cell-url-wrap">
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
+              {entry.cells?.[col.id.toString()] && <a href={entry.cells[col.id.toString()]} target="_blank" rel="noreferrer" className="cell-url-link" title="Open" tabIndex={-1}><Globe size={11} /></a>}
+            </div>
           ) : col.type === 'auto_increment' ? (
-            <AutoIncrementCell
-              idx={idx}
-              col={col}
-              entry={entry}
-              searchTerm={searchTerm}
+            <div 
+              data-cell={`cell-${idx}-${col.id}`} 
+              className="cell-auto-increment-cell-readonly" 
+              tabIndex={0} 
+              title="Auto-generated ID (Read-only)" 
               onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}
-            />
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                padding: '0 8px', 
+                color: '#64748b', 
+                background: 'var(--table-bg)',
+                height: '100%',
+                fontSize: '12px',
+                fontWeight: 500
+              }}
+            >
+              <ListOrdered size={12} style={{ opacity: 0.6 }} />
+              <span><HighlightedText text={entry.cells?.[col.id.toString()] || '–'} searchTerm={searchTerm} /></span>
+            </div>
           ) : col.type === 'currency' ? (
             <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} focusCell={focusCellProp} getNextCell={getNextCell} getPrevCell={getPrevCell} />
           ) : (
