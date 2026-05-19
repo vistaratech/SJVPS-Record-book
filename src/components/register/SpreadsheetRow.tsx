@@ -73,7 +73,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
 
     const focusNext = focusCell || ((rowI: number, cId: number | string) => {
       const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
-      if (el) el.focus();
+      if (el) el.focus({ preventScroll: true });
     });
 
     if (e.key === 'Tab' || e.key === 'Enter') {
@@ -270,7 +270,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
 
     const focusNext = focusCell || ((rowI: number, cId: number | string) => {
       const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
-      if (el) el.focus();
+      if (el) el.focus({ preventScroll: true });
     });
 
     // If dropdown is showing, ArrowDown/ArrowUp navigate suggestions
@@ -530,7 +530,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
 
     const focusNext = focusCellProp || ((rowI: number, cId: number | string) => {
       const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
-      if (el) el.focus();
+      if (el) el.focus({ preventScroll: true });
     });
 
     if (e.key === 'Tab' || e.key === 'Enter') {

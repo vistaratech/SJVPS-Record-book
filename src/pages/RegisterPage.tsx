@@ -2857,28 +2857,46 @@ export default function RegisterPage() {
   });
   colVirtualizerRef.current = colVirtualizer;
 
-  // ── focusCell: virtualizer-aware cell focus ──
-  // When column virtualization is active, off-screen cells are unmounted from the DOM.
-  // This callback scrolls the virtualizer first, waits for the cell to render, then focuses it.
+  // ── focusCell: virtualizer-aware cell focus (Google-Sheets-style) ──
+  // Uses preventScroll to stop the browser from shifting the page, then
+  // lets only the column/row virtualizers handle precise scrolling.
   const focusCell = useCallback((rowIdx: number, colId: number | string) => {
     const colIdx = visibleColumns.findIndex(c => c.id === Number(colId));
+    const scrollEl = parentRef.current;
 
     // Scroll column virtualizer to bring target column into the viewport
     if (colIdx !== -1 && colVirtualizerRef.current) {
-      colVirtualizerRef.current.scrollToIndex(colIdx, { align: 'auto' });
-    }
-    // Scroll row virtualizer to bring target row into the viewport
-    if (rowIdx >= 0 && useVirtual) {
-      rowVirtualizer.scrollToIndex(rowIdx, { align: 'auto' });
+      // Use 'auto' alignment: only scrolls if the target is outside the visible window
+      colVirtualizerRef.current.scrollToIndex(colIdx, { align: 'auto', behavior: 'auto' });
     }
 
-    // After virtualizer scroll + React render, focus the cell
+    // Scroll row virtualizer only when actually navigating to a different row
+    if (rowIdx >= 0 && useVirtual) {
+      rowVirtualizer.scrollToIndex(rowIdx, { align: 'auto', behavior: 'auto' });
+    }
+
+    // After virtualizer scroll + React render, focus the cell with preventScroll
+    // to avoid the browser's native scrollIntoView which causes the page shift
     const tryFocus = (attempt: number) => {
       const el = document.getElementById(`cell-${rowIdx}-${colId}`) ||
                  document.querySelector(`[data-cell="cell-${rowIdx}-${colId}"]`) as HTMLElement;
       if (el) {
-        el.focus();
-      } else if (attempt < 6) {
+        el.focus({ preventScroll: true });
+        // Ensure the cell is horizontally visible — nudge scroll container if partially clipped
+        if (scrollEl) {
+          const cellRect = el.getBoundingClientRect();
+          const wrapperRect = scrollEl.getBoundingClientRect();
+          const serialColWidth = 60; // S.NO column
+          const actionsColWidth = 50; // actions column
+          const visibleLeft = wrapperRect.left + serialColWidth;
+          const visibleRight = wrapperRect.right - actionsColWidth;
+          if (cellRect.right > visibleRight) {
+            scrollEl.scrollLeft += cellRect.right - visibleRight + 4;
+          } else if (cellRect.left < visibleLeft) {
+            scrollEl.scrollLeft -= visibleLeft - cellRect.left + 4;
+          }
+        }
+      } else if (attempt < 8) {
         // Cell may not be rendered yet; retry after a frame
         requestAnimationFrame(() => tryFocus(attempt + 1));
       }
