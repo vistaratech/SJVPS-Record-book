@@ -30,6 +30,7 @@ const FormulaCell = React.memo(({ idx, col, entry, registerColumns, onKeyDown }:
   const result = evaluateFormula(col.formula || '', entry, registerColumns);
   return (
     <div
+      id={`cell-${idx}-${col.id}`}
       data-cell={`cell-${idx}-${col.id}`}
       tabIndex={0}
       className="cell-formula"
@@ -169,6 +170,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
 
   return (
     <div
+      id={`cell-${idx}-${col.id}`}
       data-cell={`cell-${idx}-${col.id}`}
       tabIndex={0}
       className={`cell-currency ${readOnly ? 'cell-readonly' : ''}`}
@@ -711,6 +713,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
             </div>
           ) : col.type === 'checkbox' ? (
             <div 
+              id={!isEditable ? `cell-${idx}-${col.id}` : undefined}
               data-cell={`cell-${idx}-${col.id}`} 
               className={`cell-checkbox-wrap ${!isEditable ? 'cell-readonly' : ''}`}
               tabIndex={isEditable ? -1 : 0}
@@ -728,7 +731,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               />
             </div>
           ) : col.type === 'rating' ? (
-            <div data-cell={`cell-${idx}-${col.id}`} tabIndex={0} className={`cell-rating ${!isEditable ? 'cell-readonly' : ''}`} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}>
+            <div id={`cell-${idx}-${col.id}`} data-cell={`cell-${idx}-${col.id}`} tabIndex={0} className={`cell-rating ${!isEditable ? 'cell-readonly' : ''}`} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}>
               {[1, 2, 3, 4, 5].map(star => (
                 <button 
                   key={star} 
@@ -742,6 +745,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
             </div>
           ) : col.type === 'image' ? (
             <div 
+              id={`cell-${idx}-${col.id}`}
               data-cell={`cell-${idx}-${col.id}`} 
               tabIndex={0} 
               className="cell-image-wrap" 
@@ -816,6 +820,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
             </div>
           ) : col.type === 'auto_increment' ? (
             <div 
+              id={`cell-${idx}-${col.id}`}
               data-cell={`cell-${idx}-${col.id}`} 
               className="cell-auto-increment-cell-readonly" 
               tabIndex={0} 
