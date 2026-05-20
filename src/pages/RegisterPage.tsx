@@ -170,9 +170,20 @@ export default function RegisterPage() {
   const _canCreateAny = _canEditAny;
 
   const _editableColumnIds = useMemo(() => {
-    if (_canEditAny) return null; // All columns editable
-    return new Set<number>(); // No columns editable
-  }, [_canEditAny]);
+    if (!user || (user as any).permissions?.isAdmin || (user as any).permissions?.fullSheetAccess || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).role === 'sheet_admin') return null; // All columns editable
+    
+    const editRest = (user as any).permissions?.editRestrictions;
+    if (!editRest || editRest[String(registerId)] === undefined) {
+      return _canEditAny ? null : new Set<number>();
+    }
+
+    if (Array.isArray(editRest[String(registerId)])) {
+      if (editRest[String(registerId)].length === 0) return new Set<number>();
+      return new Set<number>(editRest[String(registerId)].map(Number));
+    }
+
+    return new Set<number>();
+  }, [user, registerId, _canEditAny]);
 
   useEffect(() => {
     if (isFullyRestricted && id) {
@@ -221,12 +232,22 @@ export default function RegisterPage() {
     if (!user || (user as any).permissions?.isAdmin || (user as any).permissions?.fullSheetAccess || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).role === 'sheet_admin') return null; // null = all
     
     const allowedRegs = (user as any).permissions?.allowedRegisters;
-    if (Array.isArray(allowedRegs) && allowedRegs.map(String).includes(String(registerId))) {
-      return null; // Always show all columns if access is granted
+    if (!Array.isArray(allowedRegs) || !allowedRegs.map(String).includes(String(registerId))) {
+      return new Set<number>(); // No access
+    }
+
+    const colViewRest = (user as any).permissions?.columnViewRestrictions;
+    if (!colViewRest || colViewRest[String(registerId)] === undefined) {
+      return null; // All columns visible
+    }
+
+    if (Array.isArray(colViewRest[String(registerId)])) {
+      if (colViewRest[String(registerId)].length === 0) return new Set<number>(); // None visible
+      return new Set<number>(colViewRest[String(registerId)].map(Number));
     }
     
-    return new Set<number>(); // No access
-  }, [user, registerId, register?.columns]);
+    return new Set<number>();
+  }, [user, registerId]);
 
   const cachedRegister = queryClient.getQueryData(['register', registerId]) as any;
 

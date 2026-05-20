@@ -25,6 +25,7 @@ export default function AdminUserSettingsPage() {
   const [sheetAccessGranted, setSheetAccessGranted] = useState<Record<string, boolean>>({});
   const [folderAccessGranted, setFolderAccessGranted] = useState<Record<string, boolean>>({});
   const [editRestrictions, setEditRestrictions] = useState<Record<string, any>>({});
+  const [columnViewRestrictions, setColumnViewRestrictions] = useState<Record<string, any>>({});
   const [downloadRestrictions, setDownloadRestrictions] = useState<Record<string, any>>({});
   const [previewReg, setPreviewReg] = useState<RegisterDetail | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Record<number | string, boolean>>({});
@@ -94,6 +95,10 @@ export default function AdminUserSettingsPage() {
           setEditRestrictions(p.editRestrictions);
         }
 
+        if (p.columnViewRestrictions && typeof p.columnViewRestrictions === 'object') {
+          setColumnViewRestrictions(p.columnViewRestrictions);
+        }
+
         if (p.downloadRestrictions && typeof p.downloadRestrictions === 'object') {
           setDownloadRestrictions(p.downloadRestrictions);
         }
@@ -123,6 +128,7 @@ export default function AdminUserSettingsPage() {
       const newPerms = {
         ...globalPerms,
         viewRestrictions: {},
+        columnViewRestrictions: columnViewRestrictions,
         editRestrictions: editRestrictions,
         downloadRestrictions: downloadRestrictions,
         createRestrictions: {},
@@ -160,7 +166,7 @@ export default function AdminUserSettingsPage() {
 
     return () => clearTimeout(timer);
   }, [
-    globalPerms, editRestrictions, downloadRestrictions, sheetAccessGranted, folderAccessGranted
+    globalPerms, editRestrictions, columnViewRestrictions, downloadRestrictions, sheetAccessGranted, folderAccessGranted
   ]);
 
   const handleChangePassword = async () => {
@@ -415,8 +421,50 @@ export default function AdminUserSettingsPage() {
                   {isExpanded && (
                     <div style={{ padding: '20px' }}>
                       <div style={{ padding: '12px', background: 'rgba(0,45,93,0.02)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <FileText size={14} /> Sheet Columns ({cols.length})
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <FileText size={14} /> Sheet Columns ({cols.length})
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--navy)', cursor: 'pointer', textTransform: 'none', letterSpacing: 'normal' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={columnViewRestrictions[reg.id] === undefined || (Array.isArray(columnViewRestrictions[reg.id]) && columnViewRestrictions[reg.id].length === cols.length)} 
+                                onChange={(e) => {
+                                  setColumnViewRestrictions(prev => {
+                                    const next = { ...prev };
+                                    if (e.target.checked) {
+                                      delete next[reg.id]; // undefined means all
+                                    } else {
+                                      next[reg.id] = []; // empty array means none
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                style={{ width: '14px', height: '14px', accentColor: '#3B82F6', cursor: 'pointer' }}
+                              />
+                              Select All Visible
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--navy)', cursor: 'pointer', textTransform: 'none', letterSpacing: 'normal' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={editRestrictions[reg.id] === undefined || (Array.isArray(editRestrictions[reg.id]) && editRestrictions[reg.id].length === cols.length)} 
+                                onChange={(e) => {
+                                  setEditRestrictions(prev => {
+                                    const next = { ...prev };
+                                    if (e.target.checked) {
+                                      delete next[reg.id]; // undefined means all
+                                    } else {
+                                      next[reg.id] = []; // empty array means none
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                style={{ width: '14px', height: '14px', accentColor: '#8B5CF6', cursor: 'pointer' }}
+                              />
+                              Select All Editable
+                            </label>
+                          </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {cols.map((col, idx) => (
@@ -425,6 +473,66 @@ export default function AdminUserSettingsPage() {
                               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '20px' }}>{col.name}</span>
                               
                               <div style={{ display: 'flex', gap: '0px', alignItems: 'center', flexShrink: 0 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: (columnViewRestrictions[reg.id] === undefined || (Array.isArray(columnViewRestrictions[reg.id]) && columnViewRestrictions[reg.id].includes(col.id))) ? '#3B82F6' : 'var(--muted)', cursor: 'pointer', userSelect: 'none', width: '80px', transition: 'color 0.2s' }}>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={columnViewRestrictions[reg.id] === undefined || (Array.isArray(columnViewRestrictions[reg.id]) && columnViewRestrictions[reg.id].includes(col.id))} 
+                                    onChange={(e) => {
+                                      setColumnViewRestrictions(prev => {
+                                        const next = { ...prev };
+                                        const current = next[reg.id];
+                                        if (e.target.checked) {
+                                          if (current === undefined) return prev;
+                                          if (Array.isArray(current)) {
+                                            const newArr = [...current, col.id];
+                                            if (newArr.length === cols.length) delete next[reg.id];
+                                            else next[reg.id] = newArr;
+                                          }
+                                        } else {
+                                          if (current === undefined) {
+                                            next[reg.id] = cols.map(c => c.id).filter(id => id !== col.id);
+                                          } else if (Array.isArray(current)) {
+                                            next[reg.id] = current.filter(id => id !== col.id);
+                                          }
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                    style={{ width: '15px', height: '15px', accentColor: '#3B82F6', cursor: 'pointer' }}
+                                  />
+                                  Visible
+                                </label>
+
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: (editRestrictions[reg.id] === undefined || (Array.isArray(editRestrictions[reg.id]) && editRestrictions[reg.id].includes(col.id))) ? '#8B5CF6' : 'var(--muted)', cursor: 'pointer', userSelect: 'none', width: '90px', transition: 'color 0.2s' }}>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={editRestrictions[reg.id] === undefined || (Array.isArray(editRestrictions[reg.id]) && editRestrictions[reg.id].includes(col.id))} 
+                                    onChange={(e) => {
+                                      setEditRestrictions(prev => {
+                                        const next = { ...prev };
+                                        const current = next[reg.id];
+                                        if (e.target.checked) {
+                                          if (current === undefined) return prev;
+                                          if (Array.isArray(current)) {
+                                            const newArr = [...current, col.id];
+                                            if (newArr.length === cols.length) delete next[reg.id];
+                                            else next[reg.id] = newArr;
+                                          }
+                                        } else {
+                                          if (current === undefined) {
+                                            next[reg.id] = cols.map(c => c.id).filter(id => id !== col.id);
+                                          } else if (Array.isArray(current)) {
+                                            next[reg.id] = current.filter(id => id !== col.id);
+                                          }
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                    style={{ width: '15px', height: '15px', accentColor: '#8B5CF6', cursor: 'pointer' }}
+                                  />
+                                  Editable
+                                </label>
+
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: (col as any).mandatory ? 'var(--primary)' : 'var(--muted)', cursor: 'pointer', userSelect: 'none', width: '100px', transition: 'color 0.2s' }}>
                                   <input 
                                     type="checkbox" 
