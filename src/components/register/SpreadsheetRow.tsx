@@ -53,10 +53,11 @@ interface SpreadsheetTextInputProps {
   searchTerm?: string;
   readOnly?: boolean;
   suggestions?: string[];
+  scrollToColumn?: (colIdx: number) => void;
 }
 
 // Currency cell: shows ₹ formatted display, edits as raw number
-const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleColumns, handleCellChange, onKeyDown, readOnly }: SpreadsheetTextInputProps & { onKeyDown?: (e: React.KeyboardEvent) => void }) => {
+const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleColumns, handleCellChange, onKeyDown, readOnly, scrollToColumn }: SpreadsheetTextInputProps & { onKeyDown?: (e: React.KeyboardEvent) => void }) => {
   const rawValue = entry.cells?.[col.id.toString()] || '';
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(rawValue);
@@ -70,9 +71,14 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
       return;
     }
 
-    const focusNext = (rowI: number, cId: number | string) => {
-      const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
-      if (el) el.focus();
+    const focusNext = (rowI: number, cId: number | string, cIdx: number) => {
+      if (scrollToColumn) {
+        scrollToColumn(cIdx);
+      }
+      setTimeout(() => {
+        const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
+        if (el) el.focus();
+      }, 50);
     };
 
     if (e.key === 'ArrowLeft') {
@@ -80,35 +86,35 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
       setEditing(false);
       const prevCol = visibleColumns[colIdx - 1];
       if (prevCol) {
-        focusNext(idx, prevCol.id);
+        focusNext(idx, prevCol.id, colIdx - 1);
       } else if (idx > 0) {
         const lastCol = visibleColumns[visibleColumns.length - 1];
-        if (lastCol) focusNext(idx - 1, lastCol.id);
+        if (lastCol) focusNext(idx - 1, lastCol.id, visibleColumns.length - 1);
       }
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       setEditing(false);
       const nextCol = visibleColumns[colIdx + 1];
       if (nextCol) {
-        focusNext(idx, nextCol.id);
+        focusNext(idx, nextCol.id, colIdx + 1);
       } else if (idx < totalRows - 1) {
         const firstCol = visibleColumns[0];
-        if (firstCol) focusNext(idx + 1, firstCol.id);
+        if (firstCol) focusNext(idx + 1, firstCol.id, 0);
       }
     } else if (e.key === 'ArrowUp') {
       if (idx > 0) {
         e.preventDefault();
         setEditing(false);
-        focusNext(idx - 1, col.id);
+        focusNext(idx - 1, col.id, colIdx);
       }
     } else if (e.key === 'ArrowDown') {
       if (idx < totalRows - 1) {
         e.preventDefault();
         setEditing(false);
-        focusNext(idx + 1, col.id);
+        focusNext(idx + 1, col.id, colIdx);
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, scrollToColumn]);
 
   if (editing && !readOnly) {
     return (
@@ -154,7 +160,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
   );
 });
 
-const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colIdx, totalRows, handleCellChange, type = 'text', placeholder, searchTerm, readOnly, suggestions }: SpreadsheetTextInputProps) => {
+const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colIdx, totalRows, handleCellChange, type = 'text', placeholder, searchTerm, readOnly, suggestions, scrollToColumn }: SpreadsheetTextInputProps) => {
   let initialValue = entry.cells?.[col.id.toString()] || '';
   if (col.type === 'date' && initialValue.includes('/')) {
     initialValue = initialValue.replace(/\//g, '-');
@@ -242,9 +248,14 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
       return;
     }
 
-    const focusNext = (rowI: number, cId: number | string) => {
-      const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
-      if (el) el.focus();
+    const focusNext = (rowI: number, cId: number | string, cIdx: number) => {
+      if (scrollToColumn) {
+        scrollToColumn(cIdx);
+      }
+      setTimeout(() => {
+        const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
+        if (el) el.focus();
+      }, 50);
     };
 
     // If dropdown is showing, ArrowDown/ArrowUp navigate suggestions
@@ -282,50 +293,50 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
       if (e.shiftKey) {
         const prevCol = visibleColumns[colIdx - 1];
         if (prevCol) {
-          focusNext(idx, prevCol.id);
+          focusNext(idx, prevCol.id, colIdx - 1);
         } else {
           const lastCol = visibleColumns[visibleColumns.length - 1];
-          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id);
+          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id, visibleColumns.length - 1);
         }
       } else {
         const nextCol = visibleColumns[colIdx + 1];
         if (nextCol) {
-          focusNext(idx, nextCol.id);
+          focusNext(idx, nextCol.id, colIdx + 1);
         } else {
           const firstCol = visibleColumns[0];
-          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id);
+          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id, 0);
         }
       }
     } else if (e.key === 'ArrowDown') {
       if (idx < totalRows - 1) {
         e.preventDefault();
-        focusNext(idx + 1, col.id);
+        focusNext(idx + 1, col.id, colIdx);
       }
     } else if (e.key === 'ArrowUp') {
       if (idx > 0) {
         e.preventDefault();
-        focusNext(idx - 1, col.id);
+        focusNext(idx - 1, col.id, colIdx);
       }
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       const prevCol = visibleColumns[colIdx - 1];
       if (prevCol) {
-        focusNext(idx, prevCol.id);
+        focusNext(idx, prevCol.id, colIdx - 1);
       } else if (idx > 0) {
         const lastCol = visibleColumns[visibleColumns.length - 1];
-        if (lastCol) focusNext(idx - 1, lastCol.id);
+        if (lastCol) focusNext(idx - 1, lastCol.id, visibleColumns.length - 1);
       }
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       const nextCol = visibleColumns[colIdx + 1];
       if (nextCol) {
-        focusNext(idx, nextCol.id);
+        focusNext(idx, nextCol.id, colIdx + 1);
       } else if (idx < totalRows - 1) {
         const firstCol = visibleColumns[0];
-        if (firstCol) focusNext(idx + 1, firstCol.id);
+        if (firstCol) focusNext(idx + 1, firstCol.id, 0);
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion, scrollToColumn]);
 
 
 
@@ -442,9 +453,9 @@ interface SpreadsheetRowProps {
   defaultColWidth?: number;
   onCellFormatClick?: (entryId: number, colId: string, rect: DOMRect) => void;
   searchTerm?: string;
-  editableColumnIds?: Set<number> | null;
   columnSuggestions?: Record<string, string[]>;
   displayRowNumber?: number;
+  scrollToColumn?: (colIdx: number) => void;
 }
 
 export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: SpreadsheetRowProps) {
@@ -476,6 +487,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     editableColumnIds,
     columnSuggestions,
     displayRowNumber,
+    scrollToColumn,
   } = props;
   const { reminders } = useNotifications();
   const hasPendingReminder = useMemo(() => {
@@ -500,9 +512,14 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
       return;
     }
 
-    const focusNext = (rowI: number, cId: number | string) => {
-      const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
-      if (el) el.focus();
+    const focusNext = (rowI: number, cId: number | string, cIdx: number) => {
+      if (scrollToColumn) {
+        scrollToColumn(cIdx);
+      }
+      setTimeout(() => {
+        const el = document.getElementById(`cell-${rowI}-${cId}`) || document.querySelector(`[data-cell="cell-${rowI}-${cId}"]`) as HTMLElement;
+        if (el) el.focus();
+      }, 50);
     };
 
     if (e.key === 'Tab' || e.key === 'Enter') {
@@ -510,46 +527,46 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
       if (e.shiftKey) {
         const prevCol = visibleColumns[colIdx - 1];
         if (prevCol) {
-          focusNext(idx, prevCol.id);
+          focusNext(idx, prevCol.id, colIdx - 1);
         } else {
           const lastCol = visibleColumns[visibleColumns.length - 1];
-          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id);
+          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id, visibleColumns.length - 1);
         }
       } else {
         const nextCol = visibleColumns[colIdx + 1];
         if (nextCol) {
-          focusNext(idx, nextCol.id);
+          focusNext(idx, nextCol.id, colIdx + 1);
         } else {
           const firstCol = visibleColumns[0];
-          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id);
+          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id, 0);
         }
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      focusNext(idx + 1, colId);
+      focusNext(idx + 1, colId, colIdx);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      focusNext(idx - 1, colId);
+      focusNext(idx - 1, colId, colIdx);
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       const prevCol = visibleColumns[colIdx - 1];
       if (prevCol) {
-        focusNext(idx, prevCol.id);
+        focusNext(idx, prevCol.id, colIdx - 1);
       } else if (idx > 0) {
         const lastCol = visibleColumns[visibleColumns.length - 1];
-        if (lastCol) focusNext(idx - 1, lastCol.id);
+        if (lastCol) focusNext(idx - 1, lastCol.id, visibleColumns.length - 1);
       }
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       const nextCol = visibleColumns[colIdx + 1];
       if (nextCol) {
-        focusNext(idx, nextCol.id);
+        focusNext(idx, nextCol.id, colIdx + 1);
       } else if (idx < totalRows - 1) {
         const firstCol = visibleColumns[0];
-        if (firstCol) focusNext(idx + 1, firstCol.id);
+        if (firstCol) focusNext(idx + 1, firstCol.id, 0);
       }
     }
-  }, [idx, visibleColumns, totalRows]);
+  }, [idx, visibleColumns, totalRows, scrollToColumn]);
 
   const handleSerialClick = useCallback(() => {
     onRowDetail?.(entry);
@@ -638,6 +655,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
                 idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange}
                 placeholder="DD-MM-YYYY" searchTerm={searchTerm}
                 readOnly={!isEditable}
+                scrollToColumn={scrollToColumn}
               />
               {isEditable && (
                 <button 
@@ -743,7 +761,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               ) : (
                 isEditable ? (
                   <label className="cell-image-upload" title="Upload image" onClick={(e) => e.stopPropagation()}>
-                    <ImageIcon size={11} /> Add
+                     Add
                     <input type="file" accept="image/*" className="hidden-file-input" tabIndex={-1} onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => handleCellChange(entry.id, col.id.toString(), ev.target?.result as string); r.readAsDataURL(f); }} />
                   </label>
                 ) : (
@@ -753,17 +771,17 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
             </div>
           ) : col.type === 'email' ? (
             <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} />
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="email" placeholder="name@example.com" searchTerm={searchTerm} readOnly={!isEditable} scrollToColumn={scrollToColumn} />
               {entry.cells?.[col.id.toString()] && <a href={`mailto:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Send email" tabIndex={-1}><Mail size={11} /></a>}
             </div>
           ) : col.type === 'phone' ? (
             <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} />
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="tel" placeholder="+91 98765 43210" searchTerm={searchTerm} readOnly={!isEditable} scrollToColumn={scrollToColumn} />
               {entry.cells?.[col.id.toString()] && <a href={`tel:${entry.cells[col.id.toString()]}`} className="cell-url-link" title="Call" tabIndex={-1}><Phone size={11} /></a>}
             </div>
           ) : col.type === 'url' ? (
             <div className="cell-url-wrap">
-              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} />
+              <SpreadsheetTextInput idx={idx} col={col} entry={entry} visibleColumns={visibleColumns} colIdx={colIdx} totalRows={totalRows} handleCellChange={handleCellChange} type="url" placeholder="https://..." searchTerm={searchTerm} readOnly={!isEditable} scrollToColumn={scrollToColumn} />
               {entry.cells?.[col.id.toString()] && <a href={entry.cells[col.id.toString()]} target="_blank" rel="noreferrer" className="cell-url-link" title="Open" tabIndex={-1}><Globe size={11} /></a>}
             </div>
           ) : col.type === 'auto_increment' ? (
@@ -789,7 +807,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               <span><HighlightedText text={entry.cells?.[col.id.toString()] || '–'} searchTerm={searchTerm} /></span>
             </div>
           ) : col.type === 'currency' ? (
-            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} />
+            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} scrollToColumn={scrollToColumn} />
           ) : (
             <SpreadsheetTextInput 
               idx={idx}
@@ -802,6 +820,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               searchTerm={searchTerm}
               readOnly={!isEditable}
               suggestions={columnSuggestions?.[col.id.toString()]}
+              scrollToColumn={scrollToColumn}
             />
           )}
           {col.type !== 'formula' && col.type !== 'auto_increment' && isEditable && (

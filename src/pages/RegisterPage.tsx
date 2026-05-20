@@ -3152,13 +3152,14 @@ export default function RegisterPage() {
                   key={virtualRow.key}
                   entry={entry}
                   idx={virtualRow.index}
-                  displayRowNumber={pageOffset + virtualRow.index + 1}
+                  displayRowNumber={(deferredSearch.trim() || deferredActiveFilters.length > 0) ? entry.rowNumber : (pageOffset + virtualRow.index + 1)}
                   visibleColumns={visibleColumns}
                   virtualCols={useColVirtual ? virtualCols : undefined}
                   beforeVirtualCols={useColVirtual ? beforeVirtualCols : undefined}
                   afterVirtualCols={useColVirtual ? afterVirtualCols : undefined}
                   paddingLeft={useColVirtual ? paddingLeft : 0}
                   paddingRight={useColVirtual ? paddingRight : 0}
+                  scrollToColumn={useColVirtual ? (colIdx) => colVirtualizer.scrollToIndex(colIdx, { align: 'auto' }) : undefined}
                   isSelected={selectedRows.has(entry.id)}
                   toggleSelectRow={toggleSelectRow}
                   handleCellChange={(eid, cid, val) => {
