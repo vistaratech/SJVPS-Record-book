@@ -1003,15 +1003,27 @@ export default function RegisterPage() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
+  // Apply row-level view restrictions before any search/filter/sort
+  const rowFilteredEntries = useMemo(() => {
+    if (!rowViewRange) return localEntries;
+    const { start, end } = rowViewRange;
+    return localEntries.filter(e => {
+      const num = e.rowNumber;
+      if (start !== undefined && num < start) return false;
+      if (end !== undefined && num > end) return false;
+      return true;
+    });
+  }, [localEntries, rowViewRange]);
+
   const entriesByPage = useMemo(() => {
     const pages: Record<number, Entry[]> = {};
-    localEntries.forEach((e) => {
+    rowFilteredEntries.forEach((e) => {
       const pIdx = e.pageIndex || 0;
       if (!pages[pIdx]) pages[pIdx] = [];
       pages[pIdx].push(e);
     });
     return pages;
-  }, [localEntries]);
+  }, [rowFilteredEntries]);
 
   const pageOffset = useMemo(() => {
     let sum = 0;
@@ -1020,9 +1032,6 @@ export default function RegisterPage() {
     }
     return sum;
   }, [entriesByPage, currentPageIndex]);
-
-  // Apply row-level view restrictions before any search/filter/sort
-  const rowFilteredEntries = localEntries;
 
   // Build paginated lookup from row-filtered entries
   const rowFilteredEntriesByPage = entriesByPage;
@@ -3444,7 +3453,26 @@ export default function RegisterPage() {
       />
 
       {/* Row Detail View Modal (Direct Edit Mode) */}
-      {detailViewEntry && (
+      {/* Row Detail View Modal (Direct Edit Mode) */}
+      {detailViewEntry && (() => {
+        const isRowEditable = !_canEditAny ? false : (!_rowEditRange ? true : (() => {
+          const num = detailViewEntry.rowNumber;
+          const { start, end } = _rowEditRange;
+          if (start !== undefined && num < start) return false;
+          if (end !== undefined && num > end) return false;
+          return true;
+        })());
+
+        const isRowDownloadable = _canDownloadAny && (() => {
+          if (!rowDownloadRange) return true;
+          const num = detailViewEntry.rowNumber;
+          const { start, end } = rowDownloadRange;
+          if (start !== undefined && num < start) return false;
+          if (end !== undefined && num > end) return false;
+          return true;
+        })();
+
+        return (
         <div className="row-detail-overlay" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }}>
           <div className="row-detail-modal" onClick={e => e.stopPropagation()}>
             <div className="row-detail-header">
@@ -3476,22 +3504,26 @@ export default function RegisterPage() {
                 </button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <button
-                  className="pab-tab-action-btn"
-                  style={{ borderColor: '#fca5a5', color: '#dc2626' }}
-                  onClick={() => handleRowDownloadPDF(detailViewEntry.id)}
-                  title="Download PDF"
-                >
-                  <FileText size={14} /> PDF
-                </button>
-                <button
-                  className="pab-tab-action-btn"
-                  style={{ borderColor: '#86efac', color: '#16a34a' }}
-                  onClick={() => handleRowDownloadExcel(detailViewEntry.id)}
-                  title="Download Excel"
-                >
-                  <Download size={14} /> Excel
-                </button>
+                {isRowDownloadable && (
+                  <button
+                    className="pab-tab-action-btn"
+                    style={{ borderColor: '#fca5a5', color: '#dc2626' }}
+                    onClick={() => handleRowDownloadPDF(detailViewEntry.id)}
+                    title="Download PDF"
+                  >
+                    <FileText size={14} /> PDF
+                  </button>
+                )}
+                {isRowDownloadable && (
+                  <button
+                    className="pab-tab-action-btn"
+                    style={{ borderColor: '#86efac', color: '#16a34a' }}
+                    onClick={() => handleRowDownloadExcel(detailViewEntry.id)}
+                    title="Download Excel"
+                  >
+                    <Download size={14} /> Excel
+                  </button>
+                )}
                 <button className="row-detail-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }} aria-label="Close">✕</button>
               </div>
             </div>
@@ -3585,6 +3617,7 @@ export default function RegisterPage() {
                 return columns.map((col) => {
                   const colKey = col.id.toString();
                   const val = detailEdits[colKey] ?? '';
+                  const isFieldEditable = isRowEditable && (!_editableColumnIds || _editableColumnIds.has(col.id)) && col.type !== 'auto_increment' && col.type !== 'formula';
 
                   return (
                     <div className={`row-detail-field ${col.type}-field`} key={col.id}>
@@ -3596,43 +3629,49 @@ export default function RegisterPage() {
                           </label>
                           <span className="row-detail-type-badge">{col.type.replace('_', ' ')}</span>
                         </div>
-                        <button 
-                          className="row-detail-col-btn" 
-                          title="Column Settings"
-                          onClick={() => {
-                            setActiveModalColId(col.id);
-                            setChangeTypeValue(col.type);
-                            if (col.type === 'formula') setNewColFormula(col.formula || '');
-                            if (col.type === 'dropdown') setNewColDropdownOpts((col.dropdownOptions || []).join(', '));
-                            setChangeTypeModal(true);
-                          }}
-                        >
-                          <ChevronDown size={12} />
-                        </button>
+                        {_canEditAny && (
+                          <button 
+                            className="row-detail-col-btn" 
+                            title="Column Settings"
+                            onClick={() => {
+                              setActiveModalColId(col.id);
+                              setChangeTypeValue(col.type);
+                              if (col.type === 'formula') setNewColFormula(col.formula || '');
+                              if (col.type === 'dropdown') setNewColDropdownOpts((col.dropdownOptions || []).join(', '));
+                              setChangeTypeModal(true);
+                            }}
+                          >
+                            <ChevronDown size={12} />
+                          </button>
+                        )}
                       </div>
                       
                       <div className="row-detail-input-wrapper">
                         {col.type === 'dropdown' ? (
                           <div className="row-detail-input-wrapper">
                             <div 
-                              className={`row-detail-input cell-dropdown ${detailErrors[colKey] ? 'invalid' : ''}`}
-                              tabIndex={0}
+                              className={`row-detail-input cell-dropdown ${detailErrors[colKey] ? 'invalid' : ''} ${!isFieldEditable ? 'cell-readonly' : ''}`}
+                              tabIndex={isFieldEditable ? 0 : -1}
                               ref={(el) => {
                                 if (el) detailInputRefs.current.set(col.id, el);
                                 else detailInputRefs.current.delete(col.id);
                               }}
                               onKeyDown={(e) => {
+                                if (!isFieldEditable) {
+                                  handleDetailKeyDown(e, col.id);
+                                  return;
+                                }
                                 if (e.key === 'Enter' || e.key === ' ') {
                                   e.preventDefault();
                                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                   openDropdown(detailViewEntry.id, col.id, col.dropdownOptions || [], rect as DOMRect);
                                 } else handleDetailKeyDown(e, col.id);
                               }}
-                              onClick={(e) => {
+                              onClick={isFieldEditable ? (e) => {
                                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                 openDropdown(detailViewEntry.id, col.id, col.dropdownOptions || [], rect as DOMRect);
                                 if (detailErrors[colKey]) setDetailErrors(prev => ({ ...prev, [colKey]: null }));
-                              }}
+                              } : undefined}
                             >
                               {val || 'Select options...'}
                             </div>
@@ -3645,13 +3684,17 @@ export default function RegisterPage() {
                           </div>
                         ) : col.type === 'checkbox' ? (
                           <div 
-                            className="row-detail-checkbox-wrapper"
-                            tabIndex={0}
+                            className={`row-detail-checkbox-wrapper ${!isFieldEditable ? 'cell-readonly' : ''}`}
+                            tabIndex={isFieldEditable ? 0 : -1}
                             ref={(el) => {
                               if (el) detailInputRefs.current.set(col.id, el);
                               else detailInputRefs.current.delete(col.id);
                             }}
                             onKeyDown={(e) => {
+                              if (!isFieldEditable) {
+                                handleDetailKeyDown(e, col.id);
+                                return;
+                              }
                               if (e.key === ' ') {
                                 e.preventDefault();
                                 setDetailEdits(prev => ({ ...prev, [colKey]: (val === 'true' || val === 'Checked') ? 'false' : 'true' }));
@@ -3659,11 +3702,12 @@ export default function RegisterPage() {
                                 handleDetailKeyDown(e, col.id);
                               }
                             }}
-                            onClick={() => setDetailEdits(prev => ({ ...prev, [colKey]: (val === 'true' || val === 'Checked') ? 'false' : 'true' }))}
+                            onClick={isFieldEditable ? () => setDetailEdits(prev => ({ ...prev, [colKey]: (val === 'true' || val === 'Checked') ? 'false' : 'true' })) : undefined}
                           >
                             <input
                               type="checkbox"
                               checked={val === 'true' || val === 'Checked'}
+                              disabled={!isFieldEditable}
                               readOnly
                             />
                             <span className="checkbox-label">{val === 'true' || val === 'Checked' ? 'Checked' : 'Unchecked'}</span>
@@ -3672,20 +3716,22 @@ export default function RegisterPage() {
                           <div className="row-detail-input-wrapper">
                             <input 
                               type="text"
-                              className={`row-detail-input cell-date ${detailErrors[colKey] ? 'invalid' : ''}`} 
+                              className={`row-detail-input cell-date ${detailErrors[colKey] ? 'invalid' : ''} ${!isFieldEditable ? 'cell-readonly' : ''}`} 
                               value={val}
-                              placeholder="DD-MM-YYYY"
+                              placeholder={isFieldEditable ? "DD-MM-YYYY" : "—"}
                               autoComplete="off"
+                              readOnly={!isFieldEditable}
                               onChange={(e) => {
+                                if (!isFieldEditable) return;
                                 setDetailEdits(prev => ({ ...prev, [colKey]: e.target.value }));
                                 if (detailErrors[colKey]) setDetailErrors(prev => ({ ...prev, [colKey]: null }));
                               }}
-                              onClick={(e) => {
+                              onClick={isFieldEditable ? (e) => {
                                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                 openDatePicker(detailViewEntry.id, col.id, val, rect as DOMRect);
-                              }}
+                              } : undefined}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
+                                if (e.key === 'Enter' && isFieldEditable) {
                                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                   openDatePicker(detailViewEntry.id, col.id, val, rect as DOMRect);
                                 } else {
@@ -3727,10 +3773,39 @@ export default function RegisterPage() {
                                 <div className="row-detail-image-actions">
                                   <button className="row-detail-img-btn" onClick={() => setPreviewImage({ url: val, entryId: detailViewEntry.id, colId: col.id.toString() })}>View Large</button>
                                   {val.split('|||').length === 1 && <button className="row-detail-img-btn" onClick={() => handleImageDownload(val.split('|||')[0])}>Download</button>}
-                                  <button className="row-detail-img-btn danger" onClick={() => setDetailEdits(prev => ({ ...prev, [colKey]: '' }))}>Remove All</button>
+                                  {isFieldEditable && <button className="row-detail-img-btn danger" onClick={() => setDetailEdits(prev => ({ ...prev, [colKey]: '' }))}>Remove All</button>}
                                 </div>
                                 
-                                <label className="row-detail-add-btn">
+                                {isFieldEditable && (
+                                  <label className="row-detail-add-btn">
+                                    <input 
+                                      type="file" 
+                                      accept="image/*" 
+                                      hidden 
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          const reader = new FileReader();
+                                          reader.onload = (rev) => {
+                                            const newImg = rev.target?.result as string;
+                                            setDetailEdits(prev => {
+                                              const current = prev[colKey] ?? detailViewEntry.cells?.[colKey] ?? '';
+                                              const updated = current ? `${current}|||${newImg}` : newImg;
+                                              return { ...prev, [colKey]: updated };
+                                            });
+                                          };
+                                          reader.readAsDataURL(file);
+                                        }
+                                      }}
+                                    />
+                                    <Plus size={14} />
+                                    <span>Add Another Image</span>
+                                  </label>
+                                )}
+                              </div>
+                            ) : (
+                              isFieldEditable ? (
+                                <label className="row-detail-image-upload">
                                   <input 
                                     type="file" 
                                     accept="image/*" 
@@ -3740,41 +3815,21 @@ export default function RegisterPage() {
                                       if (file) {
                                         const reader = new FileReader();
                                         reader.onload = (rev) => {
-                                          const newImg = rev.target?.result as string;
-                                          setDetailEdits(prev => {
-                                            const current = prev[colKey] ?? detailViewEntry.cells?.[colKey] ?? '';
-                                            const updated = current ? `${current}|||${newImg}` : newImg;
-                                            return { ...prev, [colKey]: updated };
-                                          });
+                                          setDetailEdits(prev => ({ ...prev, [colKey]: rev.target?.result as string }));
                                         };
                                         reader.readAsDataURL(file);
                                       }
                                     }}
                                   />
-                                  <Plus size={14} />
-                                  <span>Add Another Image</span>
+                                  <ImageIcon size={16} />
+                                  <span>Upload Image</span>
                                 </label>
-                              </div>
-                            ) : (
-                              <label className="row-detail-image-upload">
-                                <input 
-                                  type="file" 
-                                  accept="image/*" 
-                                  hidden 
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                      const reader = new FileReader();
-                                      reader.onload = (rev) => {
-                                        setDetailEdits(prev => ({ ...prev, [colKey]: rev.target?.result as string }));
-                                      };
-                                      reader.readAsDataURL(file);
-                                    }
-                                  }}
-                                />
-                                <ImageIcon size={16} />
-                                <span>Upload Image</span>
-                              </label>
+                              ) : (
+                                <div className="row-detail-input auto-increment-readonly" style={{ opacity: 0.5 }}>
+                                  <ImageIcon size={16} style={{ marginRight: 6 }} />
+                                  <span>No image</span>
+                                </div>
+                              )
                             )}
                           </div>
                         ) : col.type === 'formula' ? (
@@ -3786,13 +3841,13 @@ export default function RegisterPage() {
                               else detailInputRefs.current.delete(col.id);
                             }}
                             onKeyDown={(e) => handleDetailKeyDown(e, col.id)}
-                            onClick={() => {
+                            onClick={_canEditAny ? () => {
                               setActiveModalColId(col.id);
                               setNewColFormula(col.formula || '');
                               setChangeTypeValue(col.type);
                               setChangeTypeModal(true);
-                            }}
-                            title="Click to edit formula"
+                            } : undefined}
+                            title={_canEditAny ? "Click to edit formula" : undefined}
                           >
                             {evaluateFormula(col.formula || '', { ...detailViewEntry, cells: { ...detailViewEntry.cells, ...detailEdits } }, columns)}
                           </div>
@@ -3804,23 +3859,25 @@ export default function RegisterPage() {
                         ) : (
                           <div className="row-detail-input-wrapper">
                             <input
-                              className={`row-detail-input ${detailErrors[colKey] ? 'invalid' : ''}`}
+                              className={`row-detail-input ${detailErrors[colKey] ? 'invalid' : ''} ${!isFieldEditable ? 'cell-readonly' : ''}`}
                               value={val}
+                              readOnly={!isFieldEditable}
                               ref={(el) => {
                                 if (el) detailInputRefs.current.set(col.id, el);
                                 else detailInputRefs.current.delete(col.id);
                               }}
                               onKeyDown={(e) => handleDetailKeyDown(e, col.id)}
                               onChange={e => {
+                                if (!isFieldEditable) return;
                                 setDetailEdits(prev => ({ ...prev, [colKey]: e.target.value }));
                                 if (detailErrors[colKey]) setDetailErrors(prev => ({ ...prev, [colKey]: null }));
                               }}
-                              placeholder={`Enter ${col.name}…`}
+                              placeholder={isFieldEditable ? `Enter ${col.name}…` : '—'}
                               type={col.type === 'email' ? 'email' : col.type === 'phone' ? 'tel' : 'text'}
                               inputMode={col.type === 'number' || col.type === 'currency' ? 'decimal' : undefined}
-                              list={`list-detail-${col.id}`}
+                              list={isFieldEditable ? `list-detail-${col.id}` : undefined}
                             />
-                            {columnSuggestions[col.id.toString()]?.length > 0 && (
+                            {isFieldEditable && columnSuggestions[col.id.toString()]?.length > 0 && (
                               <datalist id={`list-detail-${col.id}`}>
                                 {columnSuggestions[col.id.toString()].map((s, i) => (
                                   <option key={`${s}-${i}`} value={s} />
@@ -3843,8 +3900,8 @@ export default function RegisterPage() {
             </div>
 
             <div className="row-detail-footer">
-              <button className="row-detail-btn-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setDetailErrors({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }}>{_canEditAny ? 'Cancel' : 'Close'}</button>
-              {_canEditAny && (
+              <button className="row-detail-btn-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setDetailErrors({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }}>{isRowEditable ? 'Cancel' : 'Close'}</button>
+              {isRowEditable && (
                 <button 
                   className="row-detail-btn-save" 
                   disabled={isSaving}
@@ -3969,7 +4026,8 @@ export default function RegisterPage() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {calcMenu && (
         <div className="context-popover-layer" onClick={() => setCalcMenu(null)}>

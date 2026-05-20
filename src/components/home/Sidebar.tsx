@@ -1,5 +1,5 @@
 import { useCallback, memo, useState, startTransition, useDeferredValue, useMemo } from 'react';
-import { Menu, Search, Plus, FileText, X, Folder, FileSpreadsheet, ClipboardPaste, Pencil, Trash2, PlusCircle, FolderPlus, Bell, User, Activity, LayoutTemplate, LogOut, CloudUpload, Clock, CheckCircle2, XCircle, Shield } from 'lucide-react';
+import { Menu, Search, Plus, FileText, X, Folder, FileSpreadsheet, ClipboardPaste, Pencil, Trash2, PlusCircle, FolderPlus, Bell, User, Activity, LayoutTemplate, LogOut, CloudUpload, Clock, CheckCircle2, XCircle, Shield, Sparkles } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '../../lib/auth';
@@ -78,6 +78,7 @@ export const Sidebar = memo(function Sidebar({
   });
 
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showVersionModal, setShowVersionModal] = useState(false);
 
   const notifications = useMemo(() => {
     if (!register?.entries || register.entries.length < 2) return [];
@@ -641,7 +642,22 @@ export const Sidebar = memo(function Sidebar({
             <img src="/logo-transparent.png" alt="AG Trust" className="sidebar-footer-logo" style={{ margin: 0, width: '28px', height: '28px', objectFit: 'contain' }} />
             <span className="sidebar-footer-text" style={{ fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
               AG Trust · Record Book
-              <span style={{ fontSize: '10px', fontWeight: 600, color: '#475569', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none' }}>v1.1</span>
+              <span 
+                style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowVersionModal(true);
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.backgroundColor = '#bfdbfe';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.backgroundColor = '#dbeafe';
+                }}
+                title="View what's new in v1.2"
+              >
+                v1.2
+              </span>
             </span>
           </div>
         </div>
@@ -792,6 +808,106 @@ export const Sidebar = memo(function Sidebar({
           )}
         </div>
       </div>
+
+      {/* ── Version Updates Modal ── */}
+      {showVersionModal && (
+        <div className="modal-overlay" onClick={() => setShowVersionModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', borderRadius: '16px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ background: '#eff6ff', color: '#3b82f6', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>What's New in v1.2</h3>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Released May 20, 2026</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowVersionModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#64748b', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Feature 1 */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                  <CheckCircle2 size={16} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Row-Level Detail Permissions</h4>
+                  <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                    The view, edit, and download permission checks are now fully enforced at the individual record detail (row modal) level, matching the main sheet rules.
+                  </p>
+                </div>
+              </div>
+
+              {/* Feature 2 */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                  <CheckCircle2 size={16} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Dynamic Read-Only Input Control</h4>
+                  <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                    Input elements (dropdowns, checkboxes, dates, images, and text inputs) inside the record details modal are dynamically made read-only or disabled when edits are restricted.
+                  </p>
+                </div>
+              </div>
+
+              {/* Feature 3 */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                  <CheckCircle2 size={16} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Conditional Button Visibility</h4>
+                  <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                    The "Save Changes" button and download buttons (PDF/Excel) inside the modal are dynamically shown or hidden based on row-level permissions.
+                  </p>
+                </div>
+              </div>
+
+              {/* Feature 4 */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                  <CheckCircle2 size={16} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Formula & Settings Protection</h4>
+                  <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                    Access to column configuration, column settings, and editing formulas is restricted strictly to sheet administrators to ensure data integrity.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+              <button 
+                onClick={() => setShowVersionModal(false)}
+                style={{
+                  background: 'linear-gradient(135deg, var(--navy), var(--navy-light))',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-button)'
+                }}
+              >
+                Got it, thanks!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 });
