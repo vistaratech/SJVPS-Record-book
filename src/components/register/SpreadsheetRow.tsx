@@ -453,6 +453,7 @@ interface SpreadsheetRowProps {
   defaultColWidth?: number;
   onCellFormatClick?: (entryId: number, colId: string, rect: DOMRect) => void;
   searchTerm?: string;
+  editableColumnIds?: Set<number> | null;
   columnSuggestions?: Record<string, string[]>;
   displayRowNumber?: number;
   scrollToColumn?: (colIdx: number) => void;

@@ -639,7 +639,10 @@ export const Sidebar = memo(function Sidebar({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <img src="/logo-transparent.png" alt="AG Trust" className="sidebar-footer-logo" style={{ margin: 0, width: '28px', height: '28px', objectFit: 'contain' }} />
-            <span className="sidebar-footer-text" style={{ fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>AG Trust · Record Book</span>
+            <span className="sidebar-footer-text" style={{ fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              AG Trust · Record Book
+              <span style={{ fontSize: '10px', fontWeight: 600, color: '#475569', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none' }}>v1.1</span>
+            </span>
           </div>
         </div>
 
