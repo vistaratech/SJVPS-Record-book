@@ -156,7 +156,7 @@ export function useExport({
         if (c.type === 'number' || c.type === 'currency' || c.type === 'formula') {
           const original = val.toString();
           if (c.type === 'currency') {
-            rowData.push(formatCurrency(original).replace('₹', 'Rs. '));
+            rowData.push(formatCurrency(original).replace('₹', ''));
           } else if (original.toLowerCase().includes('x')) {
             rowData.push(original);
           } else {
@@ -203,7 +203,7 @@ export function useExport({
       const prefix = CALC_PREFIX[calcType] || '';
       let displayValue = calcValue;
       if (c.type === 'currency' && (calcType === 'sum' || calcType === 'average' || calcType === 'min' || calcType === 'max')) {
-        displayValue = formatCurrency(calcValue).replace('₹', 'Rs. ');
+        displayValue = formatCurrency(calcValue).replace('₹', '');
       }
       footerRow.push(`${prefix}${displayValue}`);
     });
@@ -322,7 +322,7 @@ export function useExport({
             ? evaluateFormula(c.formula || '', entry, columns)
             : (entry.cells?.[c.id.toString()] || '');
           
-          if (c.type === 'currency') return formatCurrency(cellValue).replace('₹', 'Rs. ');
+          if (c.type === 'currency') return formatCurrency(cellValue).replace('₹', '');
           return cellValue;
         })
       ];
@@ -345,7 +345,7 @@ export function useExport({
       const prefix = CALC_PREFIX[calcType] || '';
       let displayValue = calcValue;
       if (c.type === 'currency' && (calcType === 'sum' || calcType === 'average' || calcType === 'min' || calcType === 'max')) {
-        displayValue = formatCurrency(calcValue).replace('₹', 'Rs. ');
+        displayValue = formatCurrency(calcValue).replace('₹', '');
       }
       footerRow.push(`${prefix}${displayValue}`);
     });
@@ -463,7 +463,7 @@ export function useExport({
             ? evaluateFormula(c.formula || '', entry, columns)
             : (entry.cells?.[c.id.toString()] || '');
           
-          const displayVal = c.type === 'currency' ? formatCurrency(val).replace('₹', 'Rs. ') : val;
+          const displayVal = c.type === 'currency' ? formatCurrency(val).replace('₹', '') : val;
           return [c.name, displayVal];
         })
       ];
@@ -514,7 +514,7 @@ export function useExport({
         if (c.type === 'number' || c.type === 'currency') {
           const original = val.toString();
           if (c.type === 'currency') {
-            return formatCurrency(original).replace('₹', 'Rs. ');
+            return formatCurrency(original).replace('₹', '');
           }
           if (original.toLowerCase().includes('x')) {
             return original;
@@ -565,7 +565,7 @@ export function useExport({
         ? evaluateFormula(c.formula || '', entry, columns)
         : (entry.cells?.[c.id.toString()] || '—');
       
-      const displayVal = c.type === 'currency' ? formatCurrency(val).replace('₹', 'Rs. ') : val;
+      const displayVal = c.type === 'currency' ? formatCurrency(val).replace('₹', '') : val;
       return `${c.name}: ${displayVal}`;
     });
 
