@@ -1,4 +1,4 @@
-import { Search, Filter, Trash2, Hash, FileText, Eye, Undo2, Redo2, Columns } from 'lucide-react';
+import { Search, Filter, Trash2, Hash, FileText, Eye, Columns } from 'lucide-react';
 import { memo } from 'react';
 import type { Column } from '../../lib/api';
 import { FilterModal, type FilterRule } from './modals/FilterModal';
@@ -25,10 +25,6 @@ interface RegisterToolbarProps {
   bulkDeleteMutation: any;
   setRowCountMutation?: any;
   setManageColsMenu: (v: { rect: DOMRect } | null) => void;
-  undo?: () => void;
-  redo?: () => void;
-  undoStackCount?: number;
-  redoStackCount?: number;
   entries: any[];
   canEdit?: boolean;
   allColumnsCount?: number;
@@ -42,7 +38,6 @@ export const RegisterToolbar = memo(function RegisterToolbar({
   hiddenColumns,
   selectedRows, rowCount, columns, bulkDeleteMutation,
   setManageColsMenu,
-  undo, redo, undoStackCount, redoStackCount,
   entries,
   canEdit = true,
   allColumnsCount,
@@ -121,34 +116,6 @@ export const RegisterToolbar = memo(function RegisterToolbar({
       </div>
 
       <div className="pab-divider" />
-
-      {/* Undo */}
-      {canEdit && undo && (
-        <button
-          className={`pab-icon-btn${undoStackCount && undoStackCount > 0 ? '' : ' disabled'}`}
-          title={`Undo${undoStackCount && undoStackCount > 0 ? ` (${undoStackCount})` : ''} — Ctrl+Z`}
-          onClick={undo}
-          disabled={!undoStackCount || undoStackCount === 0}
-          aria-label="Undo"
-        >
-          <Undo2 size={14} />
-          {undoStackCount && undoStackCount > 0 && <span className="pab-badge">{undoStackCount}</span>}
-        </button>
-      )}
-
-      {/* Redo */}
-      {canEdit && redo && (
-        <button
-          className={`pab-icon-btn${redoStackCount && redoStackCount > 0 ? '' : ' disabled'}`}
-          title={`Redo${redoStackCount && redoStackCount > 0 ? ` (${redoStackCount})` : ''} — Ctrl+Y`}
-          onClick={redo}
-          disabled={!redoStackCount || redoStackCount === 0}
-          aria-label="Redo"
-        >
-          <Redo2 size={14} />
-          {redoStackCount && redoStackCount > 0 && <span className="pab-badge">{redoStackCount}</span>}
-        </button>
-      )}
 
       {/* Manage Columns - Eye Icon */}
       <button 
