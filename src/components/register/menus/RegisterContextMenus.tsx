@@ -54,6 +54,8 @@ interface RegisterContextMenusProps {
   manageColsMenu: { rect: DOMRect } | null;
   setManageColsMenu: (v: { rect: DOMRect } | null) => void;
   canEdit?: boolean;
+  selectedColumns?: Set<number>;
+  isPreviewSelectedColumns?: boolean;
 }
 
 export function RegisterContextMenus(props: RegisterContextMenusProps) {
@@ -69,8 +71,13 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
     handleRowDownloadPDF, handleRowDownloadExcel, handleRowShareText,
     calcTypes, updateCalcType,
     manageColsMenu, setManageColsMenu,
-    canEdit = true
+    canEdit = true,
+    selectedColumns,
+    isPreviewSelectedColumns
   } = props;
+
+  const isPreviewActive = !!(isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0);
+  const rowExportDesc = isPreviewActive ? 'Selected columns only' : 'All columns included';
 
   return (
     <>
@@ -290,21 +297,21 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
               <FileText size={16} />
               <div className="context-item-info">
                 <span>Download as PDF</span>
-                <span className="context-item-desc">All columns included</span>
+                <span className="context-item-desc">{rowExportDesc}</span>
               </div>
             </button>
             <button className="context-item" onClick={() => { handleRowDownloadExcel(rowMenuId); setRowMenuId(null); }}>
               <FileSpreadsheet size={16} />
               <div className="context-item-info">
                 <span>Download as Excel</span>
-                <span className="context-item-desc">All columns included</span>
+                <span className="context-item-desc">{rowExportDesc}</span>
               </div>
             </button>
             <button className="context-item" onClick={() => { handleRowShareText(rowMenuId); setRowMenuId(null); }}>
               <Share2 size={16} />
               <div className="context-item-info">
                 <span>Share as Text</span>
-                <span className="context-item-desc">All columns included</span>
+                <span className="context-item-desc">{rowExportDesc}</span>
               </div>
             </button>
 

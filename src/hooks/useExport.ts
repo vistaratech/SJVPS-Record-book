@@ -23,6 +23,8 @@ interface UseExportParams {
   colWidths: Record<number, number>;
   rowDownloadRange?: { start?: number; end?: number } | null;
   downloadableColumnIds?: Set<number> | null;
+  selectedColumns?: Set<number>;
+  isPreviewSelectedColumns?: boolean;
 }
 
 /** Shared helper: compute summary value for a column across entries */
@@ -91,6 +93,8 @@ export function useExport({
   colWidths,
   rowDownloadRange,
   downloadableColumnIds,
+  selectedColumns,
+  isPreviewSelectedColumns,
 }: UseExportParams) {
 
   const handleExportExcel = useCallback(async (options: ExportOptions) => {
@@ -152,7 +156,7 @@ export function useExport({
         if (c.type === 'number' || c.type === 'currency' || c.type === 'formula') {
           const original = val.toString();
           if (c.type === 'currency') {
-            rowData.push(formatCurrency(original));
+            rowData.push(formatCurrency(original).replace('₹', 'Rs. '));
           } else if (original.toLowerCase().includes('x')) {
             rowData.push(original);
           } else {
@@ -197,7 +201,11 @@ export function useExport({
 
       const calcValue = computeCalcValue(calcType, values);
       const prefix = CALC_PREFIX[calcType] || '';
-      footerRow.push(`${prefix}${calcValue}`);
+      let displayValue = calcValue;
+      if (c.type === 'currency' && (calcType === 'sum' || calcType === 'average' || calcType === 'min' || calcType === 'max')) {
+        displayValue = formatCurrency(calcValue).replace('₹', 'Rs. ');
+      }
+      footerRow.push(`${prefix}${displayValue}`);
     });
 
     if (hasAnyCalc) {
@@ -314,7 +322,7 @@ export function useExport({
             ? evaluateFormula(c.formula || '', entry, columns)
             : (entry.cells?.[c.id.toString()] || '');
           
-          if (c.type === 'currency') return formatCurrency(cellValue);
+          if (c.type === 'currency') return formatCurrency(cellValue).replace('₹', 'Rs. ');
           return cellValue;
         })
       ];
@@ -335,7 +343,11 @@ export function useExport({
 
       const calcValue = computeCalcValue(calcType, values);
       const prefix = CALC_PREFIX[calcType] || '';
-      footerRow.push(`${prefix}${calcValue}`);
+      let displayValue = calcValue;
+      if (c.type === 'currency' && (calcType === 'sum' || calcType === 'average' || calcType === 'min' || calcType === 'max')) {
+        displayValue = formatCurrency(calcValue).replace('₹', 'Rs. ');
+      }
+      footerRow.push(`${prefix}${displayValue}`);
     });
 
     try {
@@ -420,11 +432,13 @@ export function useExport({
     if (!register) return;
     const entry = localEntries.find(e => e.id === entryId);
     if (!entry) return;
-    const visibleCols = columns.filter(col => 
-      !hiddenColumns.has(col.id) && 
-      col.type !== 'image' &&
-      (!downloadableColumnIds || downloadableColumnIds.has(col.id))
-    );
+    const visibleCols = columns.filter(col => {
+      if (hiddenColumns.has(col.id)) return false;
+      if (col.type === 'image') return false;
+      if (downloadableColumnIds && !downloadableColumnIds.has(col.id)) return false;
+      if (isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0 && !selectedColumns.has(col.id)) return false;
+      return true;
+    });
     const rowIdx = entry.rowNumber;
 
     const { default: jsPDF } = await import('jspdf');
@@ -449,7 +463,7 @@ export function useExport({
             ? evaluateFormula(c.formula || '', entry, columns)
             : (entry.cells?.[c.id.toString()] || '');
           
-          const displayVal = c.type === 'currency' ? formatCurrency(val) : val;
+          const displayVal = c.type === 'currency' ? formatCurrency(val).replace('₹', 'Rs. ') : val;
           return [c.name, displayVal];
         })
       ];
@@ -472,18 +486,20 @@ export function useExport({
       console.error('Row PDF Error:', err);
       alert('Failed to export row as PDF.');
     }
-  }, [register, localEntries, columns, hiddenColumns, downloadableColumnIds]);
+  }, [register, localEntries, columns, hiddenColumns, downloadableColumnIds, selectedColumns, isPreviewSelectedColumns]);
 
 
   const handleRowDownloadExcel = useCallback(async (entryId: number) => {
     if (!register) return;
     const entry = localEntries.find(e => e.id === entryId);
     if (!entry) return;
-    const visibleCols = columns.filter(col => 
-      !hiddenColumns.has(col.id) && 
-      col.type !== 'image' &&
-      (!downloadableColumnIds || downloadableColumnIds.has(col.id))
-    );
+    const visibleCols = columns.filter(col => {
+      if (hiddenColumns.has(col.id)) return false;
+      if (col.type === 'image') return false;
+      if (downloadableColumnIds && !downloadableColumnIds.has(col.id)) return false;
+      if (isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0 && !selectedColumns.has(col.id)) return false;
+      return true;
+    });
     const rowIdx = entry.rowNumber;
 
     const XLSX = await import('xlsx');
@@ -498,7 +514,7 @@ export function useExport({
         if (c.type === 'number' || c.type === 'currency') {
           const original = val.toString();
           if (c.type === 'currency') {
-            return formatCurrency(original);
+            return formatCurrency(original).replace('₹', 'Rs. ');
           }
           if (original.toLowerCase().includes('x')) {
             return original;
@@ -529,25 +545,27 @@ export function useExport({
       console.error('Row Excel Error:', err);
       alert('Failed to export row as Excel.');
     }
-  }, [register, localEntries, columns, hiddenColumns, downloadableColumnIds]);
+  }, [register, localEntries, columns, hiddenColumns, downloadableColumnIds, selectedColumns, isPreviewSelectedColumns]);
 
 
   const handleRowShareText = useCallback((entryId: number) => {
     if (!register) return;
     const entry = localEntries.find(e => e.id === entryId);
     if (!entry) return;
-    const visibleCols = columns.filter(col => 
-      !hiddenColumns.has(col.id) && 
-      col.type !== 'image' &&
-      (!downloadableColumnIds || downloadableColumnIds.has(col.id))
-    );
+    const visibleCols = columns.filter(col => {
+      if (hiddenColumns.has(col.id)) return false;
+      if (col.type === 'image') return false;
+      if (downloadableColumnIds && !downloadableColumnIds.has(col.id)) return false;
+      if (isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0 && !selectedColumns.has(col.id)) return false;
+      return true;
+    });
 
     const lines = visibleCols.map(c => {
       const val = c.type === 'formula'
         ? evaluateFormula(c.formula || '', entry, columns)
         : (entry.cells?.[c.id.toString()] || '—');
       
-      const displayVal = c.type === 'currency' ? formatCurrency(val) : val;
+      const displayVal = c.type === 'currency' ? formatCurrency(val).replace('₹', 'Rs. ') : val;
       return `${c.name}: ${displayVal}`;
     });
 
@@ -564,7 +582,7 @@ export function useExport({
       document.body.removeChild(ta);
       alert('Row copied to clipboard!');
     });
-  }, [register, localEntries, columns, hiddenColumns, downloadableColumnIds]);
+  }, [register, localEntries, columns, hiddenColumns, downloadableColumnIds, selectedColumns, isPreviewSelectedColumns]);
 
 
   return {

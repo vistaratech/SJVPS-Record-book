@@ -2680,6 +2680,8 @@ export default function RegisterPage() {
     colWidths,
     rowDownloadRange,
     downloadableColumnIds,
+    selectedColumns,
+    isPreviewSelectedColumns,
   });
 
 
@@ -3382,11 +3384,19 @@ export default function RegisterPage() {
             <button
               className="selection-toolbar-btn excel"
               onClick={() => {
-                const allColIds = new Set(columns.map(c => c.id));
+                const targetColIds = columns
+                  .filter(c => {
+                    if (hiddenColumns.has(c.id)) return false;
+                    if (c.type === 'image') return false;
+                    if (downloadableColumnIds && !downloadableColumnIds.has(c.id)) return false;
+                    if (isPreviewSelectedColumns && selectedColumns.size > 0 && !selectedColumns.has(c.id)) return false;
+                    return true;
+                  })
+                  .map(c => c.id);
                 handleExportExcel({
                   format: 'excel',
                   exportRows: 'selected',
-                  selectedColumnIds: allColIds,
+                  selectedColumnIds: new Set(targetColIds),
                   includeHeading: true,
                   includeDateTime: false,
                 });
@@ -3397,11 +3407,19 @@ export default function RegisterPage() {
             <button
               className="selection-toolbar-btn pdf"
               onClick={() => {
-                const allColIds = new Set(columns.map(c => c.id));
+                const targetColIds = columns
+                  .filter(c => {
+                    if (hiddenColumns.has(c.id)) return false;
+                    if (c.type === 'image') return false;
+                    if (downloadableColumnIds && !downloadableColumnIds.has(c.id)) return false;
+                    if (isPreviewSelectedColumns && selectedColumns.size > 0 && !selectedColumns.has(c.id)) return false;
+                    return true;
+                  })
+                  .map(c => c.id);
                 handleExportPDF({
                   format: 'pdf',
                   exportRows: 'selected',
-                  selectedColumnIds: allColIds,
+                  selectedColumnIds: new Set(targetColIds),
                   includeHeading: true,
                   includeDateTime: false,
                 });
@@ -3457,6 +3475,8 @@ export default function RegisterPage() {
         manageColsMenu={manageColsMenu}
         setManageColsMenu={setManageColsMenu}
         canEdit={_canEditAny}
+        selectedColumns={selectedColumns}
+        isPreviewSelectedColumns={isPreviewSelectedColumns}
       />
 
       {/* ── Modals ── */}
