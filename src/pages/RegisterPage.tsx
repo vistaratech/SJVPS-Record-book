@@ -423,8 +423,24 @@ export default function RegisterPage() {
   const deferredActiveFilters = useDeferredValue(activeFilters);
 
   // Column Selection and Preview Mode
-  const [selectedColumns, setSelectedColumns] = useState<Set<number>>(() => new Set());
-  const [isPreviewSelectedColumns, setIsPreviewSelectedColumns] = useState(false);
+  const [selectedColumns, setSelectedColumns] = useState<Set<number>>(() => {
+    try {
+      const savedCols = localStorage.getItem(`rb_selected_cols_${registerId}`);
+      if (savedCols) {
+        return new Set(JSON.parse(savedCols));
+      }
+    } catch (e) {}
+    return new Set();
+  });
+  const [isPreviewSelectedColumns, setIsPreviewSelectedColumns] = useState(() => {
+    try {
+      const savedPreview = localStorage.getItem(`rb_preview_selected_${registerId}`);
+      if (savedPreview) {
+        return savedPreview === 'true';
+      }
+    } catch (e) {}
+    return false;
+  });
 
   // Date picker for cell — refs to avoid re-render on open
   const [dateDay, setDateDay] = useState('');
@@ -880,8 +896,23 @@ export default function RegisterPage() {
 
   if (Number(registerId) !== lastSyncId.current || (register && register !== lastSyncData.current)) {
     if (Number(registerId) !== lastSyncId.current) {
-      setSelectedColumns(new Set());
-      setIsPreviewSelectedColumns(false);
+      let loadedSelected: Set<number> = new Set();
+      try {
+        const savedCols = localStorage.getItem(`rb_selected_cols_${registerId}`);
+        if (savedCols) {
+          loadedSelected = new Set(JSON.parse(savedCols));
+        }
+      } catch (e) {}
+      setSelectedColumns(loadedSelected);
+
+      let loadedPreview = false;
+      try {
+        const savedPreview = localStorage.getItem(`rb_preview_selected_${registerId}`);
+        if (savedPreview) {
+          loadedPreview = savedPreview === 'true';
+        }
+      } catch (e) {}
+      setIsPreviewSelectedColumns(loadedPreview);
     }
     lastSyncId.current = Number(registerId);
     lastSyncData.current = register;
@@ -928,6 +959,18 @@ export default function RegisterPage() {
       setIsPreviewSelectedColumns(false);
     }
   }, [selectedColumns.size]);
+
+  useEffect(() => {
+    if (registerId) {
+      localStorage.setItem(`rb_selected_cols_${registerId}`, JSON.stringify(Array.from(selectedColumns)));
+    }
+  }, [selectedColumns, registerId]);
+
+  useEffect(() => {
+    if (registerId) {
+      localStorage.setItem(`rb_preview_selected_${registerId}`, isPreviewSelectedColumns ? 'true' : 'false');
+    }
+  }, [isPreviewSelectedColumns, registerId]);
 
   const handleCalcCellClick = (e: React.MouseEvent, colId: number) => {
     e.stopPropagation();
