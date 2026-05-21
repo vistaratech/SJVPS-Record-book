@@ -79,6 +79,7 @@ export const Sidebar = memo(function Sidebar({
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
+  const [versionTab, setVersionTab] = useState<'1.3' | '1.2'>('1.3');
 
   const notifications = useMemo(() => {
     if (!register?.entries || register.entries.length < 2) return [];
@@ -646,6 +647,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
+                  setVersionTab('1.3');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -654,9 +656,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.2"
+                title="View what's new in v1.3"
               >
-                v1.2
+                v1.3
               </span>
             </span>
           </div>
@@ -689,7 +691,7 @@ export const Sidebar = memo(function Sidebar({
                 <User size={16} /> <span style={{ fontSize: '14px', fontWeight: 500 }}>Profile</span>
               </button>
               <button className="footer-menu-item" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '6px', color: 'inherit', background: 'transparent', border: 'none', width: '100%', cursor: 'pointer', textAlign: 'left', font: 'inherit' }} onClick={() => { setIsFooterMenuOpen(false); navigate('/history'); }}>
-                <Activity size={16} /> <span style={{ fontSize: '14px', fontWeight: 500 }}>Activity Report</span>
+                <Activity size={16} /> <span style={{ fontSize: '14px', fontWeight: 500 }}>History</span>
               </button>
               <button className="footer-menu-item" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '6px', color: 'inherit', background: 'transparent', border: 'none', width: '100%', cursor: 'pointer', textAlign: 'left', font: 'inherit' }} onClick={() => { setIsFooterMenuOpen(false); navigate('/recycle-bin'); }}>
                 <Trash2 size={16} /> <span style={{ fontSize: '14px', fontWeight: 500 }}>Recycle Bin</span>
@@ -813,14 +815,14 @@ export const Sidebar = memo(function Sidebar({
       {showVersionModal && (
         <div className="modal-overlay" onClick={() => setShowVersionModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', borderRadius: '16px', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ background: '#eff6ff', color: '#3b82f6', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Sparkles size={20} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>What's New in v1.2</h3>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>Released May 20, 2026</span>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>What's New</h3>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>Release updates & improvements</span>
                 </div>
               </div>
               <button 
@@ -832,60 +834,147 @@ export const Sidebar = memo(function Sidebar({
                 <X size={18} />
               </button>
             </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Feature 1 */}
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
-                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
-                  <CheckCircle2 size={16} />
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Row-Level Detail Permissions</h4>
-                  <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
-                    The view, edit, and download permission checks are now fully enforced at the individual record detail (row modal) level, matching the main sheet rules.
-                  </p>
-                </div>
-              </div>
 
-              {/* Feature 2 */}
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
-                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
-                  <CheckCircle2 size={16} />
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Dynamic Read-Only Input Control</h4>
-                  <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
-                    Input elements (dropdowns, checkboxes, dates, images, and text inputs) inside the record details modal are dynamically made read-only or disabled when edits are restricted.
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature 3 */}
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
-                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
-                  <CheckCircle2 size={16} />
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Conditional Button Visibility</h4>
-                  <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
-                    The "Save Changes" button and download buttons (PDF/Excel) inside the modal are dynamically shown or hidden based on row-level permissions.
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature 4 */}
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
-                <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
-                  <CheckCircle2 size={16} />
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Formula & Settings Protection</h4>
-                  <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
-                    Access to column configuration, column settings, and editing formulas is restricted strictly to sheet administrators to ensure data integrity.
-                  </p>
-                </div>
-              </div>
+            {/* Version Tabs */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+              <button
+                onClick={() => setVersionTab('1.3')}
+                style={{
+                  flex: 1,
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.3' ? 'white' : 'transparent',
+                  color: versionTab === '1.3' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.3' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                v1.3 (Current)
+              </button>
+              <button
+                onClick={() => setVersionTab('1.2')}
+                style={{
+                  flex: 1,
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.2' ? 'white' : 'transparent',
+                  color: versionTab === '1.2' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.2' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                v1.2 (Previous)
+              </button>
             </div>
+            
+            {versionTab === '1.3' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 21, 2026</span>
+                
+                {/* Feature 1 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Column Selection & Preview Mode</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Select columns directly from the column headers via checkboxes, toggle preview mode in the toolbar to focus on selected columns, and limit PDF/Excel exports to the selected columns.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Clear Date Option & Date Protection</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Easily clear date fields using a new "Clear" button in the custom calendar modal, and prevent accidental deletion or corruption of date values from keyboard backspace/delete inputs.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 3 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Advanced Audit Logging & History Filtering</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Logs now store detailed user credentials (userId and userEmail). The renamed "History" page allows standard users to only see their own activities, while administrators retain full visibility.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 20, 2026</span>
+                
+                {/* Feature 1 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Row-Level Detail Permissions</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      The view, edit, and download permission checks are now fully enforced at the individual record detail (row modal) level, matching the main sheet rules.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Dynamic Read-Only Input Control</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Input elements (dropdowns, checkboxes, dates, images, and text inputs) inside the record details modal are dynamically made read-only or disabled when edits are restricted.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 3 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Conditional Button Visibility</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      The "Save Changes" button and download buttons (PDF/Excel) inside the modal are dynamically shown or hidden based on row-level permissions.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 4 */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Formula & Settings Protection</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Access to column configuration, column settings, and editing formulas is restricted strictly to sheet administrators to ensure data integrity.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
               <button 

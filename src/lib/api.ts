@@ -179,6 +179,8 @@ export interface HistoryEntry {
   details: string;
   timestamp: string;
   userName?: string;
+  userId?: string | number;
+  userEmail?: string;
   registerName?: string;
   registerId?: number;
   entryId?: number;
@@ -2117,6 +2119,8 @@ export async function logAction(
       details,
       timestamp: new Date().toISOString(),
       userName: savedUser?.name || 'User',
+      userId: savedUser?.id || '',
+      userEmail: savedUser?.email || '',
       ...meta,
     };
     await setDoc(doc(db, 'history', entry.id.toString()), entry);

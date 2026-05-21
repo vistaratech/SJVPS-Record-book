@@ -422,6 +422,10 @@ export default function RegisterPage() {
   const deferredSearch = useDeferredValue(search);
   const deferredActiveFilters = useDeferredValue(activeFilters);
 
+  // Column Selection and Preview Mode
+  const [selectedColumns, setSelectedColumns] = useState<Set<number>>(() => new Set());
+  const [isPreviewSelectedColumns, setIsPreviewSelectedColumns] = useState(false);
+
   // Date picker for cell — refs to avoid re-render on open
   const [dateDay, setDateDay] = useState('');
   const [dateMonth, setDateMonth] = useState('');
@@ -875,6 +879,10 @@ export default function RegisterPage() {
   const dataToSync = register || (Number(registerId) !== lastSyncId.current ? cachedRegister : null);
 
   if (Number(registerId) !== lastSyncId.current || (register && register !== lastSyncData.current)) {
+    if (Number(registerId) !== lastSyncId.current) {
+      setSelectedColumns(new Set());
+      setIsPreviewSelectedColumns(false);
+    }
     lastSyncId.current = Number(registerId);
     lastSyncData.current = register;
 
@@ -914,6 +922,12 @@ export default function RegisterPage() {
   useEffect(() => {
     localEntriesRef.current = localEntries;
   }, [localEntries]);
+
+  useEffect(() => {
+    if (selectedColumns.size === 0) {
+      setIsPreviewSelectedColumns(false);
+    }
+  }, [selectedColumns.size]);
 
   const handleCalcCellClick = (e: React.MouseEvent, colId: number) => {
     e.stopPropagation();
@@ -2562,6 +2576,17 @@ export default function RegisterPage() {
   }, []);
 
   const handleDateSelect = useCallback((d?: string, m?: string, y?: string) => {
+    if (d === '' && m === '' && y === '') {
+      setDateDay('');
+      setDateMonth('');
+      setDateYear('');
+      if (dateEntryId != null && dateColumnId != null) {
+        handleCellChange(dateEntryId, dateColumnId.toString(), '');
+      }
+      setDateModal(false);
+      return;
+    }
+
     // Basic day-month-year validation already happened in OtherModals or is passed in
     const finalD = d || dateDay;
     const finalM = m || dateMonth;
@@ -2688,11 +2713,14 @@ export default function RegisterPage() {
   }, [localEntries, handleCellChange]);
 
   const visibleColumns = useMemo(() => {
-    const visible = columns.filter((col) => !hiddenColumns.has(col.id));
+    let visible = columns.filter((col) => !hiddenColumns.has(col.id));
+    if (isPreviewSelectedColumns && selectedColumns.size > 0) {
+      visible = visible.filter((col) => selectedColumns.has(col.id));
+    }
     const frozen = visible.filter((col) => frozenColumns.has(col.id));
     const unfrozen = visible.filter((col) => !frozenColumns.has(col.id));
     return [...frozen, ...unfrozen];
-  }, [columns, hiddenColumns, frozenColumns]);
+  }, [columns, hiddenColumns, frozenColumns, isPreviewSelectedColumns, selectedColumns]);
   // Keep refs in sync for smooth drag handler closures
   visibleColumnsRef.current = visibleColumns;
   columnsRef.current = columns;
@@ -2996,6 +3024,9 @@ export default function RegisterPage() {
             entries={localEntries}
             canEdit={_canEditAny}
             allColumnsCount={register?.columns?.length || 0}
+            selectedColumns={selectedColumns}
+            isPreviewSelectedColumns={isPreviewSelectedColumns}
+            setIsPreviewSelectedColumns={setIsPreviewSelectedColumns}
           />
           
           <RegisterHeader 
@@ -3113,6 +3144,23 @@ export default function RegisterPage() {
                       }}
                       style={{ cursor: 'pointer' }}
                     >
+                      <input
+                        type="checkbox"
+                        className="col-header-select-checkbox"
+                        checked={selectedColumns.has(col.id)}
+                        onChange={(e) => {
+                          const next = new Set(selectedColumns);
+                          if (e.target.checked) {
+                            next.add(col.id);
+                          } else {
+                            next.delete(col.id);
+                          }
+                          setSelectedColumns(next);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        title="Select column"
+                      />
                       {IconComponent}
                       <span className="col-header-name">
                         {col.name}
@@ -3394,9 +3442,14 @@ export default function RegisterPage() {
 
       {showExportModal && (() => {
         // Filter columns by download restrictions
-        const exportableColumns = downloadableColumnIds
+        let exportableColumns = downloadableColumnIds
           ? columns.filter(c => downloadableColumnIds.has(c.id))
           : columns;
+
+        if (isPreviewSelectedColumns && selectedColumns.size > 0) {
+          exportableColumns = exportableColumns.filter(c => selectedColumns.has(c.id));
+        }
+
         // Calculate permitted row count for download
         let exportRowCount = displayEntries.length;
         if (rowDownloadRange) {
@@ -3731,6 +3784,10 @@ export default function RegisterPage() {
                                 openDatePicker(detailViewEntry.id, col.id, val, rect as DOMRect);
                               } : undefined}
                               onKeyDown={(e) => {
+                                if (e.key === 'Backspace' || e.key === 'Delete') {
+                                  e.preventDefault();
+                                  return;
+                                }
                                 if (e.key === 'Enter' && isFieldEditable) {
                                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                   openDatePicker(detailViewEntry.id, col.id, val, rect as DOMRect);

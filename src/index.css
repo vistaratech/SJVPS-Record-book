@@ -6621,6 +6621,22 @@ body.modal-open {
   color: #1e293b;
 }
 
+.calendar-clear-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.calendar-clear-btn:hover {
+  background: #fef2f2;
+}
+
 /* â”€â”€ Calculation Cell Interactive â”€â”€ */
 .calc-cell-content {
   display: inline-flex;
@@ -8846,4 +8862,21 @@ tr.row-selected .row-select-checkbox {
 .spreadsheet.readonly-access .view-details-btn {
   pointer-events: auto;
   cursor: pointer !important;
+}
+
+/* Column Header Selection Checkboxes */
+.col-header-select-checkbox {
+  opacity: 0;
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  accent-color: var(--primary, #3b82f6);
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Make visible on header hover or when checked */
+.col-header-cell:hover .col-header-select-checkbox,
+.col-header-select-checkbox:checked {
+  opacity: 1;
 }

@@ -3,11 +3,15 @@ import { Activity, ArrowLeft, Calendar, FileText, Link as LinkIcon, Pencil, Plus
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listBusinesses, listHistory, type HistoryEntry } from '../lib/api';
+import { useAuth } from '../lib/auth';
 
 export default function HistoryPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: businesses } = useQuery({ queryKey: ['businesses'], queryFn: listBusinesses });
   const businessId = businesses?.[0]?.id;
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   const { data: history, isLoading, isError, error } = useQuery({
     queryKey: ['history', businessId],
@@ -18,6 +22,23 @@ export default function HistoryPage() {
     retry: 1,
   });
 
+  const filteredHistory = React.useMemo(() => {
+    if (!history) return [];
+    if (isAdmin) return history;
+
+    // Filter history for current user
+    return history.filter(entry => {
+      // Match by userId or userEmail first
+      if (entry.userId && user?.id && String(entry.userId) === String(user.id)) return true;
+      if (entry.userEmail && user?.email && entry.userEmail.toLowerCase() === user.email.toLowerCase()) return true;
+      
+      // Fallback to userName matching if neither ID nor Email is present in log entry (for older logs)
+      if (!entry.userId && !entry.userEmail && entry.userName && user?.name && entry.userName.toLowerCase() === user.name.toLowerCase()) return true;
+      
+      return false;
+    });
+  }, [history, isAdmin, user]);
+
   return (
     <div className="history-page">
       <div className="history-header">
@@ -25,8 +46,12 @@ export default function HistoryPage() {
           <ArrowLeft size={20} />
         </button>
         <div className="header-title-group">
-          <h1 className="header-title">Activity Report</h1>
-          <p className="header-subtitle">All changes and actions made across your registers</p>
+          <h1 className="header-title">History</h1>
+          <p className="header-subtitle">
+            {isAdmin 
+              ? 'All changes and actions made across registers by all users' 
+              : 'Your personal changes and actions made across registers'}
+          </p>
         </div>
       </div>
 
@@ -34,25 +59,25 @@ export default function HistoryPage() {
         {isLoading ? (
           <div className="loading-state">
             <Activity size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
-            <p>Loading activity...</p>
+            <p>Loading history...</p>
           </div>
         ) : isError ? (
           <div className="empty-state" style={{ color: '#ef4444' }}>
             <Activity size={48} className="empty-icon" />
-            <p style={{ fontWeight: 600 }}>Failed to load activity</p>
+            <p style={{ fontWeight: 600 }}>Failed to load history</p>
             <p style={{ fontSize: 13, marginTop: 4, color: '#64748b' }}>
               {(error as any)?.message || 'An unknown error occurred. Check your internet connection.'}
             </p>
           </div>
-        ) : !history || history.length === 0 ? (
+        ) : !filteredHistory || filteredHistory.length === 0 ? (
           <div className="empty-state">
             <Activity size={48} className="empty-icon" />
-            <p>No activity recorded yet.</p>
+            <p>No history recorded yet.</p>
             <p style={{ fontSize: 13, marginTop: 4 }}>Actions like adding rows, creating registers, and editing data will appear here.</p>
           </div>
         ) : (
           <div className="history-timeline">
-            {history.map((entry: HistoryEntry) => {
+            {filteredHistory.map((entry: HistoryEntry) => {
               const { icon, color, bg } = getActionStyle(entry.action);
               return (
                 <div key={entry.id} className="history-card">

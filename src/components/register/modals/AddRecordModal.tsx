@@ -317,6 +317,11 @@ export function AddRecordModal({
                         <input type="text" id={`ar-col-${col.id}`} className={inputCls}
                           value={val} onChange={onChange} placeholder="DD-MM-YYYY"
                           ref={isFirst ? (el) => { firstInputRef.current = el; } : undefined}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Backspace' || e.key === 'Delete') {
+                              e.preventDefault();
+                            }
+                          }}
                         />
                       ) : col.type === 'number' || col.type === 'currency' || col.type === 'rating' ? (
                         <input type="number" id={`ar-col-${col.id}`} className={inputCls}

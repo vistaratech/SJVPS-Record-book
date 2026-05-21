@@ -241,6 +241,11 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
   }, [val, entry, col.id, handleCellChange, readOnly]);
 
   const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (col.type === 'date' && (e.key === 'Backspace' || e.key === 'Delete')) {
+      e.preventDefault();
+      return;
+    }
+
     if (e.key === 'Escape') {
       setFocused(false);
       setHighlightIdx(-1);

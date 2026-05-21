@@ -1,4 +1,4 @@
-import { Search, Filter, Trash2, Hash, FileText, Eye, Undo2, Redo2 } from 'lucide-react';
+import { Search, Filter, Trash2, Hash, FileText, Eye, Undo2, Redo2, Columns } from 'lucide-react';
 import { memo } from 'react';
 import type { Column } from '../../lib/api';
 import { FilterModal, type FilterRule } from './modals/FilterModal';
@@ -32,6 +32,9 @@ interface RegisterToolbarProps {
   entries: any[];
   canEdit?: boolean;
   allColumnsCount?: number;
+  selectedColumns: Set<number>;
+  isPreviewSelectedColumns: boolean;
+  setIsPreviewSelectedColumns: (v: boolean) => void;
 }
 
 export const RegisterToolbar = memo(function RegisterToolbar({
@@ -42,7 +45,10 @@ export const RegisterToolbar = memo(function RegisterToolbar({
   undo, redo, undoStackCount, redoStackCount,
   entries,
   canEdit = true,
-  allColumnsCount
+  allColumnsCount,
+  selectedColumns,
+  isPreviewSelectedColumns,
+  setIsPreviewSelectedColumns
 }: RegisterToolbarProps) {
 
   return (
@@ -74,6 +80,22 @@ export const RegisterToolbar = memo(function RegisterToolbar({
           <button className="pab-search-clear" onClick={() => setSearch('')} title="Clear search">×</button>
         )}
       </div>
+
+      {/* Preview Selected Columns Toggle */}
+      {selectedColumns.size > 0 && (
+        <button
+          className={`pab-icon-btn${isPreviewSelectedColumns ? ' active' : ''}`}
+          title={isPreviewSelectedColumns ? "Show all columns" : `Show only ${selectedColumns.size} selected columns`}
+          onClick={() => setIsPreviewSelectedColumns(!isPreviewSelectedColumns)}
+          aria-label="Preview Selected Columns"
+          style={{ marginRight: '8px' }}
+        >
+          <Columns size={14} />
+          <span className="pab-badge" style={{ backgroundColor: 'var(--primary)', color: 'white' }}>
+            {selectedColumns.size}
+          </span>
+        </button>
+      )}
 
       {/* Filter */}
       <div className="pab-filter-wrapper">

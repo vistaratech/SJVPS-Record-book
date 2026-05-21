@@ -311,7 +311,17 @@ export function OtherModals(props: OtherModalsProps) {
                 <CalendarIcon size={12} style={{ marginRight: 6 }} />
                 Today
               </button>
-              <button className="calendar-cancel-btn" onClick={() => setDateModal(false)}>Cancel</button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button 
+                  className="calendar-clear-btn" 
+                  onClick={() => {
+                    handleDateSelect('', '', '');
+                  }}
+                >
+                  Clear
+                </button>
+                <button className="calendar-cancel-btn" onClick={() => setDateModal(false)}>Cancel</button>
+              </div>
             </div>
           </div>
         </div>
