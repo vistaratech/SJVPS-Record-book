@@ -444,6 +444,33 @@ async function saveRegDocImmediate(reg: RegisterDetail): Promise<void> {
   await Promise.all([...deletePromises, ...writePromises]);
 }
 
+/**
+ * Lightweight save helper for appends: updates the main document and ONLY writes
+ * the affected last chunk to Firestore. Bypasses listing existing chunks.
+ */
+async function saveAddedEntryOnly(reg: RegisterDetail, newEntryIndex: number): Promise<void> {
+  // Update cache immediately so subsequent mutations see this state
+  firestoreRegisterCache.set(reg.id, reg);
+
+  // Separate entries from the main document
+  const entries = reg.entries || [];
+  const mainDoc: any = JSON.parse(JSON.stringify(reg));
+  // Remove entries from the main document — they go into subcollection chunks
+  mainDoc.entries = [];
+  mainDoc.entryCount = entries.length;
+
+  // Write the main document (metadata + columns + pages, NO entries)
+  await setDoc(regDoc(reg.id), mainDoc);
+
+  // Write ONLY the affected last chunk
+  const chunkIndex = Math.floor(newEntryIndex / ENTRIES_PER_CHUNK);
+  const chunkStart = chunkIndex * ENTRIES_PER_CHUNK;
+  const chunkEntries = entries.slice(chunkStart, chunkStart + ENTRIES_PER_CHUNK);
+  const cleaned = JSON.parse(JSON.stringify({ entries: chunkEntries }));
+  await setDoc(chunkDoc(reg.id, chunkIndex), cleaned);
+}
+
+
 async function flushPendingWrite(registerId: number): Promise<void> {
   // Now redundant with serial queueing, but kept for interface compatibility
   const queue = registerMutationQueues.get(registerId);
@@ -1669,7 +1696,7 @@ export async function addEntry(registerId: number, cells: Record<string, string>
     renumberRows(reg); // Ensure sequence is correct
     reg.entryCount = reg.entries.length;
     reg.updatedAt = new Date().toISOString();
-    await saveRegDocImmediate(reg);
+    await saveAddedEntryOnly(reg, reg.entries.length - 1);
     const preview = Object.entries(cells).slice(0, 3).map(([id, val]) => {
       const c = reg.columns.find(col => col.id.toString() === id);
       return `${c?.name || id}: ${val}`;
@@ -2035,7 +2062,7 @@ export async function duplicateEntry(registerId: number, entryId: number): Promi
     reg.entries.push(duplicate);
     renumberRows(reg);
     reg.entryCount = reg.entries.length;
-    await saveRegDocImmediate(reg);
+    await saveAddedEntryOnly(reg, reg.entries.length - 1);
     return duplicate;
   });
 }
