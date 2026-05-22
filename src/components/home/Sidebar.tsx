@@ -79,7 +79,7 @@ export const Sidebar = memo(function Sidebar({
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
-  const [versionTab, setVersionTab] = useState<'1.3' | '1.2'>('1.3');
+  const [versionTab, setVersionTab] = useState<'1.3.1' | '1.2'>('1.3.1');
 
   const notifications = useMemo(() => {
     if (!register?.entries || register.entries.length < 2) return [];
@@ -647,7 +647,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.3');
+                  setVersionTab('1.3.1');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -656,9 +656,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.3"
+                title="View what's new in v1.3.1"
               >
-                v1.3
+                v1.3.1
               </span>
             </span>
           </div>
@@ -838,7 +838,7 @@ export const Sidebar = memo(function Sidebar({
             {/* Version Tabs */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
               <button
-                onClick={() => setVersionTab('1.3')}
+                onClick={() => setVersionTab('1.3.1')}
                 style={{
                   flex: 1,
                   padding: '6px 12px',
@@ -848,12 +848,12 @@ export const Sidebar = memo(function Sidebar({
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  background: versionTab === '1.3' ? 'white' : 'transparent',
-                  color: versionTab === '1.3' ? '#0f172a' : '#64748b',
-                  boxShadow: versionTab === '1.3' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                  background: versionTab === '1.3.1' ? 'white' : 'transparent',
+                  color: versionTab === '1.3.1' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.3.1' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                 }}
               >
-                v1.3 (Current)
+                v1.3.1 (Current)
               </button>
               <button
                 onClick={() => setVersionTab('1.2')}
@@ -875,10 +875,23 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.3' ? (
+            {versionTab === '1.3.1' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 21, 2026</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 22, 2026</span>
                 
+                {/* Feature 0: Rapid Saving & Ctrl+S Hotkey */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Rapid Data Protection & Ctrl+S Save Hotkey</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Implemented ultra-fast local state caching and single-chunk Firestore database updates to prevent data loss during rapid data entry. Press <strong>Ctrl + S</strong> at any time to immediately save all pending cell changes.
+                    </p>
+                  </div>
+                </div>
+
                 {/* Feature 1 */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
                   <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>

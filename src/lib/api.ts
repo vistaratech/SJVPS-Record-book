@@ -152,6 +152,7 @@ export interface RegisterDetail extends RegisterSummary {
   columns: Column[]; entries: Entry[]; pages: Page[];
   shareLink?: string; sharedWith?: SharedUser[];
   deletedItems?: DeletedItem[];
+  migrationCompleted?: boolean;
 }
 
 export interface SharedUser {
@@ -200,15 +201,15 @@ export interface SearchResult {
 export async function searchAllRegisters(businessId: number, searchTerm: string): Promise<SearchResult[]> {
   const q = searchTerm.toLowerCase();
   if (!q) return [];
-  
+
   const summaries = await listRegisters(businessId);
   const results: SearchResult[] = [];
-  
+
   const allRegs = await Promise.all(summaries.map(s => getRegister(s.id).catch(() => null)));
-  
+
   for (const reg of allRegs) {
     if (!reg || reg.deletedAt) continue;
-    
+
     // Check if register name matches
     if (reg.name.toLowerCase().includes(q)) {
       results.push({
@@ -220,7 +221,7 @@ export async function searchAllRegisters(businessId: number, searchTerm: string)
         matchedText: reg.name,
       });
     }
-    
+
     // Check entries
     for (const entry of reg.entries) {
       for (const colId in entry.cells) {
@@ -241,7 +242,7 @@ export async function searchAllRegisters(businessId: number, searchTerm: string)
       }
     }
   }
-  
+
   return results;
 }
 
@@ -322,7 +323,7 @@ function populateAutoIncrement(reg: RegisterDetail, columnId: number) {
 function updateColumnSymbol(col: Column, newType: string) {
   // Remove existing symbols or bracketed currency indicators (e.g. "Price (Rs)" -> "Price")
   let cleanName = col.name.replace(/\s*\([₹$]\)$|\s*\(Rs\)$|\s*\(₹\)$/i, '').trim();
-  
+
   if (newType === 'currency') {
     col.name = `${cleanName} (₹)`;
   } else {
@@ -342,10 +343,18 @@ function renumberRows(reg: RegisterDetail) {
 }
 
 async function getRegDoc(registerId: number): Promise<RegisterDetail> {
+  // Use in-memory cache if available — ensures rapid sequential mutations
+  // see each other's writes without waiting for Firestore server propagation.
+  // The cache is maintained by saveRegDocImmediate() after every write.
+  const cached = firestoreRegisterCache.get(registerId);
+  if (cached) {
+    return structuredClone(cached);
+  }
+
   const snap = await getDoc(regDoc(registerId));
   if (!snap.exists()) throw new Error('Register not found');
   const data = snap.data() as RegisterDetail;
-  
+
   // Ensure basic arrays exist so mutations don't crash
   if (!data.columns) data.columns = [];
   data.columns.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -359,7 +368,7 @@ async function getRegDoc(registerId: number): Promise<RegisterDetail> {
     // Use getDocsFromServer to always bypass Firestore SDK cache and get fresh chunk data
     const chunkSnap = await getDocsFromServer(chunksCol(registerId));
     const allEntries: Entry[] = [];
-    
+
     // Parse, sort numerically, and ensure unique chunk IDs to guarantee stable ordering
     const sortedDocs = [...chunkSnap.docs]
       .map(d => ({ idNum: parseInt(d.id, 10), doc: d }))
@@ -370,13 +379,13 @@ async function getRegDoc(registerId: number): Promise<RegisterDetail> {
     sortedDocs.forEach(({ idNum, doc }) => {
       if (seenChunkIds.has(idNum)) return;
       seenChunkIds.add(idNum);
-      
+
       const chunkData = doc.data() as { entries: Entry[] };
       if (chunkData.entries) {
         allEntries.push(...chunkData.entries);
       }
     });
-    
+
     data.entries = allEntries;
   }
 
@@ -462,7 +471,7 @@ export async function listRegisters(businessId: number): Promise<RegisterSummary
   const q = query(registersCol(), where('businessId', '==', businessId));
   const snap = await getDocs(q);
   const seenIds = new Set<number>();
-  
+
   const results = snap.docs
     .map(d => {
       const r = d.data() as RegisterDetail;
@@ -495,7 +504,7 @@ export async function listDeletedRegisters(businessId: number): Promise<Register
   const q = query(registersCol(), where('businessId', '==', businessId));
   const snap = await getDocs(q);
   const seenIds = new Set<number>();
-  
+
   const results = snap.docs
     .map(d => {
       const r = d.data() as RegisterDetail;
@@ -554,33 +563,34 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
   // Since IDs are generated chronologically (or via strict sequential offsets during import),
   // sorting by ID perfectly restores the original un-scrambled state.
   let needsSave = false;
-  let isOutOfOrder = false;
-  for (let i = 1; i < reg.entries.length; i++) {
-    if (reg.entries[i].id < reg.entries[i - 1].id) {
-      isOutOfOrder = true;
-      break;
+  if (!reg.migrationCompleted) {
+    let isOutOfOrder = false;
+    for (let i = 1; i < reg.entries.length; i++) {
+      if (reg.entries[i].id < reg.entries[i - 1].id) {
+        isOutOfOrder = true;
+        break;
+      }
     }
-  }
 
-  if (isOutOfOrder) {
-    reg.entries.sort((a, b) => a.id - b.id);
-    needsSave = true;
-  }
-
-  // MIGRATION 2: Fix duplicate IDs caused by precision loss in older Excel imports
-  // We do this AFTER sorting so that duplicate resolution preserves the restored chronological order.
-  const seenIds = new Set<number>();
-  reg.entries.forEach((e, idx) => {
-    if (seenIds.has(e.id)) {
-      needsSave = true;
-      e.id = reg.id + 10000 + idx; // Reassign a unique ID based on safe offset logic
+    if (isOutOfOrder) {
+      reg.entries.sort((a, b) => a.id - b.id);
     }
-    seenIds.add(e.id);
-  });
 
-  // Ensure rowNumbers match the true restored array sequence
-  if (needsSave) {
+    // MIGRATION 2: Fix duplicate IDs caused by precision loss in older Excel imports
+    // We do this AFTER sorting so that duplicate resolution preserves the restored chronological order.
+    const seenIds = new Set<number>();
+    reg.entries.forEach((e, idx) => {
+      if (seenIds.has(e.id)) {
+        needsSave = true;
+        e.id = reg.id + 10000 + idx; // Reassign a unique ID based on safe offset logic
+      }
+      seenIds.add(e.id);
+    });
+
+    // Ensure rowNumbers match the true restored array sequence
     reg.entries.forEach((e, i) => { e.rowNumber = i + 1; });
+    reg.migrationCompleted = true;
+    needsSave = true;
   }
 
   if (reg.entryCount !== reg.entries.length) {
@@ -599,10 +609,10 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
 export async function createRegister(data: {
   businessId: number; folderId?: number; name: string; icon?: string; iconColor?: string;
   category?: string; template?: string;
-  columns?: Array<{ 
-    name: string; 
-    type: string; 
-    dropdownOptions?: string[]; 
+  columns?: Array<{
+    name: string;
+    type: string;
+    dropdownOptions?: string[];
     formula?: string;
     width?: number;
     summary?: string;
@@ -620,6 +630,7 @@ export async function createRegister(data: {
       width: c.width, summary: c.summary,
     })),
     entries: [], pages: [{ id: 1, name: 'Page 1', index: 0 }], sharedWith: [],
+    migrationCompleted: true,
   };
   if (newReg.columns.length > 0) {
     for (let i = 0; i < 10; i++) {
@@ -681,6 +692,7 @@ export async function duplicateRegister(registerId: number): Promise<RegisterSum
     const duplicated: RegisterDetail = {
       ...JSON.parse(JSON.stringify(reg)), id: newId, name: `${reg.name} (Copy)`,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), entryCount: reg.entries.length,
+      migrationCompleted: true,
     };
     duplicated.columns = duplicated.columns.map((c: Column, i: number) => ({ ...c, id: newId + i + 1, registerId: newId }));
     duplicated.entries = duplicated.entries.map((e: Entry, i: number) => ({ ...e, id: newId + 1000 + i, registerId: newId }));
@@ -709,88 +721,88 @@ interface ColumnHint { type: string; dropdownOptions?: string[] }
 
 const COLUMN_ALIASES: Record<string, ColumnHint> = {
   // ── Date fields ──
-  'dob':             { type: 'date' },
-  'date of birth':   { type: 'date' },
-  'd.o.b':           { type: 'date' },
-  'date':            { type: 'date' },
-  'admission date':  { type: 'date' },
-  'joining date':    { type: 'date' },
-  'join date':       { type: 'date' },
-  'paid date':       { type: 'date' },
-  'due date':        { type: 'date' },
-  'start date':      { type: 'date' },
-  'end date':        { type: 'date' },
-  'expiry':          { type: 'date' },
-  'expiry date':     { type: 'date' },
+  'dob': { type: 'date' },
+  'date of birth': { type: 'date' },
+  'd.o.b': { type: 'date' },
+  'date': { type: 'date' },
+  'admission date': { type: 'date' },
+  'joining date': { type: 'date' },
+  'join date': { type: 'date' },
+  'paid date': { type: 'date' },
+  'due date': { type: 'date' },
+  'start date': { type: 'date' },
+  'end date': { type: 'date' },
+  'expiry': { type: 'date' },
+  'expiry date': { type: 'date' },
 
   // ── Grade / Standard / Class ──
-  'grade':           { type: 'dropdown', dropdownOptions: ['PRE-KG', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'] },
-  'class':           { type: 'dropdown', dropdownOptions: ['PRE-KG', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'] },
-  'standard':        { type: 'dropdown', dropdownOptions: ['PRE-KG', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'] },
-  'std':             { type: 'dropdown', dropdownOptions: ['PRE-KG', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'] },
-  'section':         { type: 'dropdown', dropdownOptions: ['A', 'B', 'C', 'D', 'E'] },
+  'grade': { type: 'dropdown', dropdownOptions: ['PRE-KG', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'] },
+  'class': { type: 'dropdown', dropdownOptions: ['PRE-KG', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'] },
+  'standard': { type: 'dropdown', dropdownOptions: ['PRE-KG', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'] },
+  'std': { type: 'dropdown', dropdownOptions: ['PRE-KG', 'LKG', 'UKG', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'] },
+  'section': { type: 'dropdown', dropdownOptions: ['A', 'B', 'C', 'D', 'E'] },
 
   // ── Gender ──
-  'gender':          { type: 'dropdown', dropdownOptions: ['Male', 'Female', 'Other'] },
-  'sex':             { type: 'dropdown', dropdownOptions: ['Male', 'Female', 'Other'] },
+  'gender': { type: 'dropdown', dropdownOptions: ['Male', 'Female', 'Other'] },
+  'sex': { type: 'dropdown', dropdownOptions: ['Male', 'Female', 'Other'] },
 
   // ── Community / Caste ──
-  'community':       { type: 'dropdown', dropdownOptions: ['OC', 'BC', 'MBC', 'SC', 'ST', 'Other'] },
-  'com':             { type: 'dropdown', dropdownOptions: ['OC', 'BC', 'MBC', 'SC', 'ST', 'Other'] },
-  'caste':           { type: 'dropdown', dropdownOptions: ['OC', 'BC', 'MBC', 'SC', 'ST', 'Other'] },
-  'category':        { type: 'dropdown', dropdownOptions: ['OC', 'BC', 'MBC', 'SC', 'ST', 'Other'] },
+  'community': { type: 'dropdown', dropdownOptions: ['OC', 'BC', 'MBC', 'SC', 'ST', 'Other'] },
+  'com': { type: 'dropdown', dropdownOptions: ['OC', 'BC', 'MBC', 'SC', 'ST', 'Other'] },
+  'caste': { type: 'dropdown', dropdownOptions: ['OC', 'BC', 'MBC', 'SC', 'ST', 'Other'] },
+  'category': { type: 'dropdown', dropdownOptions: ['OC', 'BC', 'MBC', 'SC', 'ST', 'Other'] },
 
   // ── Status ──
-  'status':          { type: 'dropdown', dropdownOptions: ['Active', 'Inactive', 'Pending'] },
-  'old/new':         { type: 'dropdown', dropdownOptions: ['OLD', 'NEW'] },
-  'old / new':       { type: 'dropdown', dropdownOptions: ['OLD', 'NEW'] },
-  'sib stu':         { type: 'checkbox' },
-  'sibling':         { type: 'checkbox' },
+  'status': { type: 'dropdown', dropdownOptions: ['Active', 'Inactive', 'Pending'] },
+  'old/new': { type: 'dropdown', dropdownOptions: ['OLD', 'NEW'] },
+  'old / new': { type: 'dropdown', dropdownOptions: ['OLD', 'NEW'] },
+  'sib stu': { type: 'checkbox' },
+  'sibling': { type: 'checkbox' },
 
   // ── Religion ──
-  'religion':        { type: 'dropdown', dropdownOptions: ['Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain', 'Other'] },
+  'religion': { type: 'dropdown', dropdownOptions: ['Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain', 'Other'] },
 
   // ── Blood Group ──
-  'blood group':     { type: 'dropdown', dropdownOptions: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
-  'blood grp':       { type: 'dropdown', dropdownOptions: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
+  'blood group': { type: 'dropdown', dropdownOptions: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
+  'blood grp': { type: 'dropdown', dropdownOptions: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
 
   // ── Payment mode ──
-  'payment mode':    { type: 'dropdown', dropdownOptions: ['Cash', 'UPI', 'Card', 'Credit', 'Cheque'] },
+  'payment mode': { type: 'dropdown', dropdownOptions: ['Cash', 'UPI', 'Card', 'Credit', 'Cheque'] },
   'mode of payment': { type: 'dropdown', dropdownOptions: ['Cash', 'UPI', 'Card', 'Credit', 'Cheque'] },
 
   // ── Numeric fields ──
-  's.no':            { type: 'number' },
-  's.no.':           { type: 'number' },
-  'sno':             { type: 'number' },
-  'sl no':           { type: 'number' },
-  'sl.no':           { type: 'number' },
-  'sl.no.':          { type: 'number' },
-  'serial':          { type: 'number' },
-  'serial no':       { type: 'number' },
-  'roll no':         { type: 'number' },
-  'roll number':     { type: 'number' },
-  'age':             { type: 'number' },
-  'amount':          { type: 'number' },
-  'total':           { type: 'number' },
-  'balance':         { type: 'number' },
-  'fees':            { type: 'number' },
-  'fee':             { type: 'number' },
-  'price':           { type: 'number' },
-  'qty':             { type: 'number' },
-  'quantity':        { type: 'number' },
+  's.no': { type: 'number' },
+  's.no.': { type: 'number' },
+  'sno': { type: 'number' },
+  'sl no': { type: 'number' },
+  'sl.no': { type: 'number' },
+  'sl.no.': { type: 'number' },
+  'serial': { type: 'number' },
+  'serial no': { type: 'number' },
+  'roll no': { type: 'number' },
+  'roll number': { type: 'number' },
+  'age': { type: 'number' },
+  'amount': { type: 'number' },
+  'total': { type: 'number' },
+  'balance': { type: 'number' },
+  'fees': { type: 'number' },
+  'fee': { type: 'number' },
+  'price': { type: 'number' },
+  'qty': { type: 'number' },
+  'quantity': { type: 'number' },
 };
 
 // Substring patterns checked when the exact alias lookup misses
 const COLUMN_SUBSTRING_HINTS: { pattern: string; hint: ColumnHint }[] = [
-  { pattern: 'date',      hint: { type: 'date' } },
-  { pattern: 'phone',     hint: { type: 'text' } },
-  { pattern: 'mobile',    hint: { type: 'text' } },
-  { pattern: 'contact',   hint: { type: 'text' } },
-  { pattern: 'number',    hint: { type: 'text' } },  // fallback — could be roll no, phone no, etc.
-  { pattern: 'address',   hint: { type: 'text' } },
-  { pattern: 'email',     hint: { type: 'text' } },
-  { pattern: 'remark',    hint: { type: 'text' } },
-  { pattern: 'note',      hint: { type: 'text' } },
+  { pattern: 'date', hint: { type: 'date' } },
+  { pattern: 'phone', hint: { type: 'text' } },
+  { pattern: 'mobile', hint: { type: 'text' } },
+  { pattern: 'contact', hint: { type: 'text' } },
+  { pattern: 'number', hint: { type: 'text' } },  // fallback — could be roll no, phone no, etc.
+  { pattern: 'address', hint: { type: 'text' } },
+  { pattern: 'email', hint: { type: 'text' } },
+  { pattern: 'remark', hint: { type: 'text' } },
+  { pattern: 'note', hint: { type: 'text' } },
 ];
 
 /**
@@ -803,12 +815,12 @@ function excelSerialToDateStr(serial: number): string {
   const utcDays = serial - 25569;
   const ms = utcDays * 86400 * 1000;
   const d = new Date(ms);
-  
+
   // Use UTC methods to avoid timezone shifts
   const dd = String(d.getUTCDate()).padStart(2, '0');
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
   const yyyy = d.getUTCFullYear();
-  
+
   return `${dd}-${mm}-${yyyy}`;
 }
 
@@ -818,7 +830,7 @@ function excelSerialToDateStr(serial: number): string {
  */
 export function formatDateToDDMMYYYY(val: any): string {
   if (val === null || val === undefined || val === '') return '';
-  
+
   // 1. Handle Excel Serial Dates
   if (typeof val === 'number' && looksLikeExcelSerial(val)) {
     return excelSerialToDateStr(val);
@@ -839,7 +851,7 @@ export function formatDateToDDMMYYYY(val: any): string {
 
   // Standardize separators to -
   s = s.replace(/[\/.]/g, '-');
-  
+
   const parts = s.split('-');
   if (parts.length === 3) {
     let p1 = parts[0].padStart(2, '0');
@@ -864,7 +876,7 @@ export function formatDateToDDMMYYYY(val: any): string {
     // The user explicitly stated that dates are coming in as MM/DD/YYYY incorrectly.
     // So if n1 <= 12 and n2 > 12, it's definitely MM/DD/YYYY -> Swap.
     // If both are <= 12, it's ambiguous, but we prioritize DD-MM-YYYY as the target.
-    
+
     if (n1 <= 12 && n2 > 12) {
       // Clearly MM/DD/YYYY (e.g. 05/15/2023) -> Swap to DD-MM-YYYY (15-05-2023)
       return `${p2}-${p1}-${p3}`;
@@ -877,13 +889,13 @@ export function formatDateToDDMMYYYY(val: any): string {
   // Final fallback: try native Date parsing
   const d = new Date(s);
   if (!isNaN(d.getTime())) {
-     const dd = String(d.getDate()).padStart(2, '0');
-     const mm = String(d.getMonth() + 1).padStart(2, '0');
-     const yyyy = d.getFullYear();
-     return `${dd}/${mm}/${yyyy}`;
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   }
 
-  return s; 
+  return s;
 }
 
 
@@ -966,9 +978,9 @@ function resolveColumnType(
 }
 
 export const importExcelData = async (
-  businessId: number, 
-  name: string, 
-  data: Record<string, string | number | boolean | null>[], 
+  businessId: number,
+  name: string,
+  data: Record<string, string | number | boolean | null>[],
   folderId?: number,
   metadata?: any[]
 ): Promise<RegisterSummary> => {
@@ -1011,7 +1023,7 @@ export const importExcelData = async (
   const columns = filteredHeaders.map((h, i) => {
     // Collect sample values for this column from the data
     const sampleValues = data.slice(0, 30).map(row => row[h]);
-    
+
     let resolved: any;
     if (metadata) {
       const meta = metadata.find(m => m['Column Name'] === h);
@@ -1026,11 +1038,11 @@ export const importExcelData = async (
         };
       }
     }
-    
+
     if (!resolved) {
       resolved = resolveColumnType(h, bestTemplate, sampleValues);
     }
-    
+
     return {
       name: h || `Column ${i + 1}`,
       type: resolved.type,
@@ -1218,7 +1230,7 @@ export function evaluateFormula(formula: string, entry: Entry, columns: Column[]
       sorted = [...columns].sort((a, b) => b.name.length - a.name.length);
       _sortedColumnsCache.set(columns, sorted);
     }
-    
+
     let expression = formula;
     // Check if formula contains any curly braces before doing expensive replacements
     if (!expression.includes('{')) {
@@ -1233,7 +1245,7 @@ export function evaluateFormula(formula: string, entry: Entry, columns: Column[]
       const regex = getColumnRegex(col.name);
       const rawVal = entry.cells?.[col.id.toString()] ?? '';
       let numStr: string;
-      
+
       if (col.type === 'formula' && col.formula) {
         const nested = evaluateFormula(col.formula, entry, columns);
         numStr = (nested === '') ? '0' : nested;
@@ -1249,11 +1261,11 @@ export function evaluateFormula(formula: string, entry: Entry, columns: Column[]
       }
       expression = expression.replace(regex, numStr);
     }
-    
+
     expression = expression.replace(/\{[^}]*\}/g, '0');
     expression = expression.trim();
     if (expression === '') return '';
-    
+
     let finalResult = '';
     const result = parseAndEval(expression);
     if (typeof result === 'number' && isFinite(result)) {
@@ -1264,7 +1276,7 @@ export function evaluateFormula(formula: string, entry: Entry, columns: Column[]
         finalResult = fixed.toString();
       }
     }
-    
+
     entryCache.set(formula, finalResult);
     return finalResult;
   } catch {
@@ -1302,7 +1314,7 @@ export async function deleteColumn(registerId: number, columnId: number): Promis
     const col = reg.columns.find(c => c.id.toString() === columnId.toString());
     if (!col) return reg;
     const colName = col.name;
-    
+
     // Collect cell data for this column before removing
     const columnCellData: Record<string, string> = {};
     reg.entries.forEach((e) => {
@@ -1311,7 +1323,7 @@ export async function deleteColumn(registerId: number, columnId: number): Promis
         columnCellData[e.id.toString()] = val;
       }
     });
-    
+
     // Move to bin
     if (!reg.deletedItems) reg.deletedItems = [];
     reg.deletedItems.push({
@@ -1323,7 +1335,7 @@ export async function deleteColumn(registerId: number, columnId: number): Promis
       column: { ...col },
       columnCellData,
     });
-    
+
     reg.columns = reg.columns.filter((c) => c.id.toString() !== columnId.toString());
     reg.columns.sort((a, b) => a.position - b.position); // ensure canonical order before re-normalise
     reg.columns.forEach((c, i) => c.position = i);
@@ -1469,26 +1481,26 @@ export async function reorderColumn(registerId: number, columnId: number, target
     reg.columns.sort((a, b) => a.position - b.position); // ensure array index === position
     const idx = reg.columns.findIndex((c) => c.id.toString() === columnId.toString());
     if (idx === -1) throw new Error('Column not found');
-    
+
     // Remove the column from its original position
     const [col] = reg.columns.splice(idx, 1);
-    
+
     // Insert it at the target position
     const clampedTarget = Math.max(0, Math.min(targetIndex, reg.columns.length));
     reg.columns.splice(clampedTarget, 0, col);
-    
+
     // Update the position properties
     reg.columns.forEach((c, i) => c.position = i);
-    
+
     await saveRegDocImmediate(reg);
     return reg;
   });
 }
 
 export async function changeColumnType(
-  registerId: number, 
-  columnId: number, 
-  newType: string, 
+  registerId: number,
+  columnId: number,
+  newType: string,
   options?: { formula?: string; dropdownOptions?: string[] },
   preventSync?: boolean
 ): Promise<RegisterDetail> {
@@ -1496,11 +1508,11 @@ export async function changeColumnType(
     const reg = await getRegDoc(registerId);
     const col = reg.columns.find((c) => c.id.toString() === columnId.toString());
     if (!col) throw new Error('Column not found');
-    
+
     const oldType = col.type;
     col.type = newType;
     updateColumnSymbol(col, newType);
-    
+
     // Reset specific fields when changing type
     if (newType === 'formula') {
       col.formula = options?.formula;
@@ -1707,7 +1719,7 @@ export async function insertEntry(registerId: number, cells: Record<string, stri
       id: generateId(), registerId, rowNumber: 0, // Assigned by renumberRows below
       cells, createdAt: new Date().toISOString(), pageIndex,
     };
-    
+
     reg.entries.splice(atIndex, 0, entry);
     renumberRows(reg); // Ensure sequence is correct
     reg.entryCount = reg.entries.length;
@@ -1753,7 +1765,7 @@ export async function updateEntry(registerId: number, entryId: number, cells: Re
     entry.cells = { ...entry.cells, ...safeCells };
     reg.updatedAt = new Date().toISOString();
     await saveRegDocImmediate(reg);
-    
+
     // Log edit details with before and after values
     const changes = Object.entries(safeCells)
       .filter(([id, val]) => (oldCells[id] || '') !== (val || ''))
@@ -1786,7 +1798,7 @@ export async function updateEntry(registerId: number, entryId: number, cells: Re
       : `Updated row #${entry.rowNumber} in "${reg.name}"`;
 
     await logAction(reg.businessId, 'Edit Row', details, { registerId, registerName: reg.name, entryId });
-    
+
     return { entry, reg };
   });
 
@@ -1801,6 +1813,74 @@ export async function updateEntry(registerId: number, entryId: number, cells: Re
   }
 
   return entry;
+}
+
+/**
+ * Lightweight cell update: patches the in-memory cache and writes ONLY the
+ * affected chunk to Firestore — instead of rewriting every chunk.
+ * Used by the debounced cell-edit handler for maximum speed during rapid data entry.
+ */
+export async function updateEntryDirect(
+  registerId: number,
+  entryId: number,
+  cells: Record<string, string>
+): Promise<Entry | null> {
+  return runQueuedMutation(registerId, async () => {
+    const reg = await getRegDoc(registerId);
+    const entryIndex = reg.entries.findIndex((e) => e.id === entryId);
+    if (entryIndex === -1) return null;
+
+    const entry = reg.entries[entryIndex];
+
+    // Security: Filter out any attempts to manually update auto_increment columns
+    const autoColIds = new Set(
+      reg.columns.filter(c => c.type === 'auto_increment').map(c => c.id.toString())
+    );
+    const safeCells = Object.fromEntries(
+      Object.entries(cells).filter(([colId]) => !autoColIds.has(colId))
+    );
+
+    const oldCells = { ...entry.cells };
+    entry.cells = { ...entry.cells, ...safeCells };
+    reg.updatedAt = new Date().toISOString();
+
+    // Update the in-memory cache immediately so next mutation sees this state
+    firestoreRegisterCache.set(reg.id, reg);
+
+    // Write ONLY the affected chunk (not the entire register)
+    const chunkIndex = Math.floor(entryIndex / ENTRIES_PER_CHUNK);
+    const chunkStart = chunkIndex * ENTRIES_PER_CHUNK;
+    const chunkEntries = reg.entries.slice(chunkStart, chunkStart + ENTRIES_PER_CHUNK);
+    const cleaned = JSON.parse(JSON.stringify({ entries: chunkEntries }));
+    await setDoc(chunkDoc(reg.id, chunkIndex), cleaned);
+
+    // Log edit details
+    const changes = Object.entries(safeCells)
+      .filter(([id, val]) => (oldCells[id] || '') !== (val || ''))
+      .map(([id, val]) => {
+        const c = reg.columns.find(col => col.id.toString() === id);
+        const colName = c?.name || id;
+        const oldVal = oldCells[id] || '';
+        const newVal = val || '';
+        const formatVal = (v: string, type?: string) => {
+          if (!v) return '""';
+          if (type === 'image' || v.startsWith('data:image/')) {
+            if (v.includes('|||')) { const count = v.split('|||').length; return `[${count} Image${count > 1 ? 's' : ''}]`; }
+            return '[Image]';
+          }
+          if (v.length > 60) return `"${v.slice(0, 60)}..."`;
+          return `"${v}"`;
+        };
+        return `${colName} was changed from ${formatVal(oldVal, c?.type)} to ${formatVal(newVal, c?.type)}`;
+      }).join(', ');
+
+    const details = changes
+      ? `Updated row #${entry.rowNumber} in "${reg.name}": ${changes}`
+      : `Updated row #${entry.rowNumber} in "${reg.name}"`;
+    await logAction(reg.businessId, 'Edit Row', details, { registerId, registerName: reg.name, entryId });
+
+    return entry;
+  });
 }
 
 // Internal helper to sync
@@ -1828,9 +1908,9 @@ async function _syncLinkedColumn(targetRegisterId: number, targetColumnId: numbe
 }
 
 export async function linkColumn(
-  registerId: number, 
-  columnId: number, 
-  targetRegisterId: number, 
+  registerId: number,
+  columnId: number,
+  targetRegisterId: number,
   targetColumnId: number
 ): Promise<void> {
   // Update register 1
@@ -1880,7 +1960,7 @@ export async function deleteEntry(registerId: number, entryId: number): Promise<
     const entryIndex = reg.entries.findIndex((e) => e.id === entryId);
     if (entryIndex === -1) return;
     const entry = reg.entries[entryIndex];
-    
+
     // Move to bin instead of permanent delete
     if (!reg.deletedItems) reg.deletedItems = [];
     reg.deletedItems.push({
@@ -1892,7 +1972,7 @@ export async function deleteEntry(registerId: number, entryId: number): Promise<
       entry: { ...entry },
       originalIndex: entryIndex,
     });
-    
+
     reg.entries = reg.entries.filter((e) => e.id !== entryId);
     renumberRows(reg);
     reg.entryCount = reg.entries.length;
@@ -1964,7 +2044,7 @@ export async function bulkDeleteEntries(registerId: number, entryIds: number[]):
   return runQueuedMutation(registerId, async () => {
     const reg = await getRegDoc(registerId);
     if (!reg.deletedItems) reg.deletedItems = [];
-    
+
     // Move each entry to bin
     const idsSet = new Set(entryIds);
     reg.entries.forEach((e, idx) => {
@@ -1980,7 +2060,7 @@ export async function bulkDeleteEntries(registerId: number, entryIds: number[]):
         });
       }
     });
-    
+
     reg.entries = reg.entries.filter((e) => !idsSet.has(e.id));
     renumberRows(reg); // Fix sequence after bulk delete
     reg.entryCount = reg.entries.length;
@@ -2108,8 +2188,8 @@ export async function logAction(
 ): Promise<void> {
   try {
     const savedUser = JSON.parse(
-      sessionStorage.getItem('recordbook_user') || 
-      localStorage.getItem('recordbook_user') || 
+      sessionStorage.getItem('recordbook_user') ||
+      localStorage.getItem('recordbook_user') ||
       'null'
     );
     const entry: HistoryEntry = {
@@ -2176,9 +2256,9 @@ export async function getAllDeletedItems(businessId: number): Promise<DeletedIte
   // Also include soft-deleted registers' items
   const deletedRegs = await listDeletedRegisters(businessId);
   const allRegIds = [...summaries, ...deletedRegs].map(s => s.id);
-  
+
   const allItems: DeletedItem[] = [];
-  
+
   for (const regId of allRegIds) {
     try {
       const reg = await getRegDoc(regId);
@@ -2189,7 +2269,7 @@ export async function getAllDeletedItems(businessId: number): Promise<DeletedIte
       // Skip registers that can't be loaded
     }
   }
-  
+
   return allItems.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
 }
 
@@ -2208,12 +2288,12 @@ export async function restoreDeletedItem(registerId: number, deletedItemId: numb
   return runQueuedMutation(registerId, async () => {
     const reg = await getRegDoc(registerId);
     if (!reg.deletedItems) return;
-    
+
     const itemIndex = reg.deletedItems.findIndex(i => i.id === deletedItemId);
     if (itemIndex === -1) return;
-    
+
     const item = reg.deletedItems[itemIndex];
-    
+
     if (item.type === 'row' && item.entry) {
       // Restore the row at its original index
       const insertAt = Math.min(item.originalIndex ?? reg.entries.length, reg.entries.length);
@@ -2225,7 +2305,7 @@ export async function restoreDeletedItem(registerId: number, deletedItemId: numb
       const insertAt = Math.min(item.column.position, reg.columns.length);
       reg.columns.splice(insertAt, 0, item.column);
       reg.columns.forEach((c, i) => c.position = i);
-      
+
       // Restore cell data
       if (item.columnCellData) {
         const colIdStr = item.column.id.toString();
@@ -2239,7 +2319,7 @@ export async function restoreDeletedItem(registerId: number, deletedItemId: numb
       }
       await logAction(reg.businessId, 'Restore Column', `Restored column "${item.column.name}" from bin in "${reg.name}"`, { registerId, registerName: reg.name });
     }
-    
+
     // Remove from bin
     reg.deletedItems.splice(itemIndex, 1);
     renumberRows(reg);
@@ -2345,10 +2425,10 @@ export async function createBackup(businessId: number, label?: string): Promise<
     const regCopy: any = JSON.parse(JSON.stringify(reg));
     const entries = regCopy.entries || [];
     delete regCopy.entries; // Store entries separately
-    
+
     const regRef = doc(db, 'backups', id, 'registers', reg.id.toString());
     await setDoc(regRef, regCopy);
-    
+
     // Store entries in chunks under this register
     for (let i = 0; i < entries.length; i += ENTRIES_PER_CHUNK) {
       const chunkIdx = Math.floor(i / ENTRIES_PER_CHUNK);
@@ -2452,7 +2532,7 @@ export async function restoreBackup(backupId: string): Promise<void> {
   firestoreRegisterCache.clear();
 
   await logAction(meta.businessId, 'Backup Restored', `Restored backup: ${meta.label} (${restoredCount}/${allRegisters.length} registers)`);
-  
+
   if (restoredCount < allRegisters.length) {
     throw new Error(`Restoration partial: only ${restoredCount} of ${allRegisters.length} registers were restored. Check console for details.`);
   }

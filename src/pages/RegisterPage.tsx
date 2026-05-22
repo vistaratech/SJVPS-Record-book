@@ -6,13 +6,13 @@ import {
   getRegister, listRegisters, addColumn, deleteColumn, renameColumn, updateColumnDropdownOptions,
   duplicateColumn, moveColumn, reorderColumn, changeColumnType, clearColumnData, insertColumn, updateColumnWidth, updateColumnSummary,
   freezeColumn, hideColumn, setColumnMandatory, setColumnUnique,
-  addEntry, updateEntry, deleteEntry, duplicateEntry, bulkDeleteEntries, insertEntry,
+  addEntry, updateEntry, updateEntryDirect, deleteEntry, duplicateEntry, bulkDeleteEntries, insertEntry,
   listRowHistory,
   restoreEntry, bulkRestoreEntries, restoreColumn,
   renamePage, deletePage,
   evaluateFormula,
   generateShareLink, addSharedUser, removeSharedUser,
-  subscribeToMutationStatus, updateEntriesOrder,
+  subscribeToMutationStatus, updateEntriesOrder, flushAllPendingWrites,
   updateEntryCellStyles,
   formatDateToDDMMYYYY,
   type Entry, type CellStyle, type HistoryEntry,
@@ -510,14 +510,43 @@ export default function RegisterPage() {
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isSaving) {
+      // Flush any pending debounced writes immediately before unloading
+      const timers = debounceTimers.current;
+      const pendingKeys = Object.keys(timers);
+      const hasPending = pendingKeys.length > 0;
+      if (hasPending) {
+        // Fire all pending debounced writes synchronously
+        pendingKeys.forEach(key => {
+          clearTimeout(timers[key]);
+          delete timers[key];
+        });
+        // Derive and fire pending cell diffs from localEntries vs React Query cache
+        const currentRegData = queryClient.getQueryData(['register', registerId]) as any;
+        if (currentRegData) {
+          const localMap = new Map(localEntriesRef.current.map(le => [le.id, le]));
+          for (const entry of currentRegData.entries || []) {
+            const local = localMap.get(entry.id);
+            if (!local) continue;
+            const diff: Record<string, string> = {};
+            for (const [colId, val] of Object.entries(local.cells || {})) {
+              if ((entry.cells?.[colId] || '') !== (val || '')) {
+                diff[colId] = val as string;
+              }
+            }
+            if (Object.keys(diff).length > 0) {
+              updateEntryDirect(registerId, entry.id, diff);
+            }
+          }
+        }
+      }
+      if (isSaving || hasPending) {
         e.preventDefault();
         e.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isSaving]);
+  }, [isSaving, registerId, queryClient]);
 
   // Stabilize references so child components only re-render when the actual data changes
   const columns = useMemo(() => {
@@ -605,7 +634,8 @@ export default function RegisterPage() {
 
   const dataToSync = register || (Number(registerId) !== lastSyncId.current ? cachedRegister : null);
 
-  if (Number(registerId) !== lastSyncId.current || (register && register !== lastSyncData.current)) {
+  const hasPendingDebounce = Object.keys(debounceTimers.current).length > 0;
+  if (Number(registerId) !== lastSyncId.current || (register && register !== lastSyncData.current && !hasPendingDebounce)) {
     if (Number(registerId) !== lastSyncId.current) {
       let loadedSelected: Set<number> = new Set();
       try {
@@ -758,7 +788,7 @@ export default function RegisterPage() {
     setCurrentPageIndex(0);
   }, [deferredSearch, deferredActiveFilters]);
 
-  // Ctrl+F to focus search
+  // Ctrl+F to focus search, Ctrl+S to flush & save all pending edits
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
@@ -766,10 +796,46 @@ export default function RegisterPage() {
         const el = document.getElementById('pab-search-input');
         if (el) { el.focus(); (el as HTMLInputElement).select(); }
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        // Immediately fire all pending debounced writes
+        const timers = debounceTimers.current;
+        const pendingKeys = Object.keys(timers);
+        if (pendingKeys.length > 0) {
+          pendingKeys.forEach(key => {
+            clearTimeout(timers[key]);
+            delete timers[key];
+          });
+          // Collect all pending cell edits from localEntries and fire updateEntryDirect for each
+          // The debounce timers captured closures with the values, so clearing them means
+          // we need to re-derive the pending edits from localEntries vs the React Query cache
+          const currentRegData = queryClient.getQueryData(['register', registerId]) as any;
+          if (currentRegData) {
+            const localMap = new Map(localEntriesRef.current.map(e => [e.id, e]));
+            for (const entry of currentRegData.entries || []) {
+              const local = localMap.get(entry.id);
+              if (!local) continue;
+              const diff: Record<string, string> = {};
+              for (const [colId, val] of Object.entries(local.cells || {})) {
+                if ((entry.cells?.[colId] || '') !== (val || '')) {
+                  diff[colId] = val as string;
+                }
+              }
+              if (Object.keys(diff).length > 0) {
+                updateEntryDirect(registerId, entry.id, diff);
+              }
+            }
+          }
+        }
+        // Wait for all queued mutations to complete
+        flushAllPendingWrites().then(() => {
+          toast.success('All changes saved!', { duration: 1500 });
+        });
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, []);
+  }, [registerId, queryClient]);
 
   // Apply row-level view restrictions before any search/filter/sort
   const rowFilteredEntries = useMemo(() => {
@@ -2087,29 +2153,18 @@ export default function RegisterPage() {
       return e;
     }));
 
-    // 2. Debounce the Firestore write — no invalidateQueries, just patch the cache
+    // 2. Debounce the Firestore write — use lightweight single-chunk writer
     const key = `${entryId}-${columnId}`;
 
     if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
     debounceTimers.current[key] = setTimeout(() => {
       delete debounceTimers.current[key];
 
-      updateEntry(registerId, entryId, { [columnId]: value }).then(() => {
+      updateEntryDirect(registerId, entryId, { [columnId]: value }).then(() => {
         const col = columnsRef.current.find(c => c.id.toString() === columnId);
         if (col?.linkedTo) {
           queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
         }
-
-        // Only patch the cache entry, never re-fetch the whole register
-        queryClient.setQueryData(['register', registerId], (old: any) => {
-          if (!old) return old;
-          return {
-            ...old,
-            entries: old.entries.map((e: any) =>
-              e.id === entryId ? { ...e, cells: { ...e.cells, [columnId]: value } } : e
-            ),
-          };
-        });
       });
     }, 600);
     return true;
