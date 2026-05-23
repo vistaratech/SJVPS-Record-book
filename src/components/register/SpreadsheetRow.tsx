@@ -81,27 +81,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
       }, 50);
     };
 
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      setEditing(false);
-      const prevCol = visibleColumns[colIdx - 1];
-      if (prevCol) {
-        focusNext(idx, prevCol.id, colIdx - 1);
-      } else if (idx > 0) {
-        const lastCol = visibleColumns[visibleColumns.length - 1];
-        if (lastCol) focusNext(idx - 1, lastCol.id, visibleColumns.length - 1);
-      }
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      setEditing(false);
-      const nextCol = visibleColumns[colIdx + 1];
-      if (nextCol) {
-        focusNext(idx, nextCol.id, colIdx + 1);
-      } else if (idx < totalRows - 1) {
-        const firstCol = visibleColumns[0];
-        if (firstCol) focusNext(idx + 1, firstCol.id, 0);
-      }
-    } else if (e.key === 'ArrowUp') {
+    if (e.key === 'ArrowUp') {
       if (idx > 0) {
         e.preventDefault();
         setEditing(false);
@@ -321,24 +301,6 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
       if (idx > 0) {
         e.preventDefault();
         focusNext(idx - 1, col.id, colIdx);
-      }
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      const prevCol = visibleColumns[colIdx - 1];
-      if (prevCol) {
-        focusNext(idx, prevCol.id, colIdx - 1);
-      } else if (idx > 0) {
-        const lastCol = visibleColumns[visibleColumns.length - 1];
-        if (lastCol) focusNext(idx - 1, lastCol.id, visibleColumns.length - 1);
-      }
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      const nextCol = visibleColumns[colIdx + 1];
-      if (nextCol) {
-        focusNext(idx, nextCol.id, colIdx + 1);
-      } else if (idx < totalRows - 1) {
-        const firstCol = visibleColumns[0];
-        if (firstCol) focusNext(idx + 1, firstCol.id, 0);
       }
     }
   }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion, scrollToColumn]);
@@ -586,8 +548,24 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
 
   return (
     <tr id={`row-${entry.id}`} data-entry-id={entry.id} className={isSelected ? 'row-selected' : ''} style={rowHeight ? { height: rowHeight, maxHeight: rowHeight } : undefined}>
-      <td className="serial" style={{ cursor: 'pointer' }}>
-        <div className="serial-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', position: 'relative' }}>
+      <td 
+        className="serial" 
+        style={{ cursor: 'pointer' }}
+        onClick={handleSerialClick}
+        title="Click to view details"
+      >
+        <div className="serial-inner">
+          <button
+            className={`row-menu-btn ${isMenuOpen ? 'menu-open' : ''}`}
+            aria-label="Row Options"
+            title="Row Options"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMenu(entry.id);
+            }}
+          >
+            <span style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-1px', lineHeight: 1 }}>⋮</span>
+          </button>
           <input
             type="checkbox"
             className="row-select-checkbox"
@@ -596,7 +574,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
             onClick={(e) => e.stopPropagation()}
             tabIndex={-1}
           />
-          <span className="serial-number" onClick={handleSerialClick} title="Click to view details">{displayRowNumber || entry.rowNumber}</span>
+          <span className="serial-number">{displayRowNumber || entry.rowNumber}</span>
           {hasPendingReminder && (
           <span title="This row has a pending reminder">
             <Bell 
@@ -841,16 +819,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
         </td>
         );
       })}
-      <td className="actions" style={{ width: '50px', minWidth: '50px', position: 'sticky', right: 0, zIndex: 1, background: 'var(--table-bg)', borderLeft: '1px solid var(--border-v)' }}>
-        <button
-          className={`row-menu-btn ${isMenuOpen ? 'menu-open' : ''}`}
-          aria-label="Row Options"
-          title="Row Options"
-          onClick={() => toggleMenu(entry.id)}
-        >
-          <span style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-1px', lineHeight: 1 }}>⋮</span>
-        </button>
-      </td>
+      <td className="actions" style={{ width: '50px', minWidth: '50px', position: 'sticky', right: 0, zIndex: 1, background: 'var(--table-bg)', borderLeft: '1px solid var(--border-v)' }} />
     </tr>
   );
 });

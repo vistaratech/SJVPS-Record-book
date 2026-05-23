@@ -294,6 +294,11 @@ export default function RegisterPage() {
   const [changeTypeModal, setChangeTypeModal] = useState(false);
   const [linkColumnModal, setLinkColumnModal] = useState(false);
   const [insertColModal, setInsertColModal] = useState<'left' | 'right' | null>(null);
+  const [linkInfoModal, setLinkInfoModal] = useState<{
+    registerName: string;
+    columnName: string;
+    role: 'source' | 'target' | 'unknown';
+  } | null>(null);
   
   // Smooth column drag-and-drop reordering
   const [draggedColumnId, setDraggedColumnId] = useState<number | null>(null);
@@ -1117,6 +1122,9 @@ export default function RegisterPage() {
       if (previousRegister) {
         const colIdStr = colId.toString();
         const col = previousRegister.columns?.find((c: any) => c.id.toString() === colIdStr);
+        if (col?.type === 'formula') {
+          throw new Error('Formula columns cannot be deleted');
+        }
         
         if (col) {
           // Optimistically update cache
@@ -1139,10 +1147,14 @@ export default function RegisterPage() {
     onSuccess: () => {
       toast.success('Column deleted');
     },
-    onError: (_err, _colId, context) => {
+    onError: (err: any, _colId, context) => {
       if (context?.previousRegister) queryClient.setQueryData(['register', registerId], context.previousRegister);
       if (context?.previousLocalEntries) setLocalEntries(context.previousLocalEntries);
-      toast.error('Failed to delete column');
+      if (err?.message === 'Formula columns cannot be deleted') {
+        toast.error('Formula columns cannot be deleted');
+      } else {
+        toast.error('Failed to delete column');
+      }
     },
   });
 
@@ -1152,11 +1164,22 @@ export default function RegisterPage() {
       await queryClient.cancelQueries({ queryKey: ['register', registerId] });
       const prev = queryClient.getQueryData(['register', registerId]) as any;
       if (prev && activeModalColId !== null) {
+        const targetCol = prev.columns?.find((c: any) => c.id === activeModalColId);
+        const oldName = targetCol?.name;
+
         queryClient.setQueryData(['register', registerId], {
           ...prev,
-          columns: (prev.columns || []).map((c: any) => 
-            c.id === activeModalColId ? { ...c, name: renameColValue } : c
-          )
+          columns: (prev.columns || []).map((c: any) => {
+            if (c.id === activeModalColId) {
+              return { ...c, name: renameColValue };
+            }
+            if (c.type === 'formula' && c.formula && oldName) {
+              const escapedOldName = oldName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+              const regex = new RegExp(`\\{${escapedOldName}\\}`, 'gi');
+              return { ...c, formula: c.formula.replace(regex, `{${renameColValue}}`) };
+            }
+            return c;
+          })
         });
       }
       setRenameColModal(false);
@@ -2679,7 +2702,7 @@ export default function RegisterPage() {
 
   const frozenLeftOffsets = useMemo(() => {
     const offsets: Record<number, number> = {};
-    let left = 60; // S.No column (widened to fit checkbox)
+    let left = 64; // S.No column (widened to fit checkbox & row options)
     for (const vc of visibleColumns) {
       if (frozenColumns.has(vc.id)) {
         offsets[vc.id] = left;
@@ -2689,6 +2712,27 @@ export default function RegisterPage() {
     return offsets;
   }, [visibleColumns, frozenColumns, colWidths, defaultColWidth]);
 
+  const handleLinkIconClick = useCallback(async (e: React.MouseEvent, col: any) => {
+    e.stopPropagation();
+    if (!col.linkedTo) return;
+    
+    const loadingToastId = toast.loading('Fetching link details...');
+    try {
+      const reg = await getRegister(col.linkedTo.registerId);
+      const targetCol = reg.columns?.find((c: any) => c.id === col.linkedTo.columnId);
+      
+      toast.dismiss(loadingToastId);
+      setLinkInfoModal({
+        registerName: reg.name,
+        columnName: targetCol ? targetCol.name : 'Unknown Column',
+        role: col.linkedTo.role || 'unknown'
+      });
+    } catch (err) {
+      console.error(err);
+      toast.dismiss(loadingToastId);
+      toast.error('Failed to load link details');
+    }
+  }, []);
 
   if (isLoading) return (
     <div className="content-area">
@@ -2788,22 +2832,37 @@ export default function RegisterPage() {
           <thead>
             <tr>
               <th className="serial">
-                <div className="serial-inner">
-                  <input
-                    type="checkbox"
-                    className="row-select-checkbox"
-                    checked={displayEntries.length > 0 && selectedRows.size === displayEntries.length}
-                    ref={(el) => { if (el) el.indeterminate = selectedRows.size > 0 && selectedRows.size < displayEntries.length; }}
-                    onChange={() => {
-                      if (selectedRows.size === displayEntries.length) {
-                        setSelectedRows(new Set());
-                      } else {
-                        setSelectedRows(new Set(displayEntries.map(e => e.id)));
-                      }
-                    }}
-                    tabIndex={-1}
-                    title="Select All"
-                  />
+                <div 
+                  className="serial-inner" 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: selectedRows.size > 0 ? 'flex-start' : 'center', 
+                    gap: '2px', 
+                    width: '100%', 
+                    height: '100%' 
+                  }}
+                >
+                  {selectedRows.size > 0 && (
+                    <>
+                      <div style={{ width: '14px', flexShrink: 0 }} /> {/* Spacer matching row options ⋮ button */}
+                      <input
+                        type="checkbox"
+                        className="row-select-checkbox"
+                        checked={displayEntries.length > 0 && selectedRows.size === displayEntries.length}
+                        ref={(el) => { if (el) el.indeterminate = selectedRows.size > 0 && selectedRows.size < displayEntries.length; }}
+                        onChange={() => {
+                          if (selectedRows.size === displayEntries.length) {
+                            setSelectedRows(new Set());
+                          } else {
+                            setSelectedRows(new Set(displayEntries.map(e => e.id)));
+                          }
+                        }}
+                        tabIndex={-1}
+                        title="Select All"
+                      />
+                    </>
+                  )}
                   <span style={{ fontSize: '11px', fontWeight: 700 }}>S.NO</span>
                 </div>
               </th>
@@ -2894,9 +2953,22 @@ export default function RegisterPage() {
                         )}
                         {col.type === 'formula' && <span className="col-formula-badge" title={col.formula}>Fx</span>}
                         {col.linkedTo && (
-                          <span title={`Linked to ${col.linkedTo.registerId}`} style={{ display: 'inline-flex', alignItems: 'center' }}>
-                            <LinkIcon size={12} color="var(--primary)" style={{ marginLeft: 4 }} />
-                          </span>
+                          <button 
+                            onClick={(e) => handleLinkIconClick(e, col)}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            title="Click to view link details"
+                            style={{ 
+                              background: 'none', 
+                              border: 'none', 
+                              padding: 0, 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              cursor: 'pointer',
+                              marginLeft: '4px'
+                            }}
+                          >
+                            <LinkIcon size={12} color="var(--primary)" />
+                          </button>
                         )}
                       </span>
                       {sortColId === col.id && sortDir && (
@@ -3016,7 +3088,11 @@ export default function RegisterPage() {
             )}
             {displayEntries.length === 0 && !deferredSearch && deferredActiveFilters.length === 0 && columns.length > 0 && [1, 2, 3].map((n) => (
               <tr key={`mock-${n}`} className="mock" onClick={_canEditAny ? () => setShowAddRecordModal(true) : undefined}>
-                <td className="serial">{n}</td>
+                <td className="serial">
+                  <div className="serial-inner">
+                    <span>{n}</span>
+                  </div>
+                </td>
                 {visibleColumns.map((col) => (
                   <td key={col.id}><div className="mock-cell-content">&nbsp;</div></td>
                 ))}
@@ -3179,6 +3255,51 @@ export default function RegisterPage() {
         allRegisters={allRegisters}
         currentRegisterId={registerId}
       />
+
+      {linkInfoModal && (
+        <div className="modal-overlay" onClick={() => setLinkInfoModal(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <LinkIcon size={18} color="var(--primary)" /> Link Connection Details
+            </h3>
+            
+            <div style={{ margin: '16px 0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ background: 'var(--bg-light)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Connection Role</span>
+                <span style={{ 
+                  fontSize: '14px', 
+                  fontWeight: 700, 
+                  color: linkInfoModal.role === 'source' ? '#16a34a' : linkInfoModal.role === 'target' ? '#2563eb' : 'var(--text-main)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginTop: '4px'
+                }}>
+                  {linkInfoModal.role === 'source' ? 'From Column (Source Column)' : linkInfoModal.role === 'target' ? 'To Column (Destination Column)' : 'Linked Column'}
+                </span>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Linked Register</span>
+                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--navy)', display: 'block', marginTop: '2px' }}>
+                  📂 {linkInfoModal.registerName}
+                </span>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Linked Column</span>
+                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--navy)', display: 'block', marginTop: '2px' }}>
+                  📊 {linkInfoModal.columnName}
+                </span>
+              </div>
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: '20px' }}>
+              <button className="modal-confirm-btn" style={{ width: '100%' }} onClick={() => setLinkInfoModal(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showExportModal && (() => {
         // Filter columns by download restrictions
@@ -3389,25 +3510,29 @@ export default function RegisterPage() {
 
             <div className="row-detail-body">
               {(() => {
+                const modalColumns = (isPreviewSelectedColumns && selectedColumns.size > 0)
+                  ? columns.filter(col => selectedColumns.has(col.id))
+                  : columns;
+
                 const handleDetailKeyDown = (e: React.KeyboardEvent, currentId: number) => {
-                  const currentIndex = columns.findIndex(c => c.id === currentId);
+                  const currentIndex = modalColumns.findIndex(c => c.id === currentId);
                   
                   if (e.key === 'Enter' || (e.key === 'ArrowDown' && (e.target as HTMLElement).tagName !== 'SELECT')) {
                     e.preventDefault();
-                    const nextCol = columns[currentIndex + 1];
+                    const nextCol = modalColumns[currentIndex + 1];
                     if (nextCol) {
                       detailInputRefs.current.get(nextCol.id)?.focus();
                     }
                   } else if (e.key === 'ArrowUp' && (e.target as HTMLElement).tagName !== 'SELECT') {
                     e.preventDefault();
-                    const prevCol = columns[currentIndex - 1];
+                    const prevCol = modalColumns[currentIndex - 1];
                     if (prevCol) {
                       detailInputRefs.current.get(prevCol.id)?.focus();
                     }
                   }
                 };
 
-                return columns.map((col) => {
+                return modalColumns.map((col) => {
                   const colKey = col.id.toString();
                   const val = detailEdits[colKey] ?? '';
                   const isFieldEditable = isRowEditable && (!_editableColumnIds || _editableColumnIds.has(col.id)) && col.type !== 'auto_increment' && col.type !== 'formula';
@@ -3705,10 +3830,14 @@ export default function RegisterPage() {
                   onClick={async () => {
                     if (!detailViewEntry) return;
 
+                    const modalColumns = (isPreviewSelectedColumns && selectedColumns.size > 0)
+                      ? columns.filter(col => selectedColumns.has(col.id))
+                      : columns;
+
                     const errors: Record<string, string | null> = {};
                     let hasErrors = false;
 
-                    columns.forEach(col => {
+                    modalColumns.forEach(col => {
                       // Fallback to existing value if not edited in this session
                       const val = detailEdits[col.id.toString()] ?? detailViewEntry.cells?.[col.id.toString()] ?? '';
                       

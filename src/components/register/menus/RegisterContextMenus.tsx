@@ -278,9 +278,21 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
                 <button className="context-item danger" onClick={() => { if (confirm('Clear all data?')) clearColumnDataMutation.mutate(colMenuId); }}>
                   <Eraser size={16} /> Clear Column Data
                 </button>
-                <button className="context-item danger" onClick={() => { if (confirm('Delete column?')) deleteColumnMutation.mutate(colMenuId); }}>
-                  <Trash2 size={16} /> Delete Column
-                </button>
+                {columns.find((c) => c.id === colMenuId)?.type !== 'formula' ? (
+                  <button className="context-item danger" onClick={() => { if (confirm('Delete column?')) deleteColumnMutation.mutate(colMenuId); }}>
+                    <Trash2 size={16} /> Delete Column
+                  </button>
+                ) : (
+                  <button 
+                    className="context-item danger" 
+                    disabled 
+                    style={{ opacity: 0.5, cursor: 'not-allowed' }} 
+                    title="Formula columns cannot be deleted"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Trash2 size={16} /> Delete Column
+                  </button>
+                )}
               </>
             )}
           </div>

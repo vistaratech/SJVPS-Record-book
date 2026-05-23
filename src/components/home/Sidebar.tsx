@@ -78,8 +78,23 @@ export const Sidebar = memo(function Sidebar({
   });
 
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showVersionModal, setShowVersionModal] = useState(false);
-  const [versionTab, setVersionTab] = useState<'1.3.1' | '1.2'>('1.3.1');
+  const [showVersionModal, setShowVersionModal] = useState(() => {
+    try {
+      return localStorage.getItem('seen_version_1.5') !== 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [versionTab, setVersionTab] = useState<'1.5' | '1.3.1' | '1.2'>('1.5');
+
+  const handleCloseVersionModal = useCallback(() => {
+    setShowVersionModal(false);
+    try {
+      localStorage.setItem('seen_version_1.5', 'true');
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
 
   const notifications = useMemo(() => {
     if (!register?.entries || register.entries.length < 2) return [];
@@ -647,7 +662,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.3.1');
+                  setVersionTab('1.5');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -656,9 +671,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.3.1"
+                title="View what's new in v1.5"
               >
-                v1.3.1
+                v1.5
               </span>
             </span>
           </div>
@@ -813,7 +828,7 @@ export const Sidebar = memo(function Sidebar({
 
       {/* ── Version Updates Modal ── */}
       {showVersionModal && (
-        <div className="modal-overlay" onClick={() => setShowVersionModal(false)}>
+        <div className="modal-overlay" onClick={handleCloseVersionModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', borderRadius: '16px', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -826,7 +841,7 @@ export const Sidebar = memo(function Sidebar({
                 </div>
               </div>
               <button 
-                onClick={() => setShowVersionModal(false)}
+                onClick={handleCloseVersionModal}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#64748b', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -837,6 +852,24 @@ export const Sidebar = memo(function Sidebar({
 
             {/* Version Tabs */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+              <button
+                onClick={() => setVersionTab('1.5')}
+                style={{
+                  flex: 1,
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.5' ? 'white' : 'transparent',
+                  color: versionTab === '1.5' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.5' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                v1.5 (Current)
+              </button>
               <button
                 onClick={() => setVersionTab('1.3.1')}
                 style={{
@@ -853,7 +886,7 @@ export const Sidebar = memo(function Sidebar({
                   boxShadow: versionTab === '1.3.1' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                 }}
               >
-                v1.3.1 (Current)
+                v1.3.1
               </button>
               <button
                 onClick={() => setVersionTab('1.2')}
@@ -871,12 +904,84 @@ export const Sidebar = memo(function Sidebar({
                   boxShadow: versionTab === '1.2' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                 }}
               >
-                v1.2 (Previous)
+                v1.2
               </button>
             </div>
             
-            {versionTab === '1.3.1' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {versionTab === '1.5' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 23, 2026</span>
+                
+                {/* Feature 1: Link Details Modal */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>View Link Details</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Click the Link icon in the column header to see exactly which register and column this column is connected to, and whether it is sending (From) or receiving (To) data.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: Auto Link Sync */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Automatic Entry Copy on Linking</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      When you link two columns, all existing entries from the source column are automatically copied over to the destination register's column matching row numbers. No manual copying needed!
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 3: S.No Column Spacing, Hover & Click Area Enhancements */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>S.No Column Improvements</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      • Widened the serial number column and reduced the gap between the number and checkbox for a cleaner layout.<br />
+                      • The serial number is centered. The checkbox and options menu only show up when you hover directly over the S.No cell, or if a row is selected.<br />
+                      • Clicking anywhere in the S.No cell area opens the row details modal (previously you had to click exactly on the number).
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 4: Keyboard Navigation Caret Navigation */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Cell Editing Navigation Fix</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      When you are typing inside a cell, pressing Left or Right arrow keys will move your cursor inside the text itself. It will no longer jump to the adjacent cell and interrupt your typing.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 5: Formula Integrity & Protection */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Formula Column Protection & Auto-Update</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      • Formula columns are locked to prevent accidental deletion.<br />
+                      • When renaming a column, all formulas using that column update automatically. The selected columns in your formulas and builder are preserved and do not get lost (only the name is updated).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : versionTab === '1.3.1' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 22, 2026</span>
                 
                 {/* Feature 0: Rapid Saving & Ctrl+S Hotkey */}
@@ -945,7 +1050,7 @@ export const Sidebar = memo(function Sidebar({
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 20, 2026</span>
                 
                 {/* Feature 1 */}
@@ -1004,7 +1109,7 @@ export const Sidebar = memo(function Sidebar({
 
             <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
               <button 
-                onClick={() => setShowVersionModal(false)}
+                onClick={handleCloseVersionModal}
                 style={{
                   background: 'linear-gradient(135deg, var(--navy), var(--navy-light))',
                   color: 'white',

@@ -1894,8 +1894,8 @@ a {
 }
 
 .spreadsheet th.serial {
-  width: 60px;
-  min-width: 60px;
+  width: 64px;
+  min-width: 64px;
   text-align: center;
   cursor: default;
   position: sticky;
@@ -2028,8 +2028,8 @@ a {
   font-size: 12px;
   font-family: 'Inter', sans-serif;
   background: var(--surface);
-  width: 60px;
-  min-width: 60px;
+  width: 64px;
+  min-width: 64px;
   position: sticky;
   left: 0;
   z-index: 11;
@@ -8542,15 +8542,76 @@ body.modal-open {
 
 .drag-fill-target { outline: 2px dashed #3b82f6 !important; background: rgba(59, 130, 246, 0.1) !important; }
 
-/* ═══════════ ROW SELECTION ═══════════ */
 .serial-inner {
   display: flex;
   align-items: center;
-  gap: 8px;
   justify-content: center;
+  gap: 2px;
   width: 100%;
   height: 100%;
   padding: 0 4px;
+  position: relative;
+}
+
+/* By default, hide row menu button and row checkbox in tbody rows */
+tbody tr .serial-inner .row-menu-btn,
+tbody tr .serial-inner .row-select-checkbox {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  position: absolute;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+tbody tr .serial-inner .row-menu-btn {
+  left: 1px;
+}
+tbody tr .serial-inner .row-select-checkbox {
+  left: 15px;
+}
+
+/* On hover, selection, focus, or menu open, show them */
+tbody td.serial:hover .serial-inner,
+tbody tr.row-selected .serial-inner,
+tbody tr .serial-inner:focus-within {
+  justify-content: flex-start;
+}
+
+tbody td.serial:hover .serial-inner .row-menu-btn,
+tbody tr.row-selected .serial-inner .row-menu-btn,
+tbody tr .serial-inner:focus-within .row-menu-btn,
+tbody tr .row-menu-btn.menu-open {
+  opacity: 1 !important;
+  pointer-events: auto;
+  visibility: visible;
+  position: static;
+}
+
+tbody td.serial:hover .serial-inner .row-select-checkbox,
+tbody tr.row-selected .serial-inner .row-select-checkbox,
+tbody tr .serial-inner:focus-within .row-select-checkbox,
+tbody tr .row-select-checkbox:checked,
+tbody tr .row-select-checkbox:indeterminate {
+  opacity: 1 !important;
+  pointer-events: auto;
+  visibility: visible;
+  position: static;
+}
+
+.serial-inner .row-menu-btn {
+  width: 14px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  color: var(--muted-light);
 }
 
 .row-select-checkbox {
@@ -8584,8 +8645,6 @@ thead .row-select-checkbox:indeterminate {
 
 .serial-number {
   cursor: pointer;
-  flex: 1;
-  text-align: center;
 }
 
 /* Selected row highlight */

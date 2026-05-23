@@ -129,7 +129,7 @@ export interface RegisterSummary {
 export interface Column {
   id: number; registerId: number; name: string; type: string; position: number;
   dropdownOptions?: string[]; formula?: string; width?: number; summary?: string;
-  linkedTo?: { registerId: number; columnId: number };
+  linkedTo?: { registerId: number; columnId: number; role?: 'source' | 'target' };
   mandatory?: boolean;
   unique?: boolean;
 }
@@ -1340,6 +1340,9 @@ export async function deleteColumn(registerId: number, columnId: number): Promis
     const reg = await getRegDoc(registerId);
     const col = reg.columns.find(c => c.id.toString() === columnId.toString());
     if (!col) return reg;
+    if (col.type === 'formula') {
+      throw new Error('Formula columns cannot be deleted');
+    }
     const colName = col.name;
 
     // Collect cell data for this column before removing
@@ -1418,8 +1421,21 @@ export async function renameColumn(registerId: number, columnId: number, newName
     const oldName = col.name;
     col.name = newName;
     updateColumnSymbol(col, col.type);
+    const finalNewName = col.name;
+
+    // Update any formulas referencing this column name
+    if (oldName !== finalNewName) {
+      const escapedOldName = oldName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const regex = new RegExp(`\\{${escapedOldName}\\}`, 'gi');
+      reg.columns.forEach((c) => {
+        if (c.type === 'formula' && c.formula) {
+          c.formula = c.formula.replace(regex, `{${finalNewName}}`);
+        }
+      });
+    }
+
     await saveRegDocImmediate(reg);
-    await logAction(reg.businessId, 'Rename Column', `Renamed column "${oldName}" to "${newName}" in "${reg.name}"`, { registerId, registerName: reg.name });
+    await logAction(reg.businessId, 'Rename Column', `Renamed column "${oldName}" to "${finalNewName}" in "${reg.name}"`, { registerId, registerName: reg.name });
     return reg;
   });
 }
@@ -1940,20 +1956,56 @@ export async function linkColumn(
   targetRegisterId: number,
   targetColumnId: number
 ): Promise<void> {
-  // Update register 1
+  // 1. Fetch source register to extract the column's entries
+  let sourceEntriesData: { rowNumber: number; value: string }[] = [];
+  
   await runQueuedMutation(registerId, async () => {
     const reg = await getRegDoc(registerId);
     const col = reg.columns.find(c => c.id === columnId);
-    if (col) col.linkedTo = { registerId: targetRegisterId, columnId: targetColumnId };
-    await saveRegDocImmediate(reg);
+    if (col) {
+      col.linkedTo = { registerId: targetRegisterId, columnId: targetColumnId, role: 'source' };
+      // Gather existing values
+      const colIdStr = columnId.toString();
+      reg.entries.forEach(e => {
+        const val = e.cells?.[colIdStr];
+        if (val !== undefined) {
+          sourceEntriesData.push({ rowNumber: e.rowNumber, value: val });
+        }
+      });
+      await saveRegDocImmediate(reg);
+    }
   });
 
-  // Update register 2
+  // 2. Update target register: set the metadata and copy the entries
   await runQueuedMutation(targetRegisterId, async () => {
     const reg = await getRegDoc(targetRegisterId);
     const col = reg.columns.find(c => c.id === targetColumnId);
-    if (col) col.linkedTo = { registerId, columnId };
-    await saveRegDocImmediate(reg);
+    if (col) {
+      col.linkedTo = { registerId, columnId, role: 'target' };
+      
+      const targetColIdStr = targetColumnId.toString();
+      sourceEntriesData.forEach(({ rowNumber, value }) => {
+        let targetEntry = reg.entries.find(e => e.rowNumber === rowNumber);
+        if (!targetEntry) {
+          targetEntry = {
+            id: generateId(),
+            registerId: targetRegisterId,
+            rowNumber,
+            cells: {},
+            createdAt: new Date().toISOString(),
+            pageIndex: 0
+          };
+          reg.entries.push(targetEntry);
+        }
+        if (!targetEntry.cells) targetEntry.cells = {};
+        targetEntry.cells[targetColIdStr] = value;
+      });
+      
+      // Update target register entry count
+      reg.entryCount = reg.entries.length;
+      
+      await saveRegDocImmediate(reg);
+    }
   });
 }
 

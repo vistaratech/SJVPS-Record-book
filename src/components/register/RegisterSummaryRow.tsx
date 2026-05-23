@@ -132,9 +132,9 @@ export const RegisterSummaryRow: React.FC<RegisterSummaryRowProps> = ({
             position: 'sticky',
             left: 0,
             zIndex: 12,
-            width: 60,
-            minWidth: 60,
-            maxWidth: 60
+            width: 64,
+            minWidth: 64,
+            maxWidth: 64
           }}
         >
           {canEdit && (
