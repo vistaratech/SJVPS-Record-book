@@ -80,17 +80,17 @@ export const Sidebar = memo(function Sidebar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(() => {
     try {
-      return localStorage.getItem('seen_version_1.5') !== 'true';
+      return localStorage.getItem('seen_version_1.5.1') !== 'true';
     } catch {
       return false;
     }
   });
-  const [versionTab, setVersionTab] = useState<'1.5' | '1.3.1' | '1.2'>('1.5');
+  const [versionTab, setVersionTab] = useState<'1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.5.1');
 
   const handleCloseVersionModal = useCallback(() => {
     setShowVersionModal(false);
     try {
-      localStorage.setItem('seen_version_1.5', 'true');
+      localStorage.setItem('seen_version_1.5.1', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -662,7 +662,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.5');
+                  setVersionTab('1.5.1');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -671,9 +671,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.5"
+                title="View what's new in v1.5.1"
               >
-                v1.5
+                v1.5.1
               </span>
             </span>
           </div>
@@ -851,15 +851,33 @@ export const Sidebar = memo(function Sidebar({
             </div>
 
             {/* Version Tabs */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+              <button
+                onClick={() => setVersionTab('1.5.1')}
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.5.1' ? 'white' : 'transparent',
+                  color: versionTab === '1.5.1' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.5.1' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                v1.5.1 (New)
+              </button>
               <button
                 onClick={() => setVersionTab('1.5')}
                 style={{
                   flex: 1,
-                  padding: '6px 12px',
+                  padding: '6px 10px',
                   borderRadius: '6px',
                   border: 'none',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -868,16 +886,16 @@ export const Sidebar = memo(function Sidebar({
                   boxShadow: versionTab === '1.5' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                 }}
               >
-                v1.5 (Current)
+                v1.5
               </button>
               <button
                 onClick={() => setVersionTab('1.3.1')}
                 style={{
                   flex: 1,
-                  padding: '6px 12px',
+                  padding: '6px 10px',
                   borderRadius: '6px',
                   border: 'none',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -892,10 +910,10 @@ export const Sidebar = memo(function Sidebar({
                 onClick={() => setVersionTab('1.2')}
                 style={{
                   flex: 1,
-                  padding: '6px 12px',
+                  padding: '6px 10px',
                   borderRadius: '6px',
                   border: 'none',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -908,7 +926,50 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.5' ? (
+            {versionTab === '1.5.1' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 23, 2026</span>
+                
+                {/* Feature 1: Live Mirror Sync */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Dynamic Column Mirroring & Parity</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      The <strong>To (Destination) Column</strong> now displays the exact state of the <strong>From (Source) Column</strong>. Any structural or content updates (Renaming, Column Type modifications, Dropdown option additions, or cell edits/deletions) instantly reflect across the link.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: Lock Indicators and Bright Headers */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Full Column Visibility & Lock Icons</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Target linked columns are kept completely bright and clear (no faded styling). A clear Lock icon 🔒 in the header visually marks it as read-only to prevent accidental edits, with a helpful warning toast if clicked.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 3: Connection Unlinking */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Instant Link Disconnection (Unlink Option)</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      You can now detach any linked columns. Clicking the 🔗 Link Details icon opens a premium modal with a <strong>🗑️ Unlink Column</strong> button. Disconnecting a link frees the To column for manual edits, keeping all existing cell values safe.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : versionTab === '1.5' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 23, 2026</span>
                 

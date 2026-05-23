@@ -13,7 +13,7 @@ import {
   evaluateFormula,
   generateShareLink, addSharedUser, removeSharedUser,
   subscribeToMutationStatus, updateEntriesOrder, flushAllPendingWrites,
-  updateEntryCellStyles,
+  updateEntryCellStyles, unlinkColumn,
   formatDateToDDMMYYYY,
   type Entry, type CellStyle, type HistoryEntry,
 } from '../lib/api';
@@ -25,7 +25,7 @@ import {
   Hash, FlaskConical, Pin, IndianRupee,
   Mail, Phone, Globe, Star, CheckSquare, Image as ImageIcon, ArrowLeft,
   Search, FileText, Download, ListOrdered, Maximize2, AlertCircle,
-  X, Link as LinkIcon, Info, AlertTriangle, Trash2, ZoomIn, ZoomOut, Bell, Clock
+  X, Link as LinkIcon, Info, AlertTriangle, Trash2, ZoomIn, ZoomOut, Bell, Clock, Lock
 } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { RegisterHeader } from '../components/register/RegisterHeader';
@@ -298,7 +298,10 @@ export default function RegisterPage() {
     registerName: string;
     columnName: string;
     role: 'source' | 'target' | 'unknown';
+    columnId: number;
+    linkedRegisterId?: number;
   } | null>(null);
+  const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
   
   // Smooth column drag-and-drop reordering
   const [draggedColumnId, setDraggedColumnId] = useState<number | null>(null);
@@ -1156,6 +1159,21 @@ export default function RegisterPage() {
         toast.error('Failed to delete column');
       }
     },
+  });
+
+  const unlinkColumnMutation = useMutation({
+    mutationFn: (colId: number) => unlinkColumn(registerId, colId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['register', registerId] });
+      if (linkInfoModal?.linkedRegisterId) {
+        queryClient.invalidateQueries({ queryKey: ['register', linkInfoModal.linkedRegisterId] });
+      }
+      toast.success('Column link successfully removed');
+      setLinkInfoModal(null);
+    },
+    onError: () => {
+      toast.error('Failed to remove column link');
+    }
   });
 
   const renameColumnMutation = useMutation({
@@ -2108,6 +2126,12 @@ export default function RegisterPage() {
       return false;
     }
 
+    // ── Linked Target Column Read-only ──
+    if ((col as any).linkedTo && (col as any).linkedTo.role === 'target') {
+      toast.error(`"${col.name}" is a linked column (To). Data comes from the source register automatically.`);
+      return false;
+    }
+
     // ── System Columns Read-only ──
     if (col.type === 'auto_increment' || col.type === 'formula') return;
 
@@ -2725,7 +2749,9 @@ export default function RegisterPage() {
       setLinkInfoModal({
         registerName: reg.name,
         columnName: targetCol ? targetCol.name : 'Unknown Column',
-        role: col.linkedTo.role || 'unknown'
+        role: col.linkedTo.role || 'unknown',
+        columnId: col.id,
+        linkedRegisterId: col.linkedTo.registerId
       });
     } catch (err) {
       console.error(err);
@@ -2953,22 +2979,29 @@ export default function RegisterPage() {
                         )}
                         {col.type === 'formula' && <span className="col-formula-badge" title={col.formula}>Fx</span>}
                         {col.linkedTo && (
-                          <button 
-                            onClick={(e) => handleLinkIconClick(e, col)}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            title="Click to view link details"
-                            style={{ 
-                              background: 'none', 
-                              border: 'none', 
-                              padding: 0, 
-                              display: 'inline-flex', 
-                              alignItems: 'center', 
-                              cursor: 'pointer',
-                              marginLeft: '4px'
-                            }}
-                          >
-                            <LinkIcon size={12} color="var(--primary)" />
-                          </button>
+                          <>
+                            <button 
+                              onClick={(e) => handleLinkIconClick(e, col)}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              title="Click to view link details"
+                              style={{ 
+                                background: 'none', 
+                                border: 'none', 
+                                padding: 0, 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                cursor: 'pointer',
+                                marginLeft: '4px'
+                              }}
+                            >
+                              <LinkIcon size={12} color="var(--primary)" />
+                            </button>
+                            {col.linkedTo.role === 'target' && (
+                              <span title="Read-only — data synced from source" style={{ marginLeft: '2px', display: 'inline-flex', alignItems: 'center', opacity: 0.6 }}>
+                                <Lock size={10} color="var(--muted)" />
+                              </span>
+                            )}
+                          </>
                         )}
                       </span>
                       {sortColId === col.id && sortDir && (
@@ -3257,7 +3290,7 @@ export default function RegisterPage() {
       />
 
       {linkInfoModal && (
-        <div className="modal-overlay" onClick={() => setLinkInfoModal(null)}>
+        <div className="modal-overlay" onClick={() => { setLinkInfoModal(null); setShowUnlinkConfirm(false); }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
             <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <LinkIcon size={18} color="var(--primary)" /> Link Connection Details
@@ -3294,9 +3327,61 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="modal-actions" style={{ marginTop: '20px' }}>
-              <button className="modal-confirm-btn" style={{ width: '100%' }} onClick={() => setLinkInfoModal(null)}>Close</button>
-            </div>
+            {showUnlinkConfirm ? (
+              <div style={{ 
+                margin: '16px 0 0 0', 
+                padding: '14px', 
+                background: 'rgba(239, 68, 68, 0.06)', 
+                border: '1px solid rgba(239, 68, 68, 0.2)', 
+                borderRadius: '8px'
+              }}>
+                <h4 style={{ color: '#dc2626', fontSize: '13px', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                  <AlertTriangle size={16} /> Are you absolutely sure?
+                </h4>
+                <p style={{ fontSize: '12px', color: 'var(--text-main)', margin: '0 0 12px 0', lineHeight: '1.4' }}>
+                  Unlinking will disconnect the live data sync. The columns will stop mirroring each other. Existing values will remain, but the <strong>To Column</strong> will be unlocked for manual edits again.
+                </p>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button 
+                    className="modal-confirm-btn" 
+                    style={{ flex: 1, background: '#dc2626', borderColor: '#dc2626', color: '#fff', fontSize: '12px', padding: '8px', fontWeight: 600 }}
+                    onClick={() => unlinkColumnMutation.mutate(linkInfoModal.columnId)}
+                    disabled={unlinkColumnMutation.isPending}
+                  >
+                    {unlinkColumnMutation.isPending ? 'Unlinking...' : 'Yes, Unlink'}
+                  </button>
+                  <button 
+                    className="modal-cancel-btn" 
+                    style={{ flex: 1, fontSize: '12px', padding: '8px' }}
+                    onClick={() => setShowUnlinkConfirm(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="modal-actions" style={{ marginTop: '20px', display: 'flex', gap: '8px' }}>
+                <button 
+                  className="modal-cancel-btn" 
+                  style={{ 
+                    flex: 1, 
+                    borderColor: '#ef4444', 
+                    color: '#ef4444', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: '6px',
+                    backgroundColor: 'transparent'
+                  }} 
+                  onClick={() => setShowUnlinkConfirm(true)}
+                >
+                  <Trash2 size={16} /> Unlink Column
+                </button>
+                <button className="modal-confirm-btn" style={{ flex: 1 }} onClick={() => setLinkInfoModal(null)}>
+                  Close
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -625,6 +625,74 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
     needsSave = true;
   }
 
+  // Dynamic sync for target linked columns to guarantee perfect parity with source
+  for (const col of reg.columns) {
+    if (col.linkedTo && col.linkedTo.role === 'target') {
+      try {
+        const sourceReg = await getRegDoc(col.linkedTo.registerId);
+        const sourceCol = sourceReg.columns.find(c => c.id === col.linkedTo!.columnId);
+        if (sourceCol) {
+          // Sync column properties
+          if (col.name !== sourceCol.name) {
+            col.name = sourceCol.name;
+            needsSave = true;
+          }
+          if (col.type !== sourceCol.type) {
+            col.type = sourceCol.type;
+            needsSave = true;
+          }
+          if (JSON.stringify(col.dropdownOptions || null) !== JSON.stringify(sourceCol.dropdownOptions || null)) {
+            col.dropdownOptions = sourceCol.dropdownOptions;
+            needsSave = true;
+          }
+
+          // Sync cell values
+          const sourceColIdStr = sourceCol.id.toString();
+          const targetColIdStr = col.id.toString();
+          sourceReg.entries.forEach(sourceEntry => {
+            const val = sourceEntry.cells?.[sourceColIdStr];
+            let targetEntry = reg.entries.find(e => e.rowNumber === sourceEntry.rowNumber);
+            if (!targetEntry) {
+              targetEntry = {
+                id: generateId(),
+                registerId: registerId,
+                rowNumber: sourceEntry.rowNumber,
+                cells: {},
+                createdAt: new Date().toISOString(),
+                pageIndex: 0
+              };
+              reg.entries.push(targetEntry);
+              needsSave = true;
+            }
+            if (!targetEntry.cells) {
+              targetEntry.cells = {};
+              needsSave = true;
+            }
+            if (targetEntry.cells[targetColIdStr] !== val) {
+              if (val === undefined) {
+                delete targetEntry.cells[targetColIdStr];
+              } else {
+                targetEntry.cells[targetColIdStr] = val;
+              }
+              needsSave = true;
+            }
+          });
+
+          // Clear any target column values for rows that do not exist in the source register
+          const maxSourceRow = Math.max(...sourceReg.entries.map(e => e.rowNumber), 0);
+          reg.entries.forEach(targetEntry => {
+            if (targetEntry.rowNumber > maxSourceRow && targetEntry.cells?.[targetColIdStr] !== undefined) {
+              delete targetEntry.cells[targetColIdStr];
+              needsSave = true;
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Failed to dynamically sync linked target column:', err);
+      }
+    }
+  }
+
   if (needsSave) {
     // Save the corrected register back to Firestore immediately so it's permanently fixed
     await saveRegDocImmediate(reg);
@@ -1922,6 +1990,16 @@ export async function updateEntryDirect(
       : `Updated row #${entry.rowNumber} in "${reg.name}"`;
     await logAction(reg.businessId, 'Edit Row', details, { registerId, registerName: reg.name, entryId });
 
+    // ── Live Sync: push changes to linked target columns ──
+    for (const [colIdStr, val] of Object.entries(safeCells)) {
+      if ((oldCells[colIdStr] || '') === (val || '')) continue; // skip unchanged
+      const col = reg.columns.find(c => c.id.toString() === colIdStr);
+      if (col?.linkedTo && col.linkedTo.role === 'source') {
+        // Fire-and-forget: sync to the target register asynchronously
+        _syncLinkedColumn(col.linkedTo.registerId, col.linkedTo.columnId, entry.rowNumber, val);
+      }
+    }
+
     return entry;
   });
 }
@@ -1956,14 +2034,21 @@ export async function linkColumn(
   targetRegisterId: number,
   targetColumnId: number
 ): Promise<void> {
-  // 1. Fetch source register to extract the column's entries
+  // 1. Fetch source register to extract the column's entries and metadata
   let sourceEntriesData: { rowNumber: number; value: string }[] = [];
+  let sourceColName = '';
+  let sourceColType = '';
+  let sourceColDropdownOptions: string[] | undefined;
   
   await runQueuedMutation(registerId, async () => {
     const reg = await getRegDoc(registerId);
     const col = reg.columns.find(c => c.id === columnId);
     if (col) {
       col.linkedTo = { registerId: targetRegisterId, columnId: targetColumnId, role: 'source' };
+      // Capture source column metadata
+      sourceColName = col.name;
+      sourceColType = col.type;
+      sourceColDropdownOptions = col.dropdownOptions;
       // Gather existing values
       const colIdStr = columnId.toString();
       reg.entries.forEach(e => {
@@ -1976,12 +2061,16 @@ export async function linkColumn(
     }
   });
 
-  // 2. Update target register: set the metadata and copy the entries
+  // 2. Update target register: set the metadata, sync name/type, and copy the entries
   await runQueuedMutation(targetRegisterId, async () => {
     const reg = await getRegDoc(targetRegisterId);
     const col = reg.columns.find(c => c.id === targetColumnId);
     if (col) {
       col.linkedTo = { registerId, columnId, role: 'target' };
+      // Sync column name and type from source
+      if (sourceColName) col.name = sourceColName;
+      if (sourceColType) col.type = sourceColType;
+      if (sourceColDropdownOptions) col.dropdownOptions = sourceColDropdownOptions;
       
       const targetColIdStr = targetColumnId.toString();
       sourceEntriesData.forEach(({ rowNumber, value }) => {
@@ -2003,11 +2092,46 @@ export async function linkColumn(
       
       // Update target register entry count
       reg.entryCount = reg.entries.length;
-      
       await saveRegDocImmediate(reg);
     }
   });
 }
+
+
+export async function unlinkColumn(
+  registerId: number,
+  columnId: number
+): Promise<void> {
+  let targetRegisterId: number | undefined;
+  let targetColumnId: number | undefined;
+
+  // 1. Clear linkedTo on current column
+  await runQueuedMutation(registerId, async () => {
+    const reg = await getRegDoc(registerId);
+    const col = reg.columns.find(c => c.id === columnId);
+    if (col && col.linkedTo) {
+      targetRegisterId = col.linkedTo.registerId;
+      targetColumnId = col.linkedTo.columnId;
+      delete col.linkedTo;
+      await saveRegDocImmediate(reg);
+    }
+  });
+
+  // 2. Clear linkedTo on target/other column if found
+  if (targetRegisterId !== undefined && targetColumnId !== undefined) {
+    const finalTargetRegisterId: number = targetRegisterId;
+    const finalTargetColumnId: number = targetColumnId;
+    await runQueuedMutation(finalTargetRegisterId, async () => {
+      const reg = await getRegDoc(finalTargetRegisterId);
+      const col = reg.columns.find(c => c.id === finalTargetColumnId);
+      if (col) {
+        delete col.linkedTo;
+        await saveRegDocImmediate(reg);
+      }
+    });
+  }
+}
+
 
 
 export async function updateEntryCellStyles(registerId: number, entryId: number, cellStyles: Record<string, CellStyle>): Promise<Entry> {
