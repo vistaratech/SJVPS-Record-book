@@ -2771,3 +2771,62 @@ export async function isBackupDue(businessId: number): Promise<boolean> {
   const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
   return lastBackup < threeDaysAgo;
 }
+
+/**
+ * Compress and resize an image before uploading to stay under Firestore's 1MB limit.
+ * Resizes the image to a max width/height of 1000px and applies JPEG compression (quality 0.7).
+ */
+export function compressImage(file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('File is not an image'));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Bounding box calculation
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(e.target?.result as string); // Fallback to raw base64
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        // Convert to highly compressed JPEG base64
+        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedBase64);
+      };
+      img.onerror = () => {
+        reject(new Error('Image failed to load'));
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => {
+      reject(new Error('File reading failed'));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+

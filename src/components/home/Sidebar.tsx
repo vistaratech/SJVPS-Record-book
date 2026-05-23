@@ -80,17 +80,17 @@ export const Sidebar = memo(function Sidebar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(() => {
     try {
-      return localStorage.getItem('seen_version_1.5.1') !== 'true';
+      return localStorage.getItem('seen_version_1.5.2') !== 'true';
     } catch {
       return false;
     }
   });
-  const [versionTab, setVersionTab] = useState<'1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.5.1');
+  const [versionTab, setVersionTab] = useState<'1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.5.2');
 
   const handleCloseVersionModal = useCallback(() => {
     setShowVersionModal(false);
     try {
-      localStorage.setItem('seen_version_1.5.1', 'true');
+      localStorage.setItem('seen_version_1.5.2', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -662,7 +662,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.5.1');
+                  setVersionTab('1.5.2');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -671,9 +671,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.5.1"
+                title="View what's new in v1.5.2"
               >
-                v1.5.1
+                v1.5.2
               </span>
             </span>
           </div>
@@ -851,15 +851,33 @@ export const Sidebar = memo(function Sidebar({
             </div>
 
             {/* Version Tabs */}
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+              <button
+                onClick={() => setVersionTab('1.5.2')}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.5.2' ? 'white' : 'transparent',
+                  color: versionTab === '1.5.2' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.5.2' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                v1.5.2 (New)
+              </button>
               <button
                 onClick={() => setVersionTab('1.5.1')}
                 style={{
                   flex: 1,
-                  padding: '6px 10px',
+                  padding: '6px 4px',
                   borderRadius: '6px',
                   border: 'none',
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -868,16 +886,16 @@ export const Sidebar = memo(function Sidebar({
                   boxShadow: versionTab === '1.5.1' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                 }}
               >
-                v1.5.1 (New)
+                v1.5.1
               </button>
               <button
                 onClick={() => setVersionTab('1.5')}
                 style={{
                   flex: 1,
-                  padding: '6px 10px',
+                  padding: '6px 4px',
                   borderRadius: '6px',
                   border: 'none',
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -892,10 +910,10 @@ export const Sidebar = memo(function Sidebar({
                 onClick={() => setVersionTab('1.3.1')}
                 style={{
                   flex: 1,
-                  padding: '6px 10px',
+                  padding: '6px 4px',
                   borderRadius: '6px',
                   border: 'none',
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -910,10 +928,10 @@ export const Sidebar = memo(function Sidebar({
                 onClick={() => setVersionTab('1.2')}
                 style={{
                   flex: 1,
-                  padding: '6px 10px',
+                  padding: '6px 4px',
                   borderRadius: '6px',
                   border: 'none',
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -926,7 +944,38 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.5.1' ? (
+            {versionTab === '1.5.2' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 23, 2026 (Latest)</span>
+                
+                {/* Feature 1: Intelligent Photo Compression */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Client-Side Image Compression</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      <strong>The Problem:</strong> Mobile photos are huge (2MB to 10MB) and exceeded Firestore's strict 1MB document size limit, causing image uploads to fail or hang silently.<br />
+                      <strong>The Solution:</strong> Implemented canvas-based compression in the browser. Large images are resized to 1000px and highly compressed to ~100KB instantly. Photos upload immediately, load faster, and will never crash the database!
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: High Parity Sync in Rows */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Reliable Photo Save Hooks</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      The compression engine is seamlessly integrated across all four photo upload gateways: direct cell uploads, row details upload, multi-image additions, and preview window additions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : versionTab === '1.5.1' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 23, 2026</span>
                 

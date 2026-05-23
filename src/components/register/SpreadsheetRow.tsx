@@ -1,4 +1,4 @@
-import { evaluateFormula, type Entry, type Column } from '../../lib/api';
+import { evaluateFormula, compressImage, type Entry, type Column } from '../../lib/api';
 import { formatCurrency } from '../../lib/formatters';
 import { Calendar, ChevronDown, Image as ImageIcon, Mail, Phone, Globe, ListOrdered, IndianRupee, Maximize2, Bell } from 'lucide-react';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -746,7 +746,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
                 isEditable ? (
                   <label className="cell-image-upload" title="Upload image" onClick={(e) => e.stopPropagation()}>
                      Add
-                    <input type="file" accept="image/*" className="hidden-file-input" tabIndex={-1} onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => handleCellChange(entry.id, col.id.toString(), ev.target?.result as string); r.readAsDataURL(f); }} />
+                    <input type="file" accept="image/*" className="hidden-file-input" tabIndex={-1} onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; compressImage(f).then(c => handleCellChange(entry.id, col.id.toString(), c)).catch(err => console.error(err)); }} />
                   </label>
                 ) : (
                   <span className="cell-placeholder" style={{ fontSize: '10px', opacity: 0.5 }}>—</span>

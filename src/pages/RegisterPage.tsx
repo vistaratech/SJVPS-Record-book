@@ -13,7 +13,7 @@ import {
   evaluateFormula,
   generateShareLink, addSharedUser, removeSharedUser,
   subscribeToMutationStatus, updateEntriesOrder, flushAllPendingWrites,
-  updateEntryCellStyles, unlinkColumn,
+  updateEntryCellStyles, unlinkColumn, compressImage,
   formatDateToDDMMYYYY,
   type Entry, type CellStyle, type HistoryEntry,
 } from '../lib/api';
@@ -3792,16 +3792,15 @@ export default function RegisterPage() {
                                       onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (file) {
-                                          const reader = new FileReader();
-                                          reader.onload = (rev) => {
-                                            const newImg = rev.target?.result as string;
-                                            setDetailEdits(prev => {
-                                              const current = prev[colKey] ?? detailViewEntry.cells?.[colKey] ?? '';
-                                              const updated = current ? `${current}|||${newImg}` : newImg;
-                                              return { ...prev, [colKey]: updated };
-                                            });
-                                          };
-                                          reader.readAsDataURL(file);
+                                          compressImage(file)
+                                            .then((newImg) => {
+                                              setDetailEdits(prev => {
+                                                const current = prev[colKey] ?? detailViewEntry.cells?.[colKey] ?? '';
+                                                const updated = current ? `${current}|||${newImg}` : newImg;
+                                                return { ...prev, [colKey]: updated };
+                                              });
+                                            })
+                                            .catch(err => console.error(err));
                                         }
                                       }}
                                     />
@@ -3820,11 +3819,11 @@ export default function RegisterPage() {
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
                                       if (file) {
-                                        const reader = new FileReader();
-                                        reader.onload = (rev) => {
-                                          setDetailEdits(prev => ({ ...prev, [colKey]: rev.target?.result as string }));
-                                        };
-                                        reader.readAsDataURL(file);
+                                        compressImage(file)
+                                          .then((newImg) => {
+                                            setDetailEdits(prev => ({ ...prev, [colKey]: newImg }));
+                                          })
+                                          .catch(err => console.error(err));
                                       }
                                     }}
                                   />
@@ -4124,15 +4123,14 @@ export default function RegisterPage() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (re) => {
-                            const newUrl = re.target?.result as string;
-                            const updated = [...urls, newUrl].join('|||');
-                            handleCellChange(previewImage.entryId!, previewImage.colId!, updated);
-                            setPreviewImage({ ...previewImage, url: updated });
-                            setPreviewImageIndex(urls.length);
-                          };
-                          reader.readAsDataURL(file);
+                          compressImage(file)
+                            .then((newUrl) => {
+                              const updated = [...urls, newUrl].join('|||');
+                              handleCellChange(previewImage.entryId!, previewImage.colId!, updated);
+                              setPreviewImage({ ...previewImage, url: updated });
+                              setPreviewImageIndex(urls.length);
+                            })
+                            .catch(err => console.error(err));
                         }
                       }}
                     />
