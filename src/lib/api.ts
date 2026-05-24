@@ -261,6 +261,16 @@ const chunkDoc = (registerId: number, chunkIndex: number) =>
 
 // In-memory cache so reads never hit Firestore after the first load
 const firestoreRegisterCache = new Map<number, RegisterDetail>();
+
+export function clearRegisterCache(registerId?: number): void {
+  if (registerId !== undefined) {
+    firestoreRegisterCache.delete(registerId);
+    console.log(`[Cache] Cleared in-memory cache for register #${registerId}`);
+  } else {
+    firestoreRegisterCache.clear();
+    console.log('[Cache] Cleared all in-memory register caches');
+  }
+}
 // Mutation queue: ensures operations on the same register run serially to prevent race conditions
 const registerMutationQueues = new Map<string | number, Promise<any>>();
 // Tracks how many mutations are currently pending/running globally
@@ -278,6 +288,11 @@ export function subscribeToMutationStatus(callback: (count: number) => void) {
   mutationListeners.add(callback);
   callback(pendingMutationsCount);
   return () => mutationListeners.delete(callback);
+}
+
+/** Direct read of the current pending mutation count (no React render delays) */
+export function getPendingMutationsCount(): number {
+  return pendingMutationsCount;
 }
 
 function updateMutationCount(delta: number) {
@@ -445,6 +460,35 @@ async function saveRegDocImmediate(reg: RegisterDetail): Promise<void> {
 }
 
 /**
+ * Lightweight save for appending: updates ONLY the main doc's entryCount
+ * and writes the affected chunk. Skips rewriting columns/pages/metadata
+ * since only entries changed.
+ */
+async function saveAddedEntryFast(reg: RegisterDetail, newEntryIndex: number): Promise<void> {
+  // Update cache immediately so subsequent mutations see this state
+  firestoreRegisterCache.set(reg.id, reg);
+
+  const entries = reg.entries || [];
+
+  // Update the main doc metadata (entryCount, updatedAt) without rewriting columns etc.
+  const mainDoc: any = JSON.parse(JSON.stringify(reg));
+  mainDoc.entries = [];
+  mainDoc.entryCount = entries.length;
+
+  // Write ONLY the affected chunk
+  const chunkIndex = Math.floor(newEntryIndex / ENTRIES_PER_CHUNK);
+  const chunkStart = chunkIndex * ENTRIES_PER_CHUNK;
+  const chunkEntries = entries.slice(chunkStart, chunkStart + ENTRIES_PER_CHUNK);
+  const cleaned = JSON.parse(JSON.stringify({ entries: chunkEntries }));
+
+  // Parallelize Firestore writes for maximum speed
+  await Promise.all([
+    setDoc(regDoc(reg.id), mainDoc),
+    setDoc(chunkDoc(reg.id, chunkIndex), cleaned)
+  ]);
+}
+
+/**
  * Lightweight save helper for appends: updates the main document and ONLY writes
  * the affected last chunk to Firestore. Bypasses listing existing chunks.
  */
@@ -459,15 +503,17 @@ async function saveAddedEntryOnly(reg: RegisterDetail, newEntryIndex: number): P
   mainDoc.entries = [];
   mainDoc.entryCount = entries.length;
 
-  // Write the main document (metadata + columns + pages, NO entries)
-  await setDoc(regDoc(reg.id), mainDoc);
-
   // Write ONLY the affected last chunk
   const chunkIndex = Math.floor(newEntryIndex / ENTRIES_PER_CHUNK);
   const chunkStart = chunkIndex * ENTRIES_PER_CHUNK;
   const chunkEntries = entries.slice(chunkStart, chunkStart + ENTRIES_PER_CHUNK);
   const cleaned = JSON.parse(JSON.stringify({ entries: chunkEntries }));
-  await setDoc(chunkDoc(reg.id, chunkIndex), cleaned);
+
+  // Parallelize Firestore writes for maximum speed
+  await Promise.all([
+    setDoc(regDoc(reg.id), mainDoc),
+    setDoc(chunkDoc(reg.id, chunkIndex), cleaned)
+  ]);
 }
 
 
@@ -1780,16 +1826,18 @@ export async function addEntry(registerId: number, cells: Record<string, string>
     renumberRows(reg); // Ensure sequence is correct
     reg.entryCount = reg.entries.length;
     reg.updatedAt = new Date().toISOString();
-    await saveAddedEntryOnly(reg, reg.entries.length - 1);
-    const preview = Object.entries(cells).slice(0, 3).map(([id, val]) => {
-      const c = reg.columns.find(col => col.id.toString() === id);
-      return `${c?.name || id}: ${val}`;
-    }).join(', ');
-    await logAction(reg.businessId, 'Add Row', `Added new row to "${reg.name}"${preview ? ` (${preview}...)` : ''}`, { registerId, registerName: reg.name, entryId: entry.id });
+    await saveAddedEntryFast(reg, reg.entries.length - 1);
     return { entry, reg };
   });
 
   const { entry, reg } = result;
+
+  // Fire-and-forget: log action outside the queue lock to avoid blocking subsequent mutations
+  const preview = Object.entries(cells).slice(0, 3).map(([id, val]) => {
+    const c = reg.columns.find(col => col.id.toString() === id);
+    return `${c?.name || id}: ${val}`;
+  }).join(', ');
+  logAction(reg.businessId, 'Add Row', `Added new row to "${reg.name}"${preview ? ` (${preview}...)` : ''}`, { registerId, registerName: reg.name, entryId: entry.id }).catch(() => {});
 
   // Sync linked columns
   for (const [colIdStr, value] of Object.entries(cells)) {
@@ -1936,7 +1984,7 @@ export async function updateEntryDirect(
   entryId: number,
   cells: Record<string, string>
 ): Promise<Entry | null> {
-  return runQueuedMutation(registerId, async () => {
+  const result = await runQueuedMutation(registerId, async () => {
     const reg = await getRegDoc(registerId);
     const entryIndex = reg.entries.findIndex((e) => e.id === entryId);
     if (entryIndex === -1) return null;
@@ -1963,45 +2011,56 @@ export async function updateEntryDirect(
     const chunkStart = chunkIndex * ENTRIES_PER_CHUNK;
     const chunkEntries = reg.entries.slice(chunkStart, chunkStart + ENTRIES_PER_CHUNK);
     const cleaned = JSON.parse(JSON.stringify({ entries: chunkEntries }));
-    await setDoc(chunkDoc(reg.id, chunkIndex), cleaned);
-
-    // Log edit details
-    const changes = Object.entries(safeCells)
-      .filter(([id, val]) => (oldCells[id] || '') !== (val || ''))
-      .map(([id, val]) => {
-        const c = reg.columns.find(col => col.id.toString() === id);
-        const colName = c?.name || id;
-        const oldVal = oldCells[id] || '';
-        const newVal = val || '';
-        const formatVal = (v: string, type?: string) => {
-          if (!v) return '""';
-          if (type === 'image' || v.startsWith('data:image/')) {
-            if (v.includes('|||')) { const count = v.split('|||').length; return `[${count} Image${count > 1 ? 's' : ''}]`; }
-            return '[Image]';
-          }
-          if (v.length > 60) return `"${v.slice(0, 60)}..."`;
-          return `"${v}"`;
-        };
-        return `${colName} was changed from ${formatVal(oldVal, c?.type)} to ${formatVal(newVal, c?.type)}`;
-      }).join(', ');
-
-    const details = changes
-      ? `Updated row #${entry.rowNumber} in "${reg.name}": ${changes}`
-      : `Updated row #${entry.rowNumber} in "${reg.name}"`;
-    await logAction(reg.businessId, 'Edit Row', details, { registerId, registerName: reg.name, entryId });
-
-    // ── Live Sync: push changes to linked target columns ──
-    for (const [colIdStr, val] of Object.entries(safeCells)) {
-      if ((oldCells[colIdStr] || '') === (val || '')) continue; // skip unchanged
-      const col = reg.columns.find(c => c.id.toString() === colIdStr);
-      if (col?.linkedTo && col.linkedTo.role === 'source') {
-        // Fire-and-forget: sync to the target register asynchronously
-        _syncLinkedColumn(col.linkedTo.registerId, col.linkedTo.columnId, entry.rowNumber, val);
-      }
+    try {
+      await setDoc(chunkDoc(reg.id, chunkIndex), cleaned);
+    } catch (err) {
+      entry.cells = oldCells;
+      firestoreRegisterCache.set(reg.id, reg);
+      throw err;
     }
 
-    return entry;
+    return { entry, reg, oldCells, safeCells };
   });
+
+  if (!result) return null;
+  const { entry, reg, oldCells, safeCells } = result;
+
+  // Fire-and-forget: log action outside the queue lock to avoid blocking subsequent mutations
+  const changes = Object.entries(safeCells)
+    .filter(([id, val]) => (oldCells[id] || '') !== (val || ''))
+    .map(([id, val]) => {
+      const c = reg.columns.find(col => col.id.toString() === id);
+      const colName = c?.name || id;
+      const oldVal = oldCells[id] || '';
+      const newVal = val || '';
+      const formatVal = (v: string, type?: string) => {
+        if (!v) return '""';
+        if (type === 'image' || v.startsWith('data:image/')) {
+          if (v.includes('|||')) { const count = v.split('|||').length; return `[${count} Image${count > 1 ? 's' : ''}]`; }
+          return '[Image]';
+        }
+        if (v.length > 60) return `"${v.slice(0, 60)}..."`;
+        return `"${v}"`;
+      };
+      return `${colName} was changed from ${formatVal(oldVal, c?.type)} to ${formatVal(newVal, c?.type)}`;
+    }).join(', ');
+
+  const details = changes
+    ? `Updated row #${entry.rowNumber} in "${reg.name}": ${changes}`
+    : `Updated row #${entry.rowNumber} in "${reg.name}"`;
+  logAction(reg.businessId, 'Edit Row', details, { registerId, registerName: reg.name, entryId }).catch(() => {});
+
+  // ── Live Sync: push changes to linked target columns ──
+  for (const [colIdStr, val] of Object.entries(safeCells)) {
+    if ((oldCells[colIdStr] || '') === (val || '')) continue; // skip unchanged
+    const col = reg.columns.find(c => c.id.toString() === colIdStr);
+    if (col?.linkedTo && col.linkedTo.role === 'source') {
+      // Fire-and-forget: sync to the target register asynchronously
+      _syncLinkedColumn(col.linkedTo.registerId, col.linkedTo.columnId, entry.rowNumber, val);
+    }
+  }
+
+  return entry;
 }
 
 // Internal helper to sync
@@ -2776,11 +2835,19 @@ export async function isBackupDue(businessId: number): Promise<boolean> {
  * Compress and resize an image before uploading to stay under Firestore's 1MB limit.
  * Resizes the image to a max width/height of 1000px and applies JPEG compression (quality 0.7).
  */
-export function compressImage(file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.7): Promise<string> {
+export function compressImage(file: File, maxWidth = 600, maxHeight = 600, quality = 0.5): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {
       reject(new Error('File is not an image'));
       return;
+    }
+
+    // Intelligent quality scaling based on file size to optimize Firestore chunk limits
+    let finalQuality = quality;
+    if (file.size < 50 * 1024) {
+      finalQuality = 0.7; // Keep higher quality for already tiny files (< 50 KB)
+    } else if (file.size > 2 * 1024 * 1024) {
+      finalQuality = 0.4; // Compress more aggressively for huge files (> 2 MB)
     }
 
     const reader = new FileReader();
@@ -2815,7 +2882,7 @@ export function compressImage(file: File, maxWidth = 1000, maxHeight = 1000, qua
 
         ctx.drawImage(img, 0, 0, width, height);
         // Convert to highly compressed JPEG base64
-        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+        const compressedBase64 = canvas.toDataURL('image/jpeg', finalQuality);
         resolve(compressedBase64);
       };
       img.onerror = () => {

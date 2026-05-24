@@ -1,4 +1,5 @@
-import { evaluateFormula, compressImage, type Entry, type Column } from '../../lib/api';
+import { evaluateFormula, type Entry, type Column } from '../../lib/api';
+import { ImageCompressionModule } from '../../lib/imageCompressionModule';
 import { formatCurrency } from '../../lib/formatters';
 import { Calendar, ChevronDown, Image as ImageIcon, Mail, Phone, Globe, ListOrdered, IndianRupee, Maximize2, Bell } from 'lucide-react';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -424,6 +425,10 @@ interface SpreadsheetRowProps {
   columnSuggestions?: Record<string, string[]>;
   displayRowNumber?: number;
   scrollToColumn?: (colIdx: number) => void;
+  /** Called when an inline image upload starts (compression begins) */
+  onImageUploadStart?: () => void;
+  /** Called when an inline image upload ends (compression + handleCellChange done) */
+  onImageUploadEnd?: () => void;
 }
 
 export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: SpreadsheetRowProps) {
@@ -458,6 +463,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     scrollToColumn,
   } = props;
   const { reminders } = useNotifications();
+  const [uploadingImageCols, setUploadingImageCols] = useState<Record<number, boolean>>({});
   const hasPendingReminder = useMemo(() => {
     return reminders.some(r => r.rowId === entry.id && r.status === 'Pending' && r.registerId === String(entry.registerId));
   }, [reminders, entry.id, entry.registerId]);
@@ -701,12 +707,18 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               className="cell-image-wrap" 
               onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)}
               onClick={() => {
+                if (uploadingImageCols[col.id]) return; // block preview during active uploading
                 const val = entry.cells?.[col.id.toString()];
                 if (val) onImagePreview?.({ url: val, entryId: entry.id, colId: col.id.toString() });
               }}
-              title={entry.cells?.[col.id.toString()] ? "Click to view full image" : (isEditable ? "No image" : "")}
+              title={uploadingImageCols[col.id] ? "Compressing & Uploading image..." : (entry.cells?.[col.id.toString()] ? "Click to view full image" : (isEditable ? "No image" : ""))}
             >
-              {entry.cells?.[col.id.toString()] ? (
+              {uploadingImageCols[col.id] ? (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '4px' }}>
+                  <span className="spinner" style={{ width: '10px', height: '10px', border: '2px solid rgba(0,0,0,0.1)', borderLeftColor: 'var(--primary)', borderRadius: '50%', display: 'inline-block' }} />
+                  <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--primary)' }}>Uploading...</span>
+                </span>
+              ) : entry.cells?.[col.id.toString()] ? (
                 (() => {
                   const val = entry.cells[col.id.toString()];
                   const images = val.split('|||').filter(Boolean);
@@ -745,8 +757,36 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               ) : (
                 isEditable ? (
                   <label className="cell-image-upload" title="Upload image" onClick={(e) => e.stopPropagation()}>
-                     Add
-                    <input type="file" accept="image/*" className="hidden-file-input" tabIndex={-1} onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; compressImage(f).then(c => handleCellChange(entry.id, col.id.toString(), c)).catch(err => console.error(err)); }} />
+                     {uploadingImageCols[col.id] ? (
+                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                         <span className="spinner" style={{ width: '10px', height: '10px', border: '2px solid rgba(0,0,0,0.1)', borderLeftColor: 'var(--primary)', borderRadius: '50%', display: 'inline-block' }} />
+                         <span style={{ fontSize: '10px' }}>Uploading...</span>
+                       </span>
+                     ) : 'Add'}
+                    <input type="file" accept="image/*" className="hidden-file-input" tabIndex={-1} onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      console.log(`[Inline Grid - Image Selected] Selected file for row #${entry.id}, column #${col.id}:`, f.name, `${(f.size / 1024).toFixed(1)} KB`);
+                      setUploadingImageCols(prev => ({ ...prev, [col.id]: true }));
+                      props.onImageUploadStart?.();
+                      console.log(`[Inline Grid - Image Upload] Starting compression & upload...`);
+                      ImageCompressionModule.compressImage(f)
+                        .then(c => {
+                          console.log(`[Inline Grid - Image Upload] Compression succeeded. Persisting to database...`);
+                          return handleCellChange(entry.id, col.id.toString(), c);
+                        })
+                        .then(() => {
+                          console.log(`[Inline Grid - Image Upload] PERSISTED successfully to database for row #${entry.id}, column #${col.id}!`);
+                        })
+                        .catch(err => {
+                          console.error(`[Inline Grid - Image Upload] FAILED for row #${entry.id}, column #${col.id}:`, err);
+                        })
+                        .finally(() => {
+                          setUploadingImageCols(prev => ({ ...prev, [col.id]: false }));
+                          props.onImageUploadEnd?.();
+                        });
+                      e.target.value = '';
+                    }} />
                   </label>
                 ) : (
                   <span className="cell-placeholder" style={{ fontSize: '10px', opacity: 0.5 }}>—</span>

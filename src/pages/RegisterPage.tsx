@@ -7,13 +7,14 @@ import {
   duplicateColumn, moveColumn, reorderColumn, changeColumnType, clearColumnData, insertColumn, updateColumnWidth, updateColumnSummary,
   freezeColumn, hideColumn, setColumnMandatory, setColumnUnique,
   addEntry, updateEntry, updateEntryDirect, deleteEntry, duplicateEntry, bulkDeleteEntries, insertEntry,
+  clearRegisterCache,
   listRowHistory,
   restoreEntry, bulkRestoreEntries, restoreColumn,
   renamePage, deletePage,
   evaluateFormula,
   generateShareLink, addSharedUser, removeSharedUser,
   subscribeToMutationStatus, updateEntriesOrder, flushAllPendingWrites,
-  updateEntryCellStyles, unlinkColumn, compressImage,
+  updateEntryCellStyles, unlinkColumn,
   formatDateToDDMMYYYY,
   type Entry, type CellStyle, type HistoryEntry,
 } from '../lib/api';
@@ -44,6 +45,9 @@ import { useNotifications } from '../lib/NotificationContext';
 import { ColumnIcon } from '../components/register/ColumnIcon';
 import { useAuth } from '../lib/auth';
 import { firebaseLogWorkspaceAction } from '../lib/firebaseAuth';
+import { ImageCompressionModule } from '../lib/imageCompressionModule';
+import { DataPersistenceModule } from '../lib/dataPersistenceModule';
+import { StorageOptimizerModal } from '../components/register/modals/StorageOptimizerModal';
 
 type CalcType = 'sum' | 'average' | 'count' | 'min' | 'max' | 'filled' | 'empty' | 'distinct' | 'none';
 
@@ -109,6 +113,12 @@ export default function RegisterPage() {
     }
     return null;
   };
+
+  // Clear stale in-memory cache on mount to force fresh Firestore load
+  useEffect(() => {
+    clearRegisterCache(registerId);
+    queryClient.invalidateQueries({ queryKey: ['register', registerId] });
+  }, [registerId]);
 
   const { data: register, isLoading, error } = useQuery({
     queryKey: ['register', registerId],
@@ -279,6 +289,10 @@ export default function RegisterPage() {
   });
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadingImagesCount, setUploadingImagesCount] = useState(0);
+  const [uploadingCells, setUploadingCells] = useState<Record<string, boolean>>({});
+  const [pendingDebounceCount, setPendingDebounceCount] = useState(0);
+  const pendingTempRowEdits = useRef<Record<number, Record<string, string>>>({});
 
   // Add Record modal
   const [showAddRecordModal, setShowAddRecordModal] = useState(false);
@@ -317,6 +331,7 @@ export default function RegisterPage() {
   const [shareModal, setShareModal] = useState(false);
   const [renamePageModal, setRenamePageModal] = useState(false);
   const [filterModal, setFilterModal] = useState(false);
+  const [storageOptimizerOpen, setStorageOptimizerOpen] = useState(false);
 
   const isLocalStorageInitializedRef = useRef(false);
 
@@ -667,7 +682,17 @@ export default function RegisterPage() {
     lastSyncData.current = register;
 
     if (dataToSync) {
-      setLocalEntries(dataToSync.entries || []);
+      // Preserve local optimistic/temporary entries (those with floating point IDs)
+      // during query cache synchronization
+      const tempEntries = localEntries.filter((e) => !Number.isInteger(e.id));
+      const incomingEntries = dataToSync.entries || [];
+      const merged = [...incomingEntries];
+      tempEntries.forEach((temp) => {
+        if (!incomingEntries.some((e: any) => e.id === temp.id)) {
+          merged.push(temp);
+        }
+      });
+      setLocalEntries(merged);
       // Initialize column settings (widths, summaries) from saved data
       if (dataToSync.columns) {
         const widths: Record<number, number> = {};
@@ -814,6 +839,7 @@ export default function RegisterPage() {
             clearTimeout(timers[key]);
             delete timers[key];
           });
+          setPendingDebounceCount(0);
           // Collect all pending cell edits from localEntries and fire updateEntryDirect for each
           // The debounce timers captured closures with the values, so clearing them means
           // we need to re-derive the pending edits from localEntries vs the React Query cache
@@ -1863,7 +1889,7 @@ export default function RegisterPage() {
       // Optimistic: add a temporary row instantly
       const currentPageRows = (entriesByPage[currentPageIndex] || []).length;
       const tempEntry: Entry = {
-        id: Date.now(),
+        id: Date.now() + 0.5, // Float so !Number.isInteger(entryId) detects it as temporary
         registerId,
         rowNumber: pageOffset + currentPageRows + 1,
         cells: initialCells,
@@ -1884,15 +1910,26 @@ export default function RegisterPage() {
         });
       }
 
+      // Check for pending edits made while the row was being saved
+      let finalEntry = newEntry;
+      if (context?.tempId && pendingTempRowEdits.current[context.tempId]) {
+        const edits = pendingTempRowEdits.current[context.tempId];
+        delete pendingTempRowEdits.current[context.tempId];
+        if (Object.keys(edits).length > 0) {
+          finalEntry = { ...newEntry, cells: { ...newEntry.cells, ...edits } };
+          updateEntryDirect(registerId, newEntry.id, edits).catch(console.error);
+        }
+      }
+
       // Replace temp entry with real entry from server
-      setLocalEntries((prev) => prev.map((e) => e.id === context?.tempId ? newEntry : e));
+      setLocalEntries((prev) => prev.map((e) => e.id === context?.tempId ? finalEntry : e));
       // Patch the cache: replace temp if present, otherwise append (upsert)
       queryClient.setQueryData(['register', registerId], (old: any) => {
         if (!old) return old;
         const hasTempEntry = old.entries.some((e: any) => e.id === context?.tempId);
         const updatedEntries = hasTempEntry
-          ? old.entries.map((e: any) => e.id === context?.tempId ? newEntry : e)
-          : [...old.entries, newEntry];
+          ? old.entries.map((e: any) => e.id === context?.tempId ? finalEntry : e)
+          : [...old.entries, finalEntry];
         return { ...old, entries: updatedEntries, entryCount: updatedEntries.length };
       });
       // Close the Add Record modal on success
@@ -2160,7 +2197,7 @@ export default function RegisterPage() {
     }
 
     // ── Double Entry Detection & Unique Enforcement ──
-    if (value.trim() !== '') {
+    if (col.type !== 'image' && value.trim() !== '') {
       const isDuplicate = localEntriesRef.current.some(
         e => e.id !== entryId && e.cells?.[columnId]?.trim().toLowerCase() === value.trim().toLowerCase()
       );
@@ -2186,34 +2223,319 @@ export default function RegisterPage() {
     if (detailViewEntryIdRef.current === entryId) {
       setDetailEdits(prev => ({ ...prev, [columnId]: value }));
       if (detailErrorsRef.current[columnId]) setDetailErrors(prev => ({ ...prev, [columnId]: null }));
-      // Return early: do NOT update main state or firestore until "Save Changes" is clicked
-      return; 
+      
+      // For image columns, we want to bypass decoupled mode and save immediately to Firestore!
+      if (col.type !== 'image') {
+        // Return early: do NOT update main state or firestore until "Save Changes" is clicked
+        return; 
+      }
     }
 
-    // 1. Update local state instantly (optimistic)
-    setLocalEntries((prev) => prev.map((e) => {
-      if (e.id === entryId) {
-        // If it's a dropdown, ensure we only store the new value (strict single choice)
-        const updatedCells = { ...e.cells, [columnId]: value };
-        return { ...e, cells: updatedCells };
-      }
-      return e;
-    }));
+    const isImageColumn = col.type === 'image';
 
-    // 2. Debounce the Firestore write — use lightweight single-chunk writer
-    const key = `${entryId}-${columnId}`;
-
-    if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
-    debounceTimers.current[key] = setTimeout(() => {
-      delete debounceTimers.current[key];
-
-      updateEntryDirect(registerId, entryId, { [columnId]: value }).then(() => {
-        const col = columnsRef.current.find(c => c.id.toString() === columnId);
-        if (col?.linkedTo) {
-          queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
+    // 1. Update local state instantly (optimistic) - ONLY for non-image columns to keep loading states accurate
+    if (!isImageColumn) {
+      setLocalEntries((prev) => prev.map((e) => {
+        if (e.id === entryId) {
+          // If it's a dropdown, ensure we only store the new value (strict single choice)
+          const updatedCells = { ...e.cells, [columnId]: value };
+          return { ...e, cells: updatedCells };
         }
-      });
-    }, 600);
+        return e;
+      }));
+
+      // Patch the React Query cache instantly so that render-phase syncs do not wipe it out
+      if (Number.isInteger(entryId)) {
+        queryClient.setQueryData(['register', registerId], (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            entries: old.entries.map((e: any) =>
+              e.id === entryId ? { ...e, cells: { ...e.cells, [columnId]: value } } : e
+            ),
+          };
+        });
+      }
+    }
+
+    // 2. Write to Firestore — INSTANT for images, debounced for other types
+    if (!Number.isInteger(entryId)) {
+      // It is a temporary optimistic row!
+      // Buffer the edit to be saved when the row creation finishes.
+      pendingTempRowEdits.current[entryId] = {
+        ...(pendingTempRowEdits.current[entryId] || {}),
+        [columnId]: value
+      };
+      return true;
+    }
+
+    if (isImageColumn) {
+      const entryIdx = localEntriesRef.current.findIndex(e => e.id === entryId);
+      const targetChunkIndex = Math.floor(entryIdx / 50);
+      
+      const checkSizeAndPersist = async () => {
+        let finalValue = value;
+        let estimatedSize = 0;
+        
+        // If value is non-empty, estimate the chunk size
+        if (value.trim() !== '') {
+          const chunkStart = targetChunkIndex * 50;
+          const chunkEntriesCopy = localEntriesRef.current.slice(chunkStart, chunkStart + 50);
+          const relativeIndex = entryIdx - chunkStart;
+          
+          if (relativeIndex >= 0 && relativeIndex < chunkEntriesCopy.length) {
+            chunkEntriesCopy[relativeIndex] = {
+              ...chunkEntriesCopy[relativeIndex],
+              cells: { ...chunkEntriesCopy[relativeIndex].cells, [columnId]: value }
+            };
+          }
+          
+          estimatedSize = JSON.stringify({ entries: chunkEntriesCopy }).length;
+          
+          if (estimatedSize > 950000) {
+            console.log(`[handleCellChange] Estimated chunk size (${estimatedSize} bytes) exceeds limit.`);
+            
+            // Check if the chunk is already full even without this new image
+            let baseChunkSize = estimatedSize - value.length;
+            if (baseChunkSize > 950000) {
+              console.log(`[handleCellChange] Base chunk is already ${baseChunkSize} bytes. Cleaning existing images to make room...`);
+              toast("Chunk is full. Cleaning up existing photos to make room...", { icon: 'ℹ️' });
+              
+              for (let i = 0; i < chunkEntriesCopy.length; i++) {
+                const chunkEntry = chunkEntriesCopy[i];
+                if (chunkEntry.id === entryId) continue; // Skip the cell we are currently updating
+                
+                let entryUpdated = false;
+                const newCells = { ...chunkEntry.cells };
+                
+                for (const [cId, cellVal] of Object.entries(newCells)) {
+                  if (typeof cellVal === 'string' && cellVal.startsWith('data:image/') && cellVal.length > 40000) {
+                    try {
+                      let optimized: string;
+                      if (cellVal.includes('|||')) {
+                        const parts = cellVal.split('|||').filter(Boolean);
+                        const optimizedParts = await Promise.all(
+                          parts.map(part => part.length > 40000 ? ImageCompressionModule.compressBase64(part, 800, 800, 0.6) : part)
+                        );
+                        optimized = optimizedParts.join('|||');
+                      } else {
+                        optimized = await ImageCompressionModule.compressBase64(cellVal, 800, 800, 0.6);
+                      }
+                      if (optimized.length < cellVal.length) {
+                        newCells[cId] = optimized;
+                        entryUpdated = true;
+                      }
+                    } catch (e) {
+                      console.error('[handleCellChange] Failed to clean existing image:', e);
+                    }
+                  }
+                }
+                
+                if (entryUpdated) {
+                  chunkEntriesCopy[i] = { ...chunkEntry, cells: newCells };
+                  // Update local cache optimistically
+                  setLocalEntries(prev => prev.map(e => e.id === chunkEntry.id ? chunkEntriesCopy[i] : e));
+                  queryClient.setQueryData(['register', registerId], (old: any) => {
+                    if (!old) return old;
+                    return { ...old, entries: old.entries.map((e: any) => e.id === chunkEntry.id ? chunkEntriesCopy[i] : e) };
+                  });
+                  // Save optimized entry to DB asynchronously (queued)
+                  updateEntryDirect(registerId, chunkEntry.id, newCells).catch(console.error);
+                }
+              }
+              
+              // Recalculate estimated size after cleanup
+              estimatedSize = JSON.stringify({ entries: chunkEntriesCopy }).length;
+              baseChunkSize = estimatedSize - value.length;
+              
+              if (baseChunkSize > 950000) {
+                console.log(`[handleCellChange] Still too big after cleaning. Aborting.`);
+                throw new Error(`Write size safety check failed: Chunk is full.`);
+              }
+              toast.success("Cleanup successful. Resuming upload...");
+            }
+
+            console.log(`[handleCellChange] Initiating fallback compression...`);
+            try {
+              // Exceeds safety limit, perform fallback compression
+              // Support multiple images separated by '|||'
+              let compressed: string;
+              if (value.includes('|||')) {
+                const parts = value.split('|||').filter(Boolean);
+                const compressedParts = await Promise.all(
+                  parts.map(part => ImageCompressionModule.compressBase64(part, 1000, 1000, 0.6))
+                );
+                compressed = compressedParts.join('|||');
+              } else {
+                compressed = await ImageCompressionModule.compressBase64(value, 1000, 1000, 0.6);
+              }
+              
+              // Re-estimate chunk size with the compressed image
+              chunkEntriesCopy[relativeIndex] = {
+                ...chunkEntriesCopy[relativeIndex],
+                cells: { ...chunkEntriesCopy[relativeIndex].cells, [columnId]: compressed }
+              };
+              const newEstimatedSize = JSON.stringify({ entries: chunkEntriesCopy }).length;
+              console.log(`[handleCellChange] Fallback compressed image size. New chunk size: ${newEstimatedSize} bytes.`);
+              
+              if (newEstimatedSize > 950000) {
+                // Still too big, try ultra-aggressive compression
+                console.log(`[handleCellChange] Still over limit. Trying ultra-aggressive fallback compression...`);
+                let ultraCompressed: string;
+                if (value.includes('|||')) {
+                  const parts = value.split('|||').filter(Boolean);
+                  const ultraCompressedParts = await Promise.all(
+                    parts.map(part => ImageCompressionModule.compressBase64(part, 600, 600, 0.5))
+                  );
+                  ultraCompressed = ultraCompressedParts.join('|||');
+                } else {
+                  ultraCompressed = await ImageCompressionModule.compressBase64(value, 600, 600, 0.5);
+                }
+                
+                chunkEntriesCopy[relativeIndex] = {
+                  ...chunkEntriesCopy[relativeIndex],
+                  cells: { ...chunkEntriesCopy[relativeIndex].cells, [columnId]: ultraCompressed }
+                };
+                const finalEstimatedSize = JSON.stringify({ entries: chunkEntriesCopy }).length;
+                console.log(`[handleCellChange] Ultra-aggressive compressed size. Final chunk size: ${finalEstimatedSize} bytes.`);
+                
+                if (finalEstimatedSize > 950000) {
+                  throw new Error(`Write size safety check failed: Chunk is full. Unable to write even ultra-compressed image.`);
+                }
+                finalValue = ultraCompressed;
+              } else {
+                finalValue = compressed;
+              }
+            } catch (compressErr) {
+              console.error('[handleCellChange] Fallback compression failed:', compressErr);
+              throw compressErr; // Abort saving if chunk is full
+            }
+          }
+        }
+        
+        // Track background persistence ledger
+        const payloadSize = JSON.stringify({ [columnId]: finalValue }).length;
+        const ledgerId = DataPersistenceModule.addLedgerItem(`Update Image (Row #${entryIdx + 1})`, targetChunkIndex, payloadSize, 'persisting');
+        
+        try {
+          const result = await updateEntryDirect(registerId, entryId, { [columnId]: finalValue });
+          if (!result) {
+            throw new Error("Failed to update entry in database");
+          }
+          DataPersistenceModule.updateLedgerStatus(ledgerId, 'success');
+          
+          // Now update local state and query cache AFTER successful database storage!
+          setLocalEntries((prev) => prev.map((e) => {
+            if (e.id === entryId) {
+              return { ...e, cells: { ...e.cells, [columnId]: finalValue } };
+            }
+            return e;
+          }));
+          
+          queryClient.setQueryData(['register', registerId], (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              entries: old.entries.map((e: any) =>
+                e.id === entryId ? { ...e, cells: { ...e.cells, [columnId]: finalValue } } : e
+              ),
+            };
+          });
+          
+          // Sync Row Detail View modal edits as well
+          if (detailViewEntryIdRef.current === entryId) {
+            setDetailEdits(prev => ({ ...prev, [columnId]: finalValue }));
+            if (detailViewEntry?.id === entryId) {
+              setDetailViewEntry(prev => prev ? { ...prev, cells: { ...prev.cells, [columnId]: finalValue } } : null);
+            }
+          }
+          
+          const col = columnsRef.current.find(c => c.id.toString() === columnId);
+          if (col?.linkedTo) {
+            queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
+          }
+        } catch (err: any) {
+          DataPersistenceModule.updateLedgerStatus(ledgerId, 'failed', err?.message || err?.toString());
+          console.error(`[handleCellChange - Image Error] Failed to write image:`, err);
+          
+          // Fetch the old image value from the cached query data
+          const cachedData = queryClient.getQueryData(['register', registerId]) as any;
+          const oldEntry = cachedData?.entries?.find((x: any) => x.id === entryId);
+          const oldVal = oldEntry?.cells?.[columnId] || '';
+          
+          // 1. Revert local state (optimistic) back to the old value
+          setLocalEntries((prev) => prev.map((e) => {
+            if (e.id === entryId) {
+              return { ...e, cells: { ...e.cells, [columnId]: oldVal } };
+            }
+            return e;
+          }));
+          
+          // 2. Revert the React Query cache back to the old value
+          queryClient.setQueryData(['register', registerId], (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              entries: old.entries.map((e: any) =>
+                e.id === entryId ? { ...e, cells: { ...e.cells, [columnId]: oldVal } } : e
+              ),
+            };
+          });
+          
+          // 3. Revert Row Detail modal edits if open for this entry
+          if (detailViewEntryIdRef.current === entryId) {
+            setDetailEdits(prev => ({ ...prev, [columnId]: oldVal }));
+            if (detailViewEntry?.id === entryId) {
+              setDetailViewEntry(prev => prev ? { ...prev, cells: { ...prev.cells, [columnId]: oldVal } } : null);
+            }
+          }
+          
+          // 4. Revert Preview Modal state if open for this entry
+          setPreviewImage(prev => {
+            if (prev && prev.entryId === entryId && prev.colId === columnId) {
+              return { ...prev, url: oldVal };
+            }
+            return prev;
+          });
+          
+          // 5. Show descriptive toast error message
+          let errorMsg = "Issue in the image update: Failed to save photo to database.";
+          if (err?.message?.includes("exceeds the maximum allowed size") || err?.toString()?.includes("exceeds the maximum allowed size") || err?.message?.includes("Chunk is full")) {
+            errorMsg = "Cell size limit exceeded. The image could not be saved because the chunk is full.";
+          }
+          toast.error(errorMsg, { duration: 6000 });
+          
+          throw err;
+        }
+      };
+      
+      return checkSizeAndPersist();
+    } else {
+      // Other columns: debounce the Firestore write for typing performance
+      const key = `${entryId}-${columnId}`;
+
+      if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
+      else setPendingDebounceCount(prev => prev + 1);
+
+      debounceTimers.current[key] = setTimeout(() => {
+        delete debounceTimers.current[key];
+        setPendingDebounceCount(prev => Math.max(0, prev - 1));
+
+        const payloadSize = JSON.stringify({ [columnId]: value }).length;
+        const targetChunkIndex = Math.floor(localEntriesRef.current.findIndex(e => e.id === entryId) / 50);
+        const ledgerId = DataPersistenceModule.addLedgerItem(`Update Cell (Row #${localEntriesRef.current.findIndex(e => e.id === entryId) + 1})`, targetChunkIndex, payloadSize, 'persisting');
+
+        updateEntryDirect(registerId, entryId, { [columnId]: value }).then(() => {
+          DataPersistenceModule.updateLedgerStatus(ledgerId, 'success');
+          const col = columnsRef.current.find(c => c.id.toString() === columnId);
+          if (col?.linkedTo) {
+            queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
+          }
+        }).catch((err) => {
+          DataPersistenceModule.updateLedgerStatus(ledgerId, 'failed', err?.message || err?.toString());
+        });
+      }, 300);
+    }
     return true;
   }, [registerId, queryClient, addNotification]);
 
@@ -2776,6 +3098,40 @@ export default function RegisterPage() {
 
   return (
     <div className="content-area">
+      {(isSaving || uploadingImagesCount > 0 || pendingDebounceCount > 0 || Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0)) && (
+        <div className="saving-background-banner" style={{
+          backgroundColor: uploadingImagesCount > 0 ? 'rgba(59, 130, 246, 0.1)' : isSaving ? 'rgba(239, 68, 68, 0.1)' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+          borderLeft: uploadingImagesCount > 0 ? '4px solid #3b82f6' : isSaving ? '4px solid #ef4444' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? '4px solid #3b82f6' : '4px solid #f59e0b',
+          color: uploadingImagesCount > 0 ? '#1d4ed8' : isSaving ? '#ef4444' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? '#1d4ed8' : '#b45309',
+          padding: '10px 18px',
+          fontSize: '13px',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          borderBottom: uploadingImagesCount > 0 ? '1px solid rgba(59, 130, 246, 0.2)' : isSaving ? '1px solid rgba(239, 68, 68, 0.2)' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+          transition: 'all 0.3s ease',
+          letterSpacing: '0.3px',
+          zIndex: 99
+        }}>
+          <AlertCircle size={16} className="animate-pulse" style={{ color: uploadingImagesCount > 0 ? '#3b82f6' : isSaving ? '#ef4444' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? '#3b82f6' : '#f59e0b', flexShrink: 0 }} />
+          <span>
+            {uploadingImagesCount > 0 
+              ? `⏳ Preparing and compressing ${uploadingImagesCount} image(s) for upload... Please do NOT refresh or close this tab.`
+              : (() => {
+                  const tempEditsCount = Object.values(pendingTempRowEdits.current).reduce((acc, edits) => acc + Object.keys(edits).length, 0);
+                  if (tempEditsCount > 0) {
+                    return `⏳ Buffered ${tempEditsCount} change(s) for new rows... Please do NOT refresh or close this tab.`;
+                  }
+                  return pendingDebounceCount > 0 && !isSaving
+                    ? `⏳ Saving ${pendingDebounceCount} pending change(s) to database... Please do NOT refresh or close this tab.`
+                    : '⚠️ Data is updating in the background. Please do NOT refresh the page or close this tab to ensure all changes are successfully saved.';
+                })()
+            }
+          </span>
+        </div>
+      )}
       {/* ── Header ── */}
       <div className="register-header">
         <div className="register-header-left">
@@ -2828,6 +3184,7 @@ export default function RegisterPage() {
             canDownload={_canDownloadAny}
             canEdit={_canEditAny}
             onViewReminders={() => setShowRemindersSummary(true)}
+            onOpenStorageOptimizer={() => setStorageOptimizerOpen(true)}
           />
         </div>
       </div>
@@ -3068,8 +3425,8 @@ export default function RegisterPage() {
                   isSelected={selectedRows.has(entry.id)}
                   toggleSelectRow={toggleSelectRow}
                   handleCellChange={(eid, cid, val) => {
-                    if (_editableColumnIds && !_editableColumnIds.has(Number(cid))) return;
-                    handleCellChange(eid, cid, val);
+                    if (_editableColumnIds && !_editableColumnIds.has(Number(cid))) return false;
+                    return handleCellChange(eid, cid, val);
                   }}
                   openDatePicker={openDatePicker}
                   openDropdown={openDropdown}
@@ -3441,6 +3798,13 @@ export default function RegisterPage() {
         onAddDropdownOption={onAddDropdownOption}
       />
 
+      <StorageOptimizerModal 
+        isOpen={storageOptimizerOpen}
+        onClose={() => setStorageOptimizerOpen(false)}
+        entries={localEntries}
+        registerId={registerId}
+      />
+
       {/* ── Add Record Modal ── */}
       <AddRecordModal
         open={showAddRecordModal}
@@ -3780,37 +4144,63 @@ export default function RegisterPage() {
                                 <div className="row-detail-image-actions">
                                   <button className="row-detail-img-btn" onClick={() => setPreviewImage({ url: val, entryId: detailViewEntry.id, colId: col.id.toString() })}>View Large</button>
                                   {val.split('|||').length === 1 && <button className="row-detail-img-btn" onClick={() => handleImageDownload(val.split('|||')[0])}>Download</button>}
-                                  {isFieldEditable && <button className="row-detail-img-btn danger" onClick={() => setDetailEdits(prev => ({ ...prev, [colKey]: '' }))}>Remove All</button>}
+                                  {isFieldEditable && <button className="row-detail-img-btn danger" onClick={() => handleCellChange(detailViewEntry.id, colKey, '')}>Remove All</button>}
                                 </div>
                                 
                                 {isFieldEditable && (
-                                  <label className="row-detail-add-btn">
-                                    <input 
-                                      type="file" 
-                                      accept="image/*" 
-                                      hidden 
-                                      onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          compressImage(file)
-                                            .then((newImg) => {
-                                              setDetailEdits(prev => {
-                                                const current = prev[colKey] ?? detailViewEntry.cells?.[colKey] ?? '';
+                                  uploadingCells[colKey] ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)', padding: '6px', marginTop: '8px' }}>
+                                      <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(0,0,0,0.1)', borderLeftColor: 'var(--primary)' }} />
+                                      <span style={{ fontSize: '13px', fontWeight: 500 }}>Adding another photo...</span>
+                                    </div>
+                                  ) : (
+                                    <label className="row-detail-add-btn">
+                                      <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        hidden 
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            console.log(`[Detail View - Image Selected] Selected file for row #${detailViewEntry.id}, column #${colKey}:`, file.name, `${(file.size / 1024).toFixed(1)} KB`);
+                                            setUploadingCells(prev => ({ ...prev, [colKey]: true }));
+                                            setUploadingImagesCount(prev => prev + 1);
+                                            console.log(`[Detail View - Image Upload] Starting compression & upload...`);
+                                            ImageCompressionModule.compressImage(file)
+                                              .then(async (newImg) => {
+                                                console.log(`[Detail View - Image Upload] Compression succeeded. Persisting to database...`);
+                                                const current = detailEdits[colKey] ?? detailViewEntry.cells?.[colKey] ?? '';
                                                 const updated = current ? `${current}|||${newImg}` : newImg;
-                                                return { ...prev, [colKey]: updated };
+                                                const res = handleCellChange(detailViewEntry.id, colKey, updated);
+                                                if (res === false) throw new Error("Cell change rejected");
+                                                await res;
+                                              })
+                                              .then(() => {
+                                                console.log(`[Detail View - Image Upload] PERSISTED successfully to database for row #${detailViewEntry.id}, column #${colKey}!`);
+                                              })
+                                              .catch(err => {
+                                                console.error(`[Detail View - Image Upload] FAILED for row #${detailViewEntry.id}, column #${colKey}:`, err);
+                                              })
+                                              .finally(() => {
+                                                setUploadingCells(prev => ({ ...prev, [colKey]: false }));
+                                                setUploadingImagesCount(prev => Math.max(0, prev - 1));
                                               });
-                                            })
-                                            .catch(err => console.error(err));
-                                        }
-                                      }}
-                                    />
-                                    <Plus size={14} />
-                                    <span>Add Another Image</span>
-                                  </label>
+                                          }
+                                        }}
+                                      />
+                                      <Plus size={14} />
+                                      <span>Add Another Image</span>
+                                    </label>
+                                  )
                                 )}
                               </div>
                             ) : (
-                              isFieldEditable ? (
+                              uploadingCells[colKey] ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)', padding: '6px' }}>
+                                  <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(0,0,0,0.1)', borderLeftColor: 'var(--primary)' }} />
+                                  <span style={{ fontSize: '13px', fontWeight: 500 }}>Compressing & uploading photo...</span>
+                                </div>
+                              ) : isFieldEditable ? (
                                 <label className="row-detail-image-upload">
                                   <input 
                                     type="file" 
@@ -3819,11 +4209,27 @@ export default function RegisterPage() {
                                     onChange={(e) => {
                                       const file = e.target.files?.[0];
                                       if (file) {
-                                        compressImage(file)
-                                          .then((newImg) => {
-                                            setDetailEdits(prev => ({ ...prev, [colKey]: newImg }));
+                                        console.log(`[Detail View - Image Selected] Selected file for row #${detailViewEntry.id}, column #${colKey}:`, file.name, `${(file.size / 1024).toFixed(1)} KB`);
+                                        setUploadingCells(prev => ({ ...prev, [colKey]: true }));
+                                        setUploadingImagesCount(prev => prev + 1);
+                                        console.log(`[Detail View - Image Upload] Starting compression & upload...`);
+                                        ImageCompressionModule.compressImage(file)
+                                          .then(async (newImg) => {
+                                            console.log(`[Detail View - Image Upload] Compression succeeded. Persisting to database...`);
+                                            const res = handleCellChange(detailViewEntry.id, colKey, newImg);
+                                            if (res === false) throw new Error("Cell change rejected");
+                                            await res;
                                           })
-                                          .catch(err => console.error(err));
+                                          .then(() => {
+                                            console.log(`[Detail View - Image Upload] PERSISTED successfully to database for row #${detailViewEntry.id}, column #${colKey}!`);
+                                          })
+                                          .catch(err => {
+                                            console.error(`[Detail View - Image Upload] FAILED for row #${detailViewEntry.id}, column #${colKey}:`, err);
+                                          })
+                                          .finally(() => {
+                                            setUploadingCells(prev => ({ ...prev, [colKey]: false }));
+                                            setUploadingImagesCount(prev => Math.max(0, prev - 1));
+                                          });
                                       }
                                     }}
                                   />
@@ -3965,6 +4371,24 @@ export default function RegisterPage() {
                     });
 
                     if (Object.keys(changedCells).length > 0) {
+                      if (!Number.isInteger(detailViewEntry.id)) {
+                        // It is a temporary entry!
+                        // Buffer these edits
+                        pendingTempRowEdits.current[detailViewEntry.id] = {
+                          ...(pendingTempRowEdits.current[detailViewEntry.id] || {}),
+                          ...changedCells
+                        };
+                        toast.success("Changes buffered. Saving to database once the row is created.");
+                        
+                        // Close modal IMMEDIATELY
+                        setDetailViewEntry(null);
+                        setDetailEdits({});
+                        setDetailErrors({});
+                        setShowRowAuditTrail(false);
+                        setRowAuditHistory([]);
+                        return;
+                      }
+
                       // 1. Update local state instantly (optimistic)
                       setLocalEntries(prev => prev.map(e => 
                         e.id === detailViewEntry.id ? { ...e, cells: { ...e.cells, ...changedCells } } : e
@@ -4115,27 +4539,50 @@ export default function RegisterPage() {
 
                 {previewImage.entryId !== undefined && previewImage.colId !== undefined && (
                   <>
-                  <label className="img-preview-add" title="Add Image">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      style={{ display: 'none' }} 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          compressImage(file)
-                            .then((newUrl) => {
-                              const updated = [...urls, newUrl].join('|||');
-                              handleCellChange(previewImage.entryId!, previewImage.colId!, updated);
-                              setPreviewImage({ ...previewImage, url: updated });
-                              setPreviewImageIndex(urls.length);
-                            })
-                            .catch(err => console.error(err));
-                        }
-                      }}
-                    />
-                    <Plus size={18} /> Add Image
-                  </label>
+                  {uploadingCells[previewImage.colId!] ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', opacity: 0.8, padding: '8px 12px' }}>
+                      <div className="spinner" style={{ width: '12px', height: '12px', border: '2px solid rgba(255,255,255,0.2)', borderLeftColor: 'white' }} />
+                      <span style={{ fontSize: '13px' }}>Uploading...</span>
+                    </div>
+                  ) : (
+                    <label className="img-preview-add" title="Add Image">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        style={{ display: 'none' }} 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            console.log(`[Preview View - Image Selected] Selected file for row #${previewImage.entryId}, column #${previewImage.colId}:`, file.name, `${(file.size / 1024).toFixed(1)} KB`);
+                            setUploadingCells(prev => ({ ...prev, [previewImage.colId!]: true }));
+                            setUploadingImagesCount(prev => prev + 1);
+                            console.log(`[Preview View - Image Upload] Starting compression & upload...`);
+                            ImageCompressionModule.compressImage(file)
+                              .then(async (newUrl) => {
+                                console.log(`[Preview View - Image Upload] Compression succeeded. Persisting to database...`);
+                                const updated = [...urls, newUrl].join('|||');
+                                const res = handleCellChange(previewImage.entryId!, previewImage.colId!, updated);
+                                if (res === false) throw new Error("Cell change rejected");
+                                await res;
+                                setPreviewImage({ ...previewImage, url: updated });
+                                setPreviewImageIndex(urls.length);
+                              })
+                              .then(() => {
+                                console.log(`[Preview View - Image Upload] PERSISTED successfully to database for row #${previewImage.entryId}, column #${previewImage.colId}!`);
+                              })
+                              .catch(err => {
+                                console.error(`[Preview View - Image Upload] FAILED for row #${previewImage.entryId}, column #${previewImage.colId}:`, err);
+                              })
+                              .finally(() => {
+                                setUploadingCells(prev => ({ ...prev, [previewImage.colId!]: false }));
+                                setUploadingImagesCount(prev => Math.max(0, prev - 1));
+                              });
+                          }
+                        }}
+                      />
+                      <Plus size={18} /> Add Image
+                    </label>
+                  )}
                   <button 
                     className="img-preview-remove" 
                     onClick={() => {

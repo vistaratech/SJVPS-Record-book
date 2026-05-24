@@ -1,0 +1,468 @@
+export interface CompressionConfig {
+  maxWidth: number;
+  maxHeight: number;
+  quality: number;
+  autoQualityScale: boolean;
+  convertToFormat: 'jpeg' | 'png' | 'webp';
+}
+
+export interface CompressionStats {
+  originalSizeTotal: number;
+  compressedSizeTotal: number;
+  imagesCompressedCount: number;
+}
+
+export interface CompressionResult {
+  originalSize: number;
+  compressedSize: number;
+  ratio: number;
+  width: number;
+  height: number;
+  timeTakenMs: number;
+  originalDataUrl: string;
+  compressedDataUrl: string;
+}
+
+const DEFAULT_CONFIG: CompressionConfig = {
+  maxWidth: 1600,
+  maxHeight: 1600,
+  quality: 0.8,
+  autoQualityScale: true,
+  convertToFormat: 'jpeg'
+};
+
+const DEFAULT_STATS: CompressionStats = {
+  originalSizeTotal: 0,
+  compressedSizeTotal: 0,
+  imagesCompressedCount: 0
+};
+
+export class ImageCompressionModule {
+  private static CONFIG_KEY = 'rb_compression_config';
+  private static STATS_KEY = 'rb_compression_stats';
+
+  /**
+   * Retrieves the current compression configuration from localStorage.
+   */
+  public static getConfig(): CompressionConfig {
+    try {
+      const stored = localStorage.getItem(this.CONFIG_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return { ...DEFAULT_CONFIG, ...parsed };
+      }
+    } catch (e) {
+      console.error('[CompressionModule] Failed to read config from localStorage:', e);
+    }
+    return { ...DEFAULT_CONFIG };
+  }
+
+  /**
+   * Updates and persists the compression configuration.
+   */
+  public static saveConfig(config: Partial<CompressionConfig>): void {
+    try {
+      const current = this.getConfig();
+      const next = { ...current, ...config };
+      localStorage.setItem(this.CONFIG_KEY, JSON.stringify(next));
+      console.log('[CompressionModule] Config updated:', next);
+    } catch (e) {
+      console.error('[CompressionModule] Failed to save config to localStorage:', e);
+    }
+  }
+
+  /**
+   * Retrieves compression statistics.
+   */
+  public static getStats(): CompressionStats {
+    try {
+      const stored = localStorage.getItem(this.STATS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return { ...DEFAULT_STATS, ...parsed };
+      }
+    } catch (e) {
+      console.error('[CompressionModule] Failed to read stats from localStorage:', e);
+    }
+    return { ...DEFAULT_STATS };
+  }
+
+  /**
+   * Updates cumulative compression statistics.
+   */
+  public static saveStats(stats: CompressionStats): void {
+    try {
+      localStorage.setItem(this.STATS_KEY, JSON.stringify(stats));
+    } catch (e) {
+      console.error('[CompressionModule] Failed to save stats to localStorage:', e);
+    }
+  }
+
+  /**
+   * Resets all compression metrics.
+   */
+  public static resetStats(): void {
+    try {
+      localStorage.setItem(this.STATS_KEY, JSON.stringify(DEFAULT_STATS));
+    } catch (e) {
+      console.error('[CompressionModule] Failed to reset stats:', e);
+    }
+  }
+
+  /**
+   * Compresses an image file according to the config. Returns a compressed base64 string.
+   */
+  public static compressImage(file: File, configOverride?: Partial<CompressionConfig>): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const startTime = performance.now();
+      if (!file.type.startsWith('image/')) {
+        reject(new Error('File is not an image'));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (!e.target?.result) {
+          reject(new Error("Failed to read file as data URL"));
+          return;
+        }
+        const dataUrl = e.target.result as string;
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const originalPixels = img.width * img.height;
+            
+            // Bypass compression if file size is <= 100KB AND resolution is <= 1MP (1,000,000 pixels)
+            if (file.size <= 100000 && originalPixels <= 1000000) {
+              console.log(`[CompressionModule] Bypassing canvas compression. Size: ${(file.size / 1024).toFixed(1)} KB, Resolution: ${(originalPixels / 1000000).toFixed(2)} MP. Converted directly to base64.`);
+              
+              // Record stats
+              try {
+                const approxBytes = Math.round((dataUrl.length - 22) * 3 / 4);
+                const stats = this.getStats();
+                stats.originalSizeTotal += file.size;
+                stats.compressedSizeTotal += approxBytes;
+                stats.imagesCompressedCount += 1;
+                this.saveStats(stats);
+              } catch (statErr) {
+                console.warn('[CompressionModule] Could not update stats:', statErr);
+              }
+              
+              resolve(dataUrl);
+              return;
+            }
+
+            const config = { ...this.getConfig(), ...configOverride };
+            let finalQuality = config.quality;
+
+            // Intelligent auto-scaling quality based on raw file sizes
+            if (config.autoQualityScale) {
+              if (file.size < 50 * 1024) {
+                finalQuality = Math.min(0.85, config.quality * 1.5); // High quality for thumbnails
+              } else if (file.size > 5 * 1024 * 1024) {
+                finalQuality = Math.max(0.25, config.quality * 0.5); // Aggressive quality reduction for 5MB+ raw files
+              } else if (file.size > 2 * 1024 * 1024) {
+                finalQuality = Math.max(0.35, config.quality * 0.7); // Dynamic quality reduction for 2MB+
+              }
+            }
+
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            // 1. Enforce 1 MP limit if it is above 1 MP
+            if (originalPixels > 1000000) {
+              const scale = Math.sqrt(1000000 / originalPixels);
+              width = Math.floor(width * scale);
+              height = Math.floor(height * scale);
+              console.log(`[CompressionModule] Image is above 1 MP (${(originalPixels / 1000000).toFixed(2)} MP). Resizing to ${(width * height / 1000000).toFixed(2)} MP (${width}x${height})`);
+            }
+
+            // 2. Aspect ratio bounding calculation (further downscale to fit config limits if needed)
+            if (width > height) {
+              if (width > config.maxWidth) {
+                height = Math.round((height * config.maxWidth) / width);
+                width = config.maxWidth;
+              }
+            } else {
+              if (height > config.maxHeight) {
+                width = Math.round((width * config.maxHeight) / height);
+                height = config.maxHeight;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              // Context failed, resolve with raw data url
+              resolve(dataUrl);
+              return;
+            }
+
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const formatMime = `image/${config.convertToFormat}`;
+            let compressedBase64 = canvas.toDataURL(formatMime, finalQuality);
+
+            // Iterative safety downscaling loop: strictly reduce image until base64 length is under 1,000,000 characters (< 750KB binary)
+            let iteration = 0;
+            const maxIterations = 4;
+            let currentWidth = width;
+            let currentHeight = height;
+
+            while (compressedBase64.length > 1000000 && iteration < maxIterations) {
+              iteration++;
+              currentWidth = Math.round(currentWidth * 0.8);
+              currentHeight = Math.round(currentHeight * 0.8);
+              finalQuality = Math.max(0.15, finalQuality * 0.75);
+
+              console.log(`[CompressionModule] Base64 length ${compressedBase64.length} exceeds 1MB limit. Downscaling iteration ${iteration}: ${currentWidth}x${currentHeight} at quality ${finalQuality}`);
+
+              const scaleCanvas = document.createElement('canvas');
+              scaleCanvas.width = currentWidth;
+              scaleCanvas.height = currentHeight;
+              const scaleCtx = scaleCanvas.getContext('2d');
+              if (scaleCtx) {
+                scaleCtx.drawImage(img, 0, 0, currentWidth, currentHeight);
+                compressedBase64 = scaleCanvas.toDataURL(formatMime, finalQuality);
+              }
+            }
+
+            // Record cumulative savings statistics asynchronously
+            try {
+              const approxBytes = Math.round((compressedBase64.length - 22) * 3 / 4); // base64 length to bytes approx
+              const stats = this.getStats();
+              stats.originalSizeTotal += file.size;
+              stats.compressedSizeTotal += approxBytes;
+              stats.imagesCompressedCount += 1;
+              this.saveStats(stats);
+            } catch (statErr) {
+              console.warn('[CompressionModule] Could not update stats:', statErr);
+            }
+
+            const endTime = performance.now();
+            console.log(
+              `[CompressionModule] Successfully compressed image inside ${Math.round(endTime - startTime)}ms. ` +
+              `Size: ${Math.round(file.size / 1024)}KB -> ${Math.round(compressedBase64.length * 3 / 4 / 1024)}KB.`
+            );
+
+            resolve(compressedBase64);
+          } catch (canvasErr: any) {
+            reject(new Error(`Canvas manipulation failed: ${canvasErr?.message || canvasErr}`));
+          }
+        };
+
+        img.onerror = () => {
+          reject(new Error('Image failed to render inside Canvas'));
+        };
+        img.src = dataUrl;
+      };
+
+      reader.onerror = () => {
+        reject(new Error('Failed to read image file buffer'));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * Runs a test compression inside the sandbox and returns a diagnostic result.
+   * Does NOT alter global stats.
+   */
+  public static testCompress(file: File, configOverride?: Partial<CompressionConfig>): Promise<CompressionResult> {
+    return new Promise((resolve, reject) => {
+      const startTime = performance.now();
+      if (!file.type.startsWith('image/')) {
+        reject(new Error('File is not an image'));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (!e.target?.result) {
+          reject(new Error("Failed to read file as data URL"));
+          return;
+        }
+        const dataUrl = e.target.result as string;
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const originalPixels = img.width * img.height;
+            const endTime = performance.now();
+            
+            // Bypass compression if file size is <= 100KB AND resolution is <= 1MP (1,000,000 pixels)
+            if (file.size <= 100000 && originalPixels <= 1000000) {
+              const approxBytes = Math.round((dataUrl.length - 22) * 3 / 4);
+              resolve({
+                originalSize: file.size,
+                compressedSize: approxBytes,
+                ratio: 0.0,
+                width: img.width,
+                height: img.height,
+                timeTakenMs: Math.round(endTime - startTime),
+                originalDataUrl: dataUrl,
+                compressedDataUrl: dataUrl
+              });
+              return;
+            }
+
+            const config = { ...this.getConfig(), ...configOverride };
+            let finalQuality = config.quality;
+
+            if (config.autoQualityScale) {
+              if (file.size < 50 * 1024) {
+                finalQuality = Math.min(0.85, config.quality * 1.5);
+              } else if (file.size > 5 * 1024 * 1024) {
+                finalQuality = Math.max(0.25, config.quality * 0.5);
+              } else if (file.size > 2 * 1024 * 1024) {
+                finalQuality = Math.max(0.35, config.quality * 0.7);
+              }
+            }
+
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            // 1. Enforce 1 MP limit if it is above 1 MP
+            if (originalPixels > 1000000) {
+              const scale = Math.sqrt(1000000 / originalPixels);
+              width = Math.floor(width * scale);
+              height = Math.floor(height * scale);
+            }
+
+            // 2. Aspect ratio bounding calculation (further downscale to fit config limits if needed)
+            if (width > height) {
+              if (width > config.maxWidth) {
+                height = Math.round((height * config.maxWidth) / width);
+                width = config.maxWidth;
+              }
+            } else {
+              if (height > config.maxHeight) {
+                width = Math.round((width * config.maxHeight) / height);
+                height = config.maxHeight;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              reject(new Error('Canvas context could not be acquired'));
+              return;
+            }
+
+            ctx.drawImage(img, 0, 0, width, height);
+            const formatMime = `image/${config.convertToFormat}`;
+            let compressedDataUrl = canvas.toDataURL(formatMime, finalQuality);
+
+            // Iterative safety downscaling loop: strictly reduce image until base64 length is under 1,000,000 characters (< 750KB binary)
+            let iteration = 0;
+            const maxIterations = 4;
+            let currentWidth = width;
+            let currentHeight = height;
+
+            while (compressedDataUrl.length > 1000000 && iteration < maxIterations) {
+              iteration++;
+              currentWidth = Math.round(currentWidth * 0.8);
+              currentHeight = Math.round(currentHeight * 0.8);
+              finalQuality = Math.max(0.15, finalQuality * 0.75);
+
+              const scaleCanvas = document.createElement('canvas');
+              scaleCanvas.width = currentWidth;
+              scaleCanvas.height = currentHeight;
+              const scaleCtx = scaleCanvas.getContext('2d');
+              if (scaleCtx) {
+                scaleCtx.drawImage(img, 0, 0, currentWidth, currentHeight);
+                compressedDataUrl = scaleCanvas.toDataURL(formatMime, finalQuality);
+              }
+            }
+
+            const compressionEndTime = performance.now();
+            const approxBytes = Math.round((compressedDataUrl.length - 22) * 3 / 4);
+
+            resolve({
+              originalSize: file.size,
+              compressedSize: approxBytes,
+              ratio: Math.max(0, parseFloat((((file.size - approxBytes) / file.size) * 100).toFixed(1))),
+              width: currentWidth,
+              height: currentHeight,
+              timeTakenMs: Math.round(compressionEndTime - startTime),
+              originalDataUrl: dataUrl,
+              compressedDataUrl
+            });
+          } catch (canvasErr: any) {
+            reject(new Error(`Canvas manipulation failed: ${canvasErr?.message || canvasErr}`));
+          }
+        };
+        img.onerror = () => {
+          reject(new Error('Image failed to render inside Canvas'));
+        };
+        img.src = dataUrl;
+      };
+      reader.onerror = () => {
+        reject(new Error('Failed to read image file buffer'));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * Compresses an existing base64 image string to a smaller size using HTML5 Canvas.
+   */
+  public static compressBase64(
+    base64: string,
+    maxWidth = 400,
+    maxHeight = 400,
+    quality = 0.25
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (!base64 || base64.trim() === '') {
+        resolve('');
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(base64); // fallback if context fails
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressed);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => {
+        reject(new Error("Failed to load base64 image onto Image element"));
+      };
+      img.src = base64;
+    });
+  }
+}
+

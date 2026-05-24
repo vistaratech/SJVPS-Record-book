@@ -1,4 +1,4 @@
-import { Bookmark, Download, Share2, X, MoreHorizontal, Trash2, Lock, Bell } from 'lucide-react';
+import { Bookmark, Download, Share2, X, MoreHorizontal, Trash2, Lock, Bell, HardDrive } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { RequestModal } from './modals/RequestModal';
@@ -20,6 +20,7 @@ interface RegisterHeaderProps {
   canDownload?: boolean;
   canEdit?: boolean;
   onViewReminders?: () => void;
+  onOpenStorageOptimizer?: () => void;
 }
 
 export function RegisterHeader({ 
@@ -28,7 +29,8 @@ export function RegisterHeader({
   handleOpenExport,
   canDownload = true,
   canEdit = true,
-  onViewReminders
+  onViewReminders,
+  onOpenStorageOptimizer
 }: RegisterHeaderProps) {
   const [saveTemplateModal, setSaveTemplateModal] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -155,6 +157,11 @@ export function RegisterHeader({
           <button className="more-menu-item" onClick={() => { setTemplateName(register?.name || ''); setSaveTemplateModal(true); }}>
             <Bookmark size={16} />
             <span>Save as Template</span>
+          </button>
+
+          <button className="more-menu-item" onClick={() => { onOpenStorageOptimizer?.(); setShowMoreMenu(false); }}>
+            <HardDrive size={16} />
+            <span>Image & Storage Optimizer</span>
           </button>
 
           <div className="context-divider" style={{ margin: '4px 0' }} />
