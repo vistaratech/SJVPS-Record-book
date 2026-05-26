@@ -20,6 +20,16 @@ const ACTION_COLORS: Record<string, string> = {
   bulk_delete_rows: '#ef4444',
   add_column: '#8b5cf6',
   delete_column: '#f59e0b',
+  // Historical actions
+  'Delete Row': '#ef4444',
+  'Delete Rows': '#ef4444',
+  'Add Column': '#8b5cf6',
+  'Delete Column': '#f59e0b',
+  'Create Register': '#10b981',
+  'Trash Register': '#f59e0b',
+  'Restore Register': '#10b981',
+  'Rename Register': '#8b5cf6',
+  'Rename Column': '#8b5cf6',
   other: '#94a3b8'
 };
 
@@ -30,6 +40,16 @@ const ACTION_LABELS: Record<string, string> = {
   bulk_delete_rows: 'Bulk Delete',
   add_column: 'Add Column',
   delete_column: 'Delete Column',
+  // Historical actions
+  'Delete Row': 'Delete Row',
+  'Delete Rows': 'Bulk Delete',
+  'Add Column': 'Add Column',
+  'Delete Column': 'Delete Column',
+  'Create Register': 'Create Register',
+  'Trash Register': 'Trash Register',
+  'Restore Register': 'Restore Register',
+  'Rename Register': 'Rename Register',
+  'Rename Column': 'Rename Column',
 };
 
 const sty = {
@@ -61,16 +81,46 @@ export default function AdminActiveReportPage() {
   const fetch_ = async () => {
     setLoading(true);
     try {
-      const [actRes, userRes, regSnap] = await Promise.all([
+      const [actRes, userRes, regSnap, histSnap] = await Promise.all([
         firebaseGetActivity(3000),
         firebaseGetUsers(),
-        getDocs(collection(db, 'registers'))
+        getDocs(collection(db, 'registers')),
+        getDocs(collection(db, 'history'))
       ]);
 
-      // Only display data entry related activities
-      const validActions = ['edit_cells', 'add_row', 'delete_row', 'bulk_delete_rows', 'add_column', 'delete_column'];
       const rawActivities = actRes.activities || [];
-      const dataActivities = rawActivities.filter((a: any) => validActions.includes(a.action));
+      
+      const historyList: any[] = [];
+      histSnap.forEach(doc => {
+        const data = doc.data();
+        historyList.push({
+          id: data.id ? data.id.toString() : doc.id,
+          userId: data.userId || '',
+          userName: data.userName || 'User',
+          action: data.action,
+          details: data.details,
+          timestamp: data.timestamp,
+          registerId: data.registerId ? String(data.registerId) : undefined,
+          registerName: data.registerName
+        });
+      });
+
+      // Merge activity audits and historical logs, remove duplicates by ID
+      const merged = [...rawActivities, ...historyList];
+      const uniqueMap = new Map<string, any>();
+      merged.forEach(item => {
+        if (item.id) uniqueMap.set(item.id.toString(), item);
+      });
+      
+      const allActivities = Array.from(uniqueMap.values())
+        .sort((a: any, b: any) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+
+      // Include all data entries and register modification activities
+      const validActions = [
+        'edit_cells', 'add_row', 'delete_row', 'bulk_delete_rows', 'add_column', 'delete_column',
+        'Delete Row', 'Delete Rows', 'Add Column', 'Delete Column', 'Create Register', 'Trash Register', 'Restore Register', 'Rename Register', 'Rename Column'
+      ];
+      const dataActivities = allActivities.filter((a: any) => validActions.includes(a.action));
       
       setActivities(dataActivities);
       setUsers((userRes.users || []).map((u: any) => ({ id: u.id, name: u.name, email: u.email })));
