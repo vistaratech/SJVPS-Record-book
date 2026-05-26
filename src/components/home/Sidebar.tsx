@@ -1723,7 +1723,24 @@ export const Sidebar = memo(function Sidebar({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 26, 2026 (Latest)</span>
                 
-                {/* Feature 1: Split-Pane Quick Entry */}
+                {/* Feature 1: Cloudinary Cloud Image Upload */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#dbeafe', color: '#2563eb', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>☁️ Cloudinary Cloud Image Upload</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      All uploaded images are now <strong>automatically compressed and uploaded to Cloudinary</strong> cloud storage! Images are stored as clean HTTPS URLs instead of heavy base64 data. This means:<br />
+                      • <strong>Excel exports</strong> now contain clickable "View Photo" hyperlinks<br />
+                      • <strong>Faster loading</strong> — images load from CDN instead of Firestore<br />
+                      • <strong>Smaller database</strong> — URLs are tiny compared to base64 blobs<br />
+                      • <strong>Auto-fallback</strong> — if network fails, safely saves as base64
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: Split-Pane Quick Entry */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
                   <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
                     <CheckCircle2 size={16} />
@@ -1736,7 +1753,7 @@ export const Sidebar = memo(function Sidebar({
                   </div>
                 </div>
 
-                {/* Feature 2: High-Performance Image Uploader */}
+                {/* Feature 3: Drag-and-Drop Image Uploader */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
                   <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
                     <CheckCircle2 size={16} />
@@ -1744,12 +1761,12 @@ export const Sidebar = memo(function Sidebar({
                   <div>
                     <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Drag-and-Drop Image Uploader</h4>
                     <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
-                      Implemented direct image uploading with client-side Canvas compression inside both the Quick Entry form and the Add Record modal! Select local photos directly, see instant previews, and enjoy error-free, compressed base64 photo saves.
+                      Implemented direct image uploading with client-side Canvas compression inside both the Quick Entry form and the Add Record modal! Select local photos directly, see instant previews, and images are automatically uploaded to the cloud.
                     </p>
                   </div>
                 </div>
 
-                {/* Feature 3: Accelerated Continuous Entry */}
+                {/* Feature 4: Accelerated Continuous Entry */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
                   <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
                     <CheckCircle2 size={16} />
@@ -1764,7 +1781,7 @@ export const Sidebar = memo(function Sidebar({
               </div>
             ) : versionTab === '1.5.2' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 23, 2026 (Latest)</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 23, 2026</span>
                 
                 {/* Feature 1: Intelligent Photo Compression */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
