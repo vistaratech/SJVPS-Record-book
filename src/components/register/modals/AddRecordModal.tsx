@@ -403,7 +403,7 @@ export function AddRecordModal({
                                   try {
                                     const uploadedUrl = await ImageCompressionModule.compressAndUploadToCloudinary(f);
                                     setValues(prev => ({ ...prev, [colIdStr]: uploadedUrl }));
-                                    toast.success('Image compressed & uploaded to Cloudinary successfully!');
+                                    toast.success('Image compressed & uploaded to secure cloud storage successfully!');
                                   } catch (err) {
                                     toast.error('Failed to upload image');
                                     console.error(err);

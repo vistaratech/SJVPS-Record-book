@@ -1290,7 +1290,7 @@ export const Sidebar = memo(function Sidebar({
                                                 try {
                                                   const uploadedUrl = await ImageCompressionModule.compressAndUploadToCloudinary(f);
                                                   setEntryValues(prev => ({ ...prev, [colIdStr]: uploadedUrl }));
-                                                  toast.success('Image compressed & uploaded to Cloudinary successfully!');
+                                                  toast.success('Image compressed & uploaded to secure cloud storage successfully!');
                                                 } catch (err) {
                                                   toast.error('Failed to upload image');
                                                   console.error(err);
@@ -1723,15 +1723,15 @@ export const Sidebar = memo(function Sidebar({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 26, 2026 (Latest)</span>
                 
-                {/* Feature 1: Cloudinary Cloud Image Upload */}
+                {/* Feature 1: Cloud Image Upload */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
                   <div style={{ background: '#dbeafe', color: '#2563eb', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
                     <CheckCircle2 size={16} />
                   </div>
                   <div>
-                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>☁️ Cloudinary Cloud Image Upload</h4>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>☁️ High-Speed Cloud Image Upload</h4>
                     <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
-                      All uploaded images are now <strong>automatically compressed and uploaded to Cloudinary</strong> cloud storage! Images are stored as clean HTTPS URLs instead of heavy base64 data. This means:<br />
+                      All uploaded images are now <strong>automatically compressed and uploaded to secure cloud storage</strong>! Images are stored as clean HTTPS URLs instead of heavy base64 data. This means:<br />
                       • <strong>Excel exports</strong> now contain clickable "View Photo" hyperlinks<br />
                       • <strong>Faster loading</strong> — images load from CDN instead of Firestore<br />
                       • <strong>Smaller database</strong> — URLs are tiny compared to base64 blobs<br />
