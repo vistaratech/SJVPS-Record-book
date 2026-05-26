@@ -3098,40 +3098,6 @@ export default function RegisterPage() {
 
   return (
     <div className="content-area">
-      {(isSaving || uploadingImagesCount > 0 || pendingDebounceCount > 0 || Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0)) && (
-        <div className="saving-background-banner" style={{
-          backgroundColor: uploadingImagesCount > 0 ? 'rgba(59, 130, 246, 0.1)' : isSaving ? 'rgba(239, 68, 68, 0.1)' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-          borderLeft: uploadingImagesCount > 0 ? '4px solid #3b82f6' : isSaving ? '4px solid #ef4444' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? '4px solid #3b82f6' : '4px solid #f59e0b',
-          color: uploadingImagesCount > 0 ? '#1d4ed8' : isSaving ? '#ef4444' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? '#1d4ed8' : '#b45309',
-          padding: '10px 18px',
-          fontSize: '13px',
-          fontWeight: 600,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          borderBottom: uploadingImagesCount > 0 ? '1px solid rgba(59, 130, 246, 0.2)' : isSaving ? '1px solid rgba(239, 68, 68, 0.2)' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-          transition: 'all 0.3s ease',
-          letterSpacing: '0.3px',
-          zIndex: 99
-        }}>
-          <AlertCircle size={16} className="animate-pulse" style={{ color: uploadingImagesCount > 0 ? '#3b82f6' : isSaving ? '#ef4444' : Object.values(pendingTempRowEdits.current).some(edits => Object.keys(edits).length > 0) ? '#3b82f6' : '#f59e0b', flexShrink: 0 }} />
-          <span>
-            {uploadingImagesCount > 0 
-              ? `⏳ Preparing and compressing ${uploadingImagesCount} image(s) for upload... Please do NOT refresh or close this tab.`
-              : (() => {
-                  const tempEditsCount = Object.values(pendingTempRowEdits.current).reduce((acc, edits) => acc + Object.keys(edits).length, 0);
-                  if (tempEditsCount > 0) {
-                    return `⏳ Buffered ${tempEditsCount} change(s) for new rows... Please do NOT refresh or close this tab.`;
-                  }
-                  return pendingDebounceCount > 0 && !isSaving
-                    ? `⏳ Saving ${pendingDebounceCount} pending change(s) to database... Please do NOT refresh or close this tab.`
-                    : '⚠️ Data is updating in the background. Please do NOT refresh the page or close this tab to ensure all changes are successfully saved.';
-                })()
-            }
-          </span>
-        </div>
-      )}
       {/* ── Header ── */}
       <div className="register-header">
         <div className="register-header-left">
@@ -3175,6 +3141,10 @@ export default function RegisterPage() {
             selectedColumns={selectedColumns}
             isPreviewSelectedColumns={isPreviewSelectedColumns}
             setIsPreviewSelectedColumns={setIsPreviewSelectedColumns}
+            isSaving={isSaving}
+            uploadingImagesCount={uploadingImagesCount}
+            pendingDebounceCount={pendingDebounceCount}
+            pendingTempRowEditsCount={Object.values(pendingTempRowEdits.current).reduce((acc, edits) => acc + Object.keys(edits).length, 0)}
           />
           
           <RegisterHeader 

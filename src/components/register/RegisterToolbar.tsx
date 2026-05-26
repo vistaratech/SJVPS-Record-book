@@ -31,6 +31,10 @@ interface RegisterToolbarProps {
   selectedColumns: Set<number>;
   isPreviewSelectedColumns: boolean;
   setIsPreviewSelectedColumns: (v: boolean) => void;
+  isSaving?: boolean;
+  uploadingImagesCount?: number;
+  pendingDebounceCount?: number;
+  pendingTempRowEditsCount?: number;
 }
 
 export const RegisterToolbar = memo(function RegisterToolbar({
@@ -43,8 +47,14 @@ export const RegisterToolbar = memo(function RegisterToolbar({
   allColumnsCount,
   selectedColumns,
   isPreviewSelectedColumns,
-  setIsPreviewSelectedColumns
+  setIsPreviewSelectedColumns,
+  isSaving = false,
+  uploadingImagesCount = 0,
+  pendingDebounceCount = 0,
+  pendingTempRowEditsCount = 0
 }: RegisterToolbarProps) {
+
+  const isSyncing = isSaving || uploadingImagesCount > 0 || pendingDebounceCount > 0 || pendingTempRowEditsCount > 0;
 
   return (
     <div className="pages-actions-right">
@@ -53,10 +63,82 @@ export const RegisterToolbar = memo(function RegisterToolbar({
         <Hash size={11} />
         {rowCount < entries.length ? `${rowCount} / ${entries.length}` : rowCount} rows
       </span>
-      <span className="pab-stat" title={columns.length < (allColumnsCount || columns.length) ? `Showing ${columns.length} of ${allColumnsCount} total columns` : `${columns.length} columns total`}>
+      <span className="pab-stat" style={{ marginRight: isSyncing ? '4px' : '0px' }} title={columns.length < (allColumnsCount || columns.length) ? `Showing ${columns.length} of ${allColumnsCount} total columns` : `${columns.length} columns total`}>
         <FileText size={11} />
         {columns.length < (allColumnsCount || columns.length) ? `${columns.length} / ${allColumnsCount}` : columns.length} cols
       </span>
+
+      {/* Elegant background syncing status indicator */}
+      {isSyncing && (
+        <div 
+          className="header-sync-status-badge"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '3px 8px',
+            borderRadius: '12px',
+            fontSize: '10.5px',
+            fontWeight: 600,
+            transition: 'all 0.3s ease',
+            backgroundColor: uploadingImagesCount > 0 
+              ? 'rgba(59, 130, 246, 0.08)' 
+              : isSaving 
+                ? 'rgba(239, 68, 68, 0.08)' 
+                : 'rgba(245, 158, 11, 0.08)',
+            color: uploadingImagesCount > 0 
+              ? '#1d4ed8' 
+              : isSaving 
+                ? '#ef4444' 
+                : '#b45309',
+            border: `1px solid ${
+              uploadingImagesCount > 0 
+                ? 'rgba(59, 130, 246, 0.15)' 
+                : isSaving 
+                  ? 'rgba(239, 68, 68, 0.15)' 
+                  : 'rgba(245, 158, 11, 0.15)'
+            }`,
+            marginLeft: '6px',
+            userSelect: 'none',
+          }}
+          title={
+            uploadingImagesCount > 0 
+              ? `Compressing & uploading ${uploadingImagesCount} photo(s)... Do NOT close tab.`
+              : pendingTempRowEditsCount > 0
+                ? `Buffered ${pendingTempRowEditsCount} offline edit(s)... Do NOT close tab.`
+                : pendingDebounceCount > 0 && !isSaving
+                  ? `Saving ${pendingDebounceCount} change(s)... Do NOT close tab.`
+                  : 'Saving updates in the background... Do NOT close tab.'
+          }
+        >
+          <span 
+            className="mini-sync-spinner"
+            style={{
+              width: '9px',
+              height: '9px',
+              borderRadius: '50%',
+              border: `1.5px solid ${
+                uploadingImagesCount > 0 
+                  ? 'rgba(59, 130, 246, 0.2)' 
+                  : isSaving 
+                    ? 'rgba(239, 68, 68, 0.2)' 
+                    : 'rgba(245, 158, 11, 0.2)'
+              }`,
+              borderLeftColor: 'currentColor',
+              display: 'inline-block',
+              animation: 'spin 0.8s linear infinite'
+            }}
+          />
+          <span className="mini-sync-text" style={{ letterSpacing: '0.1px' }}>
+            {uploadingImagesCount > 0 
+              ? 'Uploading Photos...'
+              : pendingTempRowEditsCount > 0
+                ? `Offline (${pendingTempRowEditsCount})`
+                : 'Saving...'
+            }
+          </span>
+        </div>
+      )}
 
       <div className="pab-divider" />
 
