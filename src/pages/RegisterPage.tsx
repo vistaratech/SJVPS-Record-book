@@ -2297,7 +2297,7 @@ export default function RegisterPage() {
             
             // Check if the chunk is already full even without this new image
             let baseChunkSize = estimatedSize - value.length;
-            if (baseChunkSize > 950000) {
+            if (baseChunkSize > 980000) {
               console.log(`[handleCellChange] Base chunk is already ${baseChunkSize} bytes. Cleaning existing images to make room...`);
               toast("Chunk is full. Cleaning up existing photos to make room...", { icon: 'ℹ️' });
               
@@ -2348,7 +2348,7 @@ export default function RegisterPage() {
               estimatedSize = JSON.stringify({ entries: chunkEntriesCopy }).length;
               baseChunkSize = estimatedSize - value.length;
               
-              if (baseChunkSize > 950000) {
+              if (baseChunkSize > 980000) {
                 console.log(`[handleCellChange] Still too big after cleaning. Aborting.`);
                 throw new Error(`Write size safety check failed: Chunk is full.`);
               }
@@ -2378,7 +2378,7 @@ export default function RegisterPage() {
               const newEstimatedSize = JSON.stringify({ entries: chunkEntriesCopy }).length;
               console.log(`[handleCellChange] Fallback compressed image size. New chunk size: ${newEstimatedSize} bytes.`);
               
-              if (newEstimatedSize > 950000) {
+              if (newEstimatedSize > 1010000) {
                 // Still too big, try ultra-aggressive compression
                 console.log(`[handleCellChange] Still over limit. Trying ultra-aggressive fallback compression...`);
                 let ultraCompressed: string;
@@ -2399,7 +2399,7 @@ export default function RegisterPage() {
                 const finalEstimatedSize = JSON.stringify({ entries: chunkEntriesCopy }).length;
                 console.log(`[handleCellChange] Ultra-aggressive compressed size. Final chunk size: ${finalEstimatedSize} bytes.`);
                 
-                if (finalEstimatedSize > 950000) {
+                if (finalEstimatedSize > 1010000) {
                   throw new Error(`Write size safety check failed: Chunk is full. Unable to write even ultra-compressed image.`);
                 }
                 finalValue = ultraCompressed;
