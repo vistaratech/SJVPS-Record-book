@@ -68,7 +68,9 @@ export const RegisterToolbar = memo(function RegisterToolbar({
         {columns.length < (allColumnsCount || columns.length) ? `${columns.length} / ${allColumnsCount}` : columns.length} cols
       </span>
 
-      {/* Elegant background syncing status indicator */}
+      <div className="pab-divider" />
+
+      {/* Elegant background syncing status indicator (repositioned next to search bar & styled in premium Green!) */}
       {isSyncing && (
         <div 
           className="header-sync-status-badge"
@@ -76,29 +78,15 @@ export const RegisterToolbar = memo(function RegisterToolbar({
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            padding: '3px 8px',
+            padding: '3.5px 9px',
             borderRadius: '12px',
             fontSize: '10.5px',
             fontWeight: 600,
             transition: 'all 0.3s ease',
-            backgroundColor: uploadingImagesCount > 0 
-              ? 'rgba(59, 130, 246, 0.08)' 
-              : isSaving 
-                ? 'rgba(239, 68, 68, 0.08)' 
-                : 'rgba(245, 158, 11, 0.08)',
-            color: uploadingImagesCount > 0 
-              ? '#1d4ed8' 
-              : isSaving 
-                ? '#ef4444' 
-                : '#b45309',
-            border: `1px solid ${
-              uploadingImagesCount > 0 
-                ? 'rgba(59, 130, 246, 0.15)' 
-                : isSaving 
-                  ? 'rgba(239, 68, 68, 0.15)' 
-                  : 'rgba(245, 158, 11, 0.15)'
-            }`,
-            marginLeft: '6px',
+            backgroundColor: 'rgba(16, 185, 129, 0.08)',
+            color: '#059669', // Premium Emerald Green
+            border: '1px solid rgba(16, 185, 129, 0.18)',
+            marginRight: '8px',
             userSelect: 'none',
           }}
           title={
@@ -117,13 +105,7 @@ export const RegisterToolbar = memo(function RegisterToolbar({
               width: '9px',
               height: '9px',
               borderRadius: '50%',
-              border: `1.5px solid ${
-                uploadingImagesCount > 0 
-                  ? 'rgba(59, 130, 246, 0.2)' 
-                  : isSaving 
-                    ? 'rgba(239, 68, 68, 0.2)' 
-                    : 'rgba(245, 158, 11, 0.2)'
-              }`,
+              border: '1.5px solid rgba(16, 185, 129, 0.25)',
               borderLeftColor: 'currentColor',
               display: 'inline-block',
               animation: 'spin 0.8s linear infinite'
@@ -139,8 +121,6 @@ export const RegisterToolbar = memo(function RegisterToolbar({
           </span>
         </div>
       )}
-
-      <div className="pab-divider" />
 
       {/* Search */}
       <div className={`pab-search${search ? ' active' : ''}`} id="pab-search-wrap">
