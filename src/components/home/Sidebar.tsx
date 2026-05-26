@@ -104,17 +104,17 @@ export const Sidebar = memo(function Sidebar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(() => {
     try {
-      return localStorage.getItem('seen_version_1.5.5') !== 'true';
+      return localStorage.getItem('seen_version_1.5.6') !== 'true';
     } catch {
       return false;
     }
   });
-  const [versionTab, setVersionTab] = useState<'1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.5.5');
+  const [versionTab, setVersionTab] = useState<'1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.5.6');
 
   const handleCloseVersionModal = useCallback(() => {
     setShowVersionModal(false);
     try {
-      localStorage.setItem('seen_version_1.5.5', 'true');
+      localStorage.setItem('seen_version_1.5.6', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -725,7 +725,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.5.5');
+                  setVersionTab('1.5.6');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -734,9 +734,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.5.5"
+                title="View what's new in v1.5.6"
               >
-                v1.5.5
+                v1.5.6
               </span>
             </span>
           </div>
@@ -1610,6 +1610,24 @@ export const Sidebar = memo(function Sidebar({
             {/* Version Tabs */}
             <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
               <button
+                onClick={() => setVersionTab('1.5.6')}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.5.6' ? 'white' : 'transparent',
+                  color: versionTab === '1.5.6' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.5.6' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                v1.5.6 (New)
+              </button>
+              <button
                 onClick={() => setVersionTab('1.5.5')}
                 style={{
                   flex: 1,
@@ -1625,7 +1643,7 @@ export const Sidebar = memo(function Sidebar({
                   boxShadow: versionTab === '1.5.5' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                 }}
               >
-                v1.5.5 (New)
+                v1.5.5
               </button>
               <button
                 onClick={() => setVersionTab('1.5.2')}
@@ -1719,9 +1737,78 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.5.5' ? (
+            {versionTab === '1.5.6' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 26, 2026 (Latest)</span>
+                
+                {/* Feature 1: Cell Arrow Key Navigation */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#dbeafe', color: '#2563eb', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>⌨️ Smart Keyboard Cell Navigation</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Navigate registers like a desktop spreadsheet! Click a cell once to focus/highlight, then use <strong>Up/Down/Left/Right arrow keys</strong> to navigate cell-by-cell. Double-click or start typing to edit text inside a cell seamlessly.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: Simplified Filter Column Selector */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>🔍 Simplified Column Visibility Filter</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Bypassed the "+ ADD FILTER" step! Clicking the Filter button now displays an <strong>instant, searchable dropdown checklist of columns</strong> to show or hide columns immediately.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 3: Sharp Read-Only Visibility */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>👁️ High-Contrast Read-Only Data</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      No more faded, unreadable text for read-only rows, columns, or tables! Text opacity reduction has been completely removed so read-only dates and record details remain sharp, clear, and highly legible.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 4: Full Excel Export All Columns */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>📥 Complete Excel Exports By Default</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Exporting to Excel now includes all columns (including hidden ones) by default with pre-selected options in the export modal, saving extra click steps while downloading.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 5: Expanded Register Titles */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>📌 Full Register Titles View</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Increased title width to 600px, ensuring long register titles (like <em>BE NEW TEST</em>) display fully without being truncated in the header.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : versionTab === '1.5.5' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 26, 2026</span>
                 
                 {/* Feature 1: Cloud Image Upload */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
