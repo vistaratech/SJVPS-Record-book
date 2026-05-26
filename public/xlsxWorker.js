@@ -59,6 +59,36 @@ self.onmessage = function (evt) {
       }
     }
 
+    // ── Pre-process worksheet to extract original URLs from HYPERLINK formulas ──
+    const refForPreprocess = ws['!ref'];
+    if (refForPreprocess) {
+      const range = XLSX.utils.decode_range(refForPreprocess);
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws[addr];
+          if (cell && cell.f && typeof cell.f === 'string') {
+            const trimmedFormula = cell.f.trim();
+            if (/^HYPERLINK\(/i.test(trimmedFormula)) {
+              const match = trimmedFormula.match(/^HYPERLINK\(\s*"([^"]+)"/i);
+              if (match && match[1]) {
+                let url = match[1];
+                url = url.replace(/""/g, '"');
+                if (url.includes('#urls=')) {
+                  const hashPart = url.split('#urls=')[1];
+                  try {
+                    url = decodeURIComponent(hashPart);
+                  } catch (e) {}
+                }
+                cell.v = url;
+                cell.w = url;
+              }
+            }
+          }
+        }
+      }
+    }
+
     // sheet_to_json returns objects keyed by header name, starting from the detected header row
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, range: headerRowIdx });
 

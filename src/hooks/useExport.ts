@@ -102,7 +102,6 @@ export function useExport({
 
     const visibleColumns = columns.filter((col) =>
       !hiddenColumns.has(col.id) &&
-      col.type !== 'image' &&
       options.selectedColumnIds.has(col.id) &&
       (!downloadableColumnIds || downloadableColumnIds.has(col.id))
     );
@@ -149,9 +148,33 @@ export function useExport({
     entriesToExport.forEach((entry) => {
       const rowData: any[] = [entry.rowNumber.toString()];
       visibleColumns.forEach(c => {
-        const val = c.type === 'formula'
+        let val: any = c.type === 'formula'
           ? evaluateFormula(c.formula || '', entry, columns)
           : (entry.cells?.[c.id.toString()] || '');
+
+        if (c.type === 'image' && val) {
+          const urls = (val.includes('|||') ? val.split('|||') : [val]) as string[];
+          const cleanUrls = urls.map((url: string) => {
+            if (url.startsWith('data:image/')) {
+              return null;
+            }
+            return url.trim().replace(/\s+/g, '%20');
+          }).filter(Boolean) as string[];
+
+          if (cleanUrls.length === 0) {
+            val = '[Local Photo (Base64)]';
+          } else if (cleanUrls.length === 1) {
+            const escapedUrl = cleanUrls[0].replace(/"/g, '""');
+            val = { f: `HYPERLINK("${escapedUrl}", "View Photo")`, t: 's', v: 'View Photo' };
+          } else {
+            const escapedUrl = cleanUrls[0].replace(/"/g, '""');
+            val = {
+              f: `HYPERLINK("${escapedUrl}", "View Photo 1 (+${cleanUrls.length - 1} more)")`,
+              t: 's',
+              v: `View Photo 1 (+${cleanUrls.length - 1} more)`
+            };
+          }
+        }
 
         if (c.type === 'number' || c.type === 'currency' || c.type === 'formula') {
           const original = val.toString();
@@ -283,7 +306,6 @@ export function useExport({
 
     const visibleCols = columns.filter((col) =>
       !hiddenColumns.has(col.id) &&
-      col.type !== 'image' &&
       options.selectedColumnIds.has(col.id) &&
       (!downloadableColumnIds || downloadableColumnIds.has(col.id))
     );
@@ -322,6 +344,15 @@ export function useExport({
             ? evaluateFormula(c.formula || '', entry, columns)
             : (entry.cells?.[c.id.toString()] || '');
           
+          if (c.type === 'image') {
+            if (!cellValue) return '';
+            const urls = cellValue.includes('|||') ? cellValue.split('|||') : [cellValue];
+            const cleanUrls = urls.filter(url => !url.startsWith('data:image/'));
+            if (cleanUrls.length === 0) {
+              return '[Local Photo]';
+            }
+            return cleanUrls.length === 1 ? 'View Photo' : `View Photo (+${cleanUrls.length - 1} more)`;
+          }
           if (c.type === 'currency') return formatCurrency(cellValue).replace('₹', '');
           return cellValue;
         })
@@ -434,7 +465,6 @@ export function useExport({
     if (!entry) return;
     const visibleCols = columns.filter(col => {
       if (hiddenColumns.has(col.id)) return false;
-      if (col.type === 'image') return false;
       if (downloadableColumnIds && !downloadableColumnIds.has(col.id)) return false;
       if (isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0 && !selectedColumns.has(col.id)) return false;
       return true;
@@ -463,7 +493,22 @@ export function useExport({
             ? evaluateFormula(c.formula || '', entry, columns)
             : (entry.cells?.[c.id.toString()] || '');
           
-          const displayVal = c.type === 'currency' ? formatCurrency(val).replace('₹', '') : val;
+          let displayVal = val;
+          if (c.type === 'image') {
+            if (!val) {
+              displayVal = '';
+            } else {
+              const urls = val.includes('|||') ? val.split('|||') : [val];
+              const cleanUrls = urls.filter(url => !url.startsWith('data:image/'));
+              if (cleanUrls.length === 0) {
+                displayVal = '[Local Photo]';
+              } else {
+                displayVal = cleanUrls.length === 1 ? 'View Photo' : `View Photo (+${cleanUrls.length - 1} more)`;
+              }
+            }
+          } else if (c.type === 'currency') {
+            displayVal = formatCurrency(val).replace('₹', '');
+          }
           return [c.name, displayVal];
         })
       ];
@@ -495,7 +540,6 @@ export function useExport({
     if (!entry) return;
     const visibleCols = columns.filter(col => {
       if (hiddenColumns.has(col.id)) return false;
-      if (col.type === 'image') return false;
       if (downloadableColumnIds && !downloadableColumnIds.has(col.id)) return false;
       if (isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0 && !selectedColumns.has(col.id)) return false;
       return true;
@@ -507,9 +551,33 @@ export function useExport({
     try {
       const headerRow = ['S.No.', ...visibleCols.map(c => c.name)];
       const dataRow = [entry.rowNumber.toString(), ...visibleCols.map(c => {
-        const val = c.type === 'formula'
+        let val: any = c.type === 'formula'
           ? evaluateFormula(c.formula || '', entry, columns)
           : (entry.cells?.[c.id.toString()] || '');
+
+        if (c.type === 'image' && val) {
+          const urls = (val.includes('|||') ? val.split('|||') : [val]) as string[];
+          const cleanUrls = urls.map((url: string) => {
+            if (url.startsWith('data:image/')) {
+              return null;
+            }
+            return url.trim().replace(/\s+/g, '%20');
+          }).filter(Boolean) as string[];
+
+          if (cleanUrls.length === 0) {
+            val = '[Local Photo (Base64)]';
+          } else if (cleanUrls.length === 1) {
+            const escapedUrl = cleanUrls[0].replace(/"/g, '""');
+            val = { f: `HYPERLINK("${escapedUrl}", "View Photo")`, t: 's', v: 'View Photo' };
+          } else {
+            const escapedUrl = cleanUrls[0].replace(/"/g, '""');
+            val = {
+              f: `HYPERLINK("${escapedUrl}", "View Photo 1 (+${cleanUrls.length - 1} more)")`,
+              t: 's',
+              v: `View Photo 1 (+${cleanUrls.length - 1} more)`
+            };
+          }
+        }
 
         if (c.type === 'number' || c.type === 'currency') {
           const original = val.toString();
@@ -554,7 +622,6 @@ export function useExport({
     if (!entry) return;
     const visibleCols = columns.filter(col => {
       if (hiddenColumns.has(col.id)) return false;
-      if (col.type === 'image') return false;
       if (downloadableColumnIds && !downloadableColumnIds.has(col.id)) return false;
       if (isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0 && !selectedColumns.has(col.id)) return false;
       return true;
