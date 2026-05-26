@@ -468,8 +468,67 @@ export class ImageCompressionModule {
     });
   }
 
+  private static async sha1(string: string): Promise<string> {
+    const utf8 = new TextEncoder().encode(string);
+    const hashBuffer = await crypto.subtle.digest('SHA-1', utf8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+  }
+
   /**
-   * Compresses an image and attempts to upload it directly to Firebase Storage.
+   * Compresses an image file and uploads it directly to Cloudinary using a secure signed upload.
+   */
+  public static async compressAndUploadToCloudinary(file: File): Promise<string> {
+    // 1. Compress image to Base64 first using existing high-quality module
+    const compressedBase64 = await this.compressImage(file);
+    
+    try {
+      const cloudName = 'dorxms8wu';
+      const apiKey = '124594964523531';
+      const apiSecret = 'OzCir1bp4le0fcyjj3a1IM0hbO0';
+      
+      const timestamp = Math.round(new Date().getTime() / 1000).toString();
+      const folder = 'record_book_images';
+      
+      // Calculate signature: alphabetically sorted parameters
+      const signatureString = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
+      const signature = await this.sha1(signatureString);
+      
+      const formData = new FormData();
+      formData.append('file', compressedBase64);
+      formData.append('api_key', apiKey);
+      formData.append('timestamp', timestamp);
+      formData.append('signature', signature);
+      formData.append('folder', folder);
+      
+      console.log(`[Cloudinary Upload] Starting upload of compressed image to Cloudinary...`);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Cloudinary responded with status ${res.status}: ${errText}`);
+      }
+      
+      const data = await res.json();
+      if (!data.secure_url) {
+        throw new Error('No secure_url returned from Cloudinary response');
+      }
+      
+      console.log(`[Cloudinary Upload] Upload successful! URL:`, data.secure_url);
+      return data.secure_url;
+    } catch (error) {
+      console.error('[Cloudinary Upload] Failed, falling back to Base64:', error);
+      // Fallback to storing the compressed base64 directly
+      return compressedBase64;
+    }
+  }
+
+  /**
+   * Compresses an image and attempts to upload it directly to Cloudinary.
    * If the upload fails, it automatically falls back to returning the compressed Base64 string.
    */
   public static async compressAndUploadImage(
@@ -478,25 +537,7 @@ export class ImageCompressionModule {
     entryId: number | string,
     columnId: string
   ): Promise<string> {
-    // 1. Compress image to Base64 first using existing high-quality module
-    const compressedBase64 = await this.compressImage(file);
-    
-    // 2. Try direct client-side Firebase Storage upload
-    try {
-      const filename = `${registerId}_${entryId}_${columnId}_${Date.now()}.jpg`;
-      const path = `registers/${registerId}/entries/${entryId}/${filename}`;
-      const imageRef = storageRef(storage, path);
-      
-      console.log(`[Cloud Upload] Starting direct Firebase Storage upload for ${path}...`);
-      const snapshot = await uploadString(imageRef, compressedBase64, 'data_url');
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      console.log(`[Cloud Upload] Direct upload successful! URL:`, downloadURL);
-      return downloadURL;
-    } catch (storageErr) {
-      console.warn(`[Cloud Upload] Firebase Storage direct upload failed (falling back to Base64):`, storageErr);
-      // Fallback to storing the compressed base64 directly
-      return compressedBase64;
-    }
+    return this.compressAndUploadToCloudinary(file);
   }
 }
 

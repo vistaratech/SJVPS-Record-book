@@ -401,11 +401,11 @@ export function AddRecordModal({
                                   if (!f) return;
                                   setUploadingImageCol(colIdStr);
                                   try {
-                                    const compressed = await ImageCompressionModule.compressImage(f);
-                                    setValues(prev => ({ ...prev, [colIdStr]: compressed }));
-                                    toast.success('Image loaded & compressed successfully!');
+                                    const uploadedUrl = await ImageCompressionModule.compressAndUploadToCloudinary(f);
+                                    setValues(prev => ({ ...prev, [colIdStr]: uploadedUrl }));
+                                    toast.success('Image compressed & uploaded to Cloudinary successfully!');
                                   } catch (err) {
-                                    toast.error('Failed to compress image');
+                                    toast.error('Failed to upload image');
                                     console.error(err);
                                   } finally {
                                     setUploadingImageCol(null);

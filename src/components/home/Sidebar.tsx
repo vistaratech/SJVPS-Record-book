@@ -1288,11 +1288,11 @@ export const Sidebar = memo(function Sidebar({
                                                 if (!f) return;
                                                 setEntryUploadingImageCol(colIdStr);
                                                 try {
-                                                  const compressed = await ImageCompressionModule.compressImage(f);
-                                                  setEntryValues(prev => ({ ...prev, [colIdStr]: compressed }));
-                                                  toast.success('Image loaded & compressed successfully!');
+                                                  const uploadedUrl = await ImageCompressionModule.compressAndUploadToCloudinary(f);
+                                                  setEntryValues(prev => ({ ...prev, [colIdStr]: uploadedUrl }));
+                                                  toast.success('Image compressed & uploaded to Cloudinary successfully!');
                                                 } catch (err) {
-                                                  toast.error('Failed to compress image');
+                                                  toast.error('Failed to upload image');
                                                   console.error(err);
                                                 } finally {
                                                   setEntryUploadingImageCol(null);
