@@ -32,7 +32,7 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
   useEffect(() => {
     const visibleColIds = new Set<number>();
     columns.forEach(c => {
-      if (!hiddenColumns.has(c.id) && c.type !== 'image') {
+      if (!hiddenColumns.has(c.id)) {
         visibleColIds.add(c.id);
       }
     });
@@ -49,9 +49,7 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
   const handleSelectAll = () => {
     const allColIds = new Set<number>();
     columns.forEach(c => {
-      if (c.type !== 'image') {
-        allColIds.add(c.id);
-      }
+      allColIds.add(c.id);
     });
     setSelectedColIds(allColIds);
   };
@@ -193,13 +191,12 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
                 <span style={{ color: 'var(--border)' }}>|</span>
                 <button onClick={handleDeselectAll} style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px' }}>None</button>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', background: 'rgba(0, 45, 93, 0.1)', padding: '2px 8px', borderRadius: '12px', marginLeft: '4px' }}>
-                  {selectedColIds.size} / {columns.filter(c => c.type !== 'image').length}
+                  {selectedColIds.size} / {columns.length}
                 </span>
               </div>
             </div>
             <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflowY: 'auto', flex: 1, background: '#fff', padding: '4px 0' }}>
               {columns.map(col => {
-                if (col.type === 'image') return null; // Can't export images
                 const isHidden = hiddenColumns.has(col.id);
                 const isSelected = selectedColIds.has(col.id);
                 return (
