@@ -2222,18 +2222,42 @@ export default function RegisterPage() {
       );
       if (isDuplicate) {
         if ((col as any).unique) {
-          toast.error(`${col.name} is a unique field. The value "${value}" already exists.`);
+          toast.error(
+            `Unique Field Violation: "${value}" already exists in column "${col.name}".`,
+            {
+              id: `dup-unique-${columnId}-${value}`,
+              duration: 5000,
+              position: 'top-right',
+              style: {
+                background: '#fef2f2',
+                color: '#991b1b',
+                border: '1px solid #ef4444',
+                fontWeight: 600,
+                fontSize: '13px',
+                maxWidth: '340px',
+              },
+              icon: '⛔',
+            }
+          );
           return false; // Return false to indicate rejection
         } else {
-          addNotification({
-            title: 'Double Entry Detected',
-            message: `The value "${value}" already exists in column "${col.name}".`,
-            type: 'warning',
-            link: {
-              registerId: String(registerId),
-              rowId: entryId,
+          toast(
+            `Double Entry Warning: The value "${value}" already exists in column "${col.name}".`,
+            {
+              id: `dup-warning-${columnId}-${value}`,
+              duration: 5000,
+              position: 'top-right',
+              style: {
+                background: '#fff7ed',
+                color: '#92400e',
+                border: '1px solid #f59e0b',
+                fontWeight: 600,
+                fontSize: '13px',
+                maxWidth: '340px',
+              },
+              icon: '⚠️',
             }
-          });
+          );
         }
       }
     }
