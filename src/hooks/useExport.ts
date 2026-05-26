@@ -101,7 +101,6 @@ export function useExport({
     if (!register) return;
 
     const visibleColumns = columns.filter((col) =>
-      !hiddenColumns.has(col.id) &&
       options.selectedColumnIds.has(col.id) &&
       (!downloadableColumnIds || downloadableColumnIds.has(col.id))
     );
@@ -305,7 +304,6 @@ export function useExport({
     if (!register) return;
 
     const visibleCols = columns.filter((col) =>
-      !hiddenColumns.has(col.id) &&
       options.selectedColumnIds.has(col.id) &&
       (!downloadableColumnIds || downloadableColumnIds.has(col.id))
     );
@@ -464,7 +462,6 @@ export function useExport({
     const entry = localEntries.find(e => e.id === entryId);
     if (!entry) return;
     const visibleCols = columns.filter(col => {
-      if (hiddenColumns.has(col.id)) return false;
       if (downloadableColumnIds && !downloadableColumnIds.has(col.id)) return false;
       if (isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0 && !selectedColumns.has(col.id)) return false;
       return true;
@@ -539,7 +536,6 @@ export function useExport({
     const entry = localEntries.find(e => e.id === entryId);
     if (!entry) return;
     const visibleCols = columns.filter(col => {
-      if (hiddenColumns.has(col.id)) return false;
       if (downloadableColumnIds && !downloadableColumnIds.has(col.id)) return false;
       if (isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0 && !selectedColumns.has(col.id)) return false;
       return true;
@@ -621,7 +617,6 @@ export function useExport({
     const entry = localEntries.find(e => e.id === entryId);
     if (!entry) return;
     const visibleCols = columns.filter(col => {
-      if (hiddenColumns.has(col.id)) return false;
       if (downloadableColumnIds && !downloadableColumnIds.has(col.id)) return false;
       if (isPreviewSelectedColumns && selectedColumns && selectedColumns.size > 0 && !selectedColumns.has(col.id)) return false;
       return true;

@@ -4195,7 +4195,19 @@ a {
 .spreadsheet td .cell-checkbox-wrap.cell-readonly {
   background-color: rgba(243, 244, 246, 0.4) !important;
   cursor: not-allowed !important;
-  opacity: 0.7;
+  opacity: 1 !important;
+}
+
+/* Prevent disabled inputs, select, and textarea from being faded/greyed out by browser defaults */
+.spreadsheet td .cell-readonly input,
+.spreadsheet td .cell-readonly select,
+.spreadsheet td .cell-readonly textarea,
+.spreadsheet input:disabled,
+.spreadsheet select:disabled,
+.spreadsheet textarea:disabled {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  opacity: 1 !important;
 }
 
 /* Empty state */
@@ -8899,7 +8911,7 @@ tr.row-selected .row-select-checkbox {
 
 /* Readonly Access - Dimmed Effect and Cursor */
 .spreadsheet.readonly-access {
-  opacity: 0.75;
+  opacity: 1 !important;
 }
 
 .spreadsheet.readonly-access tbody {

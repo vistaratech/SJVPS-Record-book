@@ -26,18 +26,16 @@ export function ExportModal({ onClose, onExport, columns, hiddenColumns, selecte
   const [includeDateTime, setIncludeDateTime] = useState(true);
   const [exportRows, setExportRows] = useState<'all' | 'selected'>(selectedRowCount > 0 ? 'selected' : 'all');
   
-  // Initialize with visible columns only
+  // Initialize with all columns checked by default
   const [selectedColIds, setSelectedColIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
-    const visibleColIds = new Set<number>();
+    const allColIds = new Set<number>();
     columns.forEach(c => {
-      if (!hiddenColumns.has(c.id)) {
-        visibleColIds.add(c.id);
-      }
+      allColIds.add(c.id);
     });
-    setSelectedColIds(visibleColIds);
-  }, [columns, hiddenColumns]);
+    setSelectedColIds(allColIds);
+  }, [columns]);
 
   const toggleColumn = (colId: number) => {
     const next = new Set(selectedColIds);
