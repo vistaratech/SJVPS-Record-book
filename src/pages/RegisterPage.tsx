@@ -86,12 +86,7 @@ export default function RegisterPage() {
     return (user as any)?.permissions?.isAdmin === true || (user as any)?.permissions?.fullSheetAccess === true || (user as any)?.role === 'admin' || (user as any)?.role === 'superadmin' || (user as any)?.role === 'sheet_admin';
   }, [user]);
 
-  // Helper to log workspace actions for activity tracking
-  const _logWork = useCallback((action: string, details: string) => {
-    if (user?.id) {
-      firebaseLogWorkspaceAction(user.id as string, (user as any)?.name || user?.email || 'Unknown', action, details);
-    }
-  }, [user]);
+
 
   // Helper to parse column restriction strings like "1,3,5-8" into a Set of 0-indexed column indices
   const _parseColumnRestriction = (value: any): Set<number> | null => {
@@ -129,6 +124,20 @@ export default function RegisterPage() {
     refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
+
+  // Helper to log workspace actions for activity tracking
+  const _logWork = useCallback((action: string, details: string) => {
+    if (user?.id) {
+      firebaseLogWorkspaceAction(
+        user.id as string, 
+        (user as any)?.name || user?.email || 'Unknown', 
+        action, 
+        details, 
+        registerId, 
+        register?.name
+      );
+    }
+  }, [user, registerId, register]);
 
   const isFullyRestricted = useMemo(() => {
     if (!user || (user as any).permissions?.isAdmin || (user as any).permissions?.fullSheetAccess || (user as any).role === 'admin' || (user as any).role === 'superadmin' || (user as any).role === 'sheet_admin') return false;
@@ -1132,6 +1141,7 @@ export default function RegisterPage() {
       // Force a re-fetch to ensure all sequential logic (auto-increment) is synced from server
       queryClient.invalidateQueries({ queryKey: ['register', registerId] });
       toast.success('Column added successfully');
+      _logWork('add_column', `Added column "${newColName}" (${newColType})`);
 
       // Reset form fields
       setNewColName('');
@@ -1192,8 +1202,11 @@ export default function RegisterPage() {
       setColMenuId(null);
       return { previousRegister, previousLocalEntries };
     },
-    onSuccess: () => {
+    onSuccess: (_, colId, context) => {
       toast.success('Column deleted');
+      const deletedColStr = colId.toString();
+      const deletedCol = context?.previousRegister?.columns?.find((c: any) => c.id.toString() === deletedColStr);
+      _logWork('delete_column', `Deleted column "${deletedCol?.name || colId}"`);
     },
     onError: (err: any, _colId, context) => {
       if (context?.previousRegister) queryClient.setQueryData(['register', registerId], context.previousRegister);
@@ -1215,6 +1228,7 @@ export default function RegisterPage() {
       }
       toast.success('Column link successfully removed');
       setLinkInfoModal(null);
+      _logWork('update_permissions', `Removed link on column: ${linkInfoModal?.columnName || 'Unknown'}`);
     },
     onError: () => {
       toast.error('Failed to remove column link');
@@ -1248,10 +1262,12 @@ export default function RegisterPage() {
       setRenameColModal(false);
       return { prev };
     },
-    onSuccess: (updatedReg) => {
+    onSuccess: (updatedReg, _vars, context) => {
       queryClient.setQueryData(['register', registerId], updatedReg);
       queryClient.invalidateQueries({ queryKey: ['register', registerId] });
       toast.success('Column renamed');
+      const targetCol = context?.prev?.columns?.find((c: any) => c.id === activeModalColId);
+      _logWork('add_column', `Renamed column from "${targetCol?.name || 'Unknown'}" to "${renameColValue}"`);
     },
     onError: (_err, _vars, context) => {
       if (context?.prev) queryClient.setQueryData(['register', registerId], context.prev);
@@ -1953,6 +1969,7 @@ export default function RegisterPage() {
       });
       // Close the Add Record modal on success
       setShowAddRecordModal(false);
+      _logWork('add_row', `Added new row #${newEntry.rowNumber}`);
     },
     onError: (_err, _vars, context) => {
       // Roll back temp entry
@@ -1992,6 +2009,11 @@ export default function RegisterPage() {
       }
       toast.error('Failed to delete row');
     },
+    onSuccess: (_, entryId, context) => {
+      const deletedRow = context?.previousLocalEntries?.find(e => e.id === entryId);
+      const rowNum = deletedRow ? deletedRow.rowNumber : 'Unknown';
+      _logWork('delete_row', `Deleted row #${rowNum}`);
+    },
     onSettled: () => {
       // 7. Always refetch after error or success to ensure we are in sync with the server
       // queryClient.invalidateQueries({ queryKey: ['register', registerId] });
@@ -2009,6 +2031,7 @@ export default function RegisterPage() {
       });
       setLocalEntries(prev => [...prev, newEntry]);
       setRowMenuId(null);
+      _logWork('add_row', `Duplicated row to create row #${newEntry.rowNumber}`);
     },
   });
 
@@ -2042,6 +2065,7 @@ export default function RegisterPage() {
       });
       setRowMenuId(null);
       toast.success('Row added successfully');
+      _logWork('add_row', `Inserted new row #${newEntry.rowNumber} at position ${atIndex + 1}`);
 
       // Focus the first editable cell of the new row
       setTimeout(() => {
@@ -2076,8 +2100,9 @@ export default function RegisterPage() {
 
       return { previousRegister, previousLocalEntries };
     },
-    onSuccess: () => {
+    onSuccess: (_, entryIds) => {
       toast.success('Rows deleted');
+      _logWork('bulk_delete_rows', `Deleted ${entryIds.length} rows`);
     },
     onError: (_err, _vars, context) => {
       if (context?.previousRegister) queryClient.setQueryData(['register', registerId], context.previousRegister);
@@ -2497,6 +2522,7 @@ export default function RegisterPage() {
           if (col?.linkedTo) {
             queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
           }
+          _logWork('edit_cells', `Updated photo in cell [Row #${entryIdx + 1}, Column: ${col?.name || columnId}]`);
         } catch (err: any) {
           DataPersistenceModule.updateLedgerStatus(ledgerId, 'failed', err?.message || err?.toString());
           console.error(`[handleCellChange - Image Error] Failed to write image:`, err);
@@ -2574,6 +2600,9 @@ export default function RegisterPage() {
           if (col?.linkedTo) {
             queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
           }
+          const rowIdx = localEntriesRef.current.findIndex(e => e.id === entryId);
+          const displayVal = value.length > 50 ? value.substring(0, 50) + '...' : value;
+          _logWork('edit_cells', `Updated value to "${displayVal}" in cell [Row #${rowIdx + 1}, Column: ${col?.name || columnId}]`);
         }).catch((err) => {
           DataPersistenceModule.updateLedgerStatus(ledgerId, 'failed', err?.message || err?.toString());
         });

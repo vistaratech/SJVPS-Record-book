@@ -347,7 +347,14 @@ export async function firebaseUpdateUserStatus(id: string, status: 'active' | 'i
 
 // ─── Activity Logs ───────────────────────────────────────────────────────────
 
-export async function logActivity(userId: string, userName: string, action: string, details: string) {
+export async function logActivity(
+  userId: string, 
+  userName: string, 
+  action: string, 
+  details: string,
+  registerId?: string | number,
+  registerName?: string
+) {
   const id = generateId();
   await setDoc(doc(db, 'app_activity', id), {
     id,
@@ -356,6 +363,8 @@ export async function logActivity(userId: string, userName: string, action: stri
     action,
     details,
     timestamp: new Date().toISOString(),
+    ...(registerId !== undefined ? { registerId: String(registerId) } : {}),
+    ...(registerName !== undefined ? { registerName } : {}),
   });
 }
 
@@ -364,9 +373,14 @@ export async function logActivity(userId: string, userName: string, action: stri
  * This is a fire-and-forget call — errors are silently swallowed.
  */
 export function firebaseLogWorkspaceAction(
-  userId: string, userName: string, action: string, details: string
+  userId: string, 
+  userName: string, 
+  action: string, 
+  details: string,
+  registerId?: string | number,
+  registerName?: string
 ) {
-  logActivity(userId, userName, action, details).catch(() => {});
+  logActivity(userId, userName, action, details, registerId, registerName).catch(() => {});
 }
 
 

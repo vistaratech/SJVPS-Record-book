@@ -8,6 +8,7 @@ import type { RegisterSummary, Business } from '../../lib/api';
 import { getRegister, getRegisterColumnsOnly, addEntry, formatDateToDDMMYYYY, listFolders, createFolder, renameFolder, deleteFolder, moveRegisterToFolder, duplicateRegister, searchAllRegisters } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { ImageCompressionModule } from '../../lib/imageCompressionModule';
+import { firebaseLogWorkspaceAction } from '../../lib/firebaseAuth';
 interface SidebarProps {
   businesses?: Business[];
   filtered?: RegisterSummary[];
@@ -1381,6 +1382,16 @@ export const Sidebar = memo(function Sidebar({
                                 setEntrySubmitting(true);
                                 try {
                                   await addEntry(entrySelectedReg!.id, cells);
+                                  if (user?.id) {
+                                    firebaseLogWorkspaceAction(
+                                      user.id as string,
+                                      (user as any)?.name || user?.email || 'Unknown',
+                                      'add_row',
+                                      `Added new row (Quick Entry) inside register: ${entrySelectedReg!.name}`,
+                                      entrySelectedReg!.id,
+                                      entrySelectedReg!.name
+                                    );
+                                  }
                                   toast.success(`Entry added to ${entrySelectedReg!.name}`, {
                                     style: { background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 600, fontSize: '13px' },
                                     icon: '✅',

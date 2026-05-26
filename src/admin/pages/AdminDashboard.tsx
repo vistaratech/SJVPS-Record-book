@@ -2,16 +2,17 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { firebaseLogout } from '../../lib/firebaseAuth';
-import { LayoutDashboard, Users, Activity, LogOut, BarChart3, Menu, X, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Users, Activity, LogOut, BarChart3, Menu, X, ShieldAlert, FileSpreadsheet } from 'lucide-react';
 import AdminUsersPage from './AdminUsersPage';
 import AdminActivityPage from './AdminActivityPage';
 import AdminDownloadRequestsPage from './AdminDownloadRequestsPage';
 import AdminAnalyticsPage from './AdminAnalyticsPage';
+import AdminActiveReportPage from './AdminActiveReportPage';
 
 export default function AdminDashboard() {
   const { user, logout, token } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'users'|'activity'|'downloads'|'analytics'>('users');
+  const [activeTab, setActiveTab] = useState<'users'|'activity'|'report'|'downloads'|'analytics'>('users');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Clear workspace mode when entering admin dashboard
@@ -34,6 +35,7 @@ export default function AdminDashboard() {
   const navItems: { key: typeof activeTab; icon: any; label: string }[] = [
     { key: 'users', icon: <Users size={18}/>, label: 'Users & Roles' },
     { key: 'activity', icon: <Activity size={18}/>, label: 'Activity Log' },
+    { key: 'report', icon: <FileSpreadsheet size={18}/>, label: 'Active Report' },
     { key: 'downloads', icon: <ShieldAlert size={18}/>, label: 'Approval Requests' },
     { key: 'analytics', icon: <BarChart3 size={18}/>, label: 'Analytics' },
   ];
@@ -106,6 +108,7 @@ export default function AdminDashboard() {
       <div className="admin-main-content" style={{flex:1,padding:'30px 40px',overflowY:'auto',height:'100vh',boxSizing:'border-box'}}>
         {activeTab === 'users' && <AdminUsersPage />}
         {activeTab === 'activity' && <AdminActivityPage />}
+        {activeTab === 'report' && <AdminActiveReportPage />}
         {activeTab === 'downloads' && <AdminDownloadRequestsPage />}
         {activeTab === 'analytics' && <AdminAnalyticsPage />}
       </div>
