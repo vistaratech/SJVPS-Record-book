@@ -8800,7 +8800,7 @@ tr.row-selected .row-select-checkbox {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 250px;
+  max-width: 600px;
 }
 
 .header-add-btn {
@@ -8885,7 +8885,7 @@ tr.row-selected .row-select-checkbox {
 
 @media (max-width: 1024px) {
   .register-header-title {
-    max-width: 150px;
+    max-width: 350px;
   }
   .register-header-left {
     gap: 16px;
