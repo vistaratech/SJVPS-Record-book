@@ -129,12 +129,22 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
   return (
     <div
       data-cell={`cell-${idx}-${col.id}`}
+      id={`cell-${idx}-${col.id}`}
       tabIndex={readOnly ? -1 : 0}
       className={`cell-currency ${readOnly ? 'cell-readonly' : ''}`}
-      onClick={() => !readOnly && setEditing(true)}
-      onFocus={() => !readOnly && setEditing(true)}
-      onKeyDown={onKeyDown}
-      title={readOnly ? "" : "Click to edit"}
+      onDoubleClick={() => !readOnly && setEditing(true)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          setEditing(true);
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          setEditing(true);
+          setVal(e.key);
+        } else {
+          onKeyDown?.(e);
+        }
+      }}
+      title={readOnly ? "" : "Double click to edit"}
     >
       {rawValue ? formatCurrency(rawValue) : <span className="cell-placeholder"><IndianRupee size={11} /> Amount</span>}
     </div>
@@ -148,6 +158,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
   }
   const [val, setVal] = useState(initialValue);
   const [focused, setFocused] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -206,6 +217,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
     // Delay to allow click on dropdown item
     setTimeout(() => {
       setFocused(false);
+      setIsEditing(false);
       setIsDeleting(false);
       setHighlightIdx(-1);
       if (readOnly) return;
@@ -229,6 +241,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
 
     if (e.key === 'Escape') {
       setFocused(false);
+      setIsEditing(false);
       setHighlightIdx(-1);
       e.currentTarget.blur();
       return;
@@ -275,6 +288,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         }
       }
       setFocused(false);
+      setIsEditing(false);
       setHighlightIdx(-1);
       if (e.shiftKey) {
         const prevCol = visibleColumns[colIdx - 1];
@@ -293,18 +307,55 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
           if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id, 0);
         }
       }
-    } else if (e.key === 'ArrowDown') {
+      return;
+    }
+
+    // Enable edit mode when user starts typing printable characters
+    if (!isEditing && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      setIsEditing(true);
+    }
+
+    // Arrow navigation when NOT actively editing text
+    if (!isEditing) {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const prevCol = visibleColumns[colIdx - 1];
+        if (prevCol) {
+          focusNext(idx, prevCol.id, colIdx - 1);
+        } else if (idx > 0) {
+          const lastCol = visibleColumns[visibleColumns.length - 1];
+          if (lastCol) focusNext(idx - 1, lastCol.id, visibleColumns.length - 1);
+        }
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const nextCol = visibleColumns[colIdx + 1];
+        if (nextCol) {
+          focusNext(idx, nextCol.id, colIdx + 1);
+        } else if (idx < totalRows - 1) {
+          const firstCol = visibleColumns[0];
+          if (firstCol) focusNext(idx + 1, firstCol.id, 0);
+        }
+        return;
+      }
+    }
+
+    // Row navigation is always cell-by-cell
+    if (e.key === 'ArrowDown') {
       if (idx < totalRows - 1) {
         e.preventDefault();
+        setIsEditing(false); // Reset editing on vertical navigation
         focusNext(idx + 1, col.id, colIdx);
       }
     } else if (e.key === 'ArrowUp') {
       if (idx > 0) {
         e.preventDefault();
+        setIsEditing(false); // Reset editing on vertical navigation
         focusNext(idx - 1, col.id, colIdx);
       }
     }
-  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion, scrollToColumn]);
+  }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion, scrollToColumn, isEditing]);
 
 
 
@@ -341,11 +392,16 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         onBlur={onBlur}
         onFocus={handleFocus}
         onKeyDown={onKeyDown}
+        onDoubleClick={() => !readOnly && setIsEditing(true)}
         type={type}
         placeholder={placeholder}
         inputMode={col.type === 'number' ? 'decimal' : undefined}
         autoComplete="off"
         readOnly={readOnly}
+        style={{
+          caretColor: isEditing ? 'auto' : 'transparent',
+          userSelect: isEditing ? 'text' : 'none'
+        }}
       />
       {showDropdown && dropdownPos && createPortal(
         <div
