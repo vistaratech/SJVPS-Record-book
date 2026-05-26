@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, AlertTriangle } from 'lucide-react';
+import { Plus, AlertTriangle, CloudUpload, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatDateToDDMMYYYY } from '../../../lib/api';
+import { ImageCompressionModule } from '../../../lib/imageCompressionModule';
 
 interface Column {
   id: number;
@@ -35,6 +36,7 @@ export function AddRecordModal({
 }: AddRecordModalProps) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [duplicates, setDuplicates] = useState<Set<string>>(new Set());
+  const [uploadingImageCol, setUploadingImageCol] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLElement | null>(null);
   // Track which (colId:value) combinations we've already toasted — prevents spam
   const toastedRef = useRef<Set<string>>(new Set());
@@ -199,7 +201,7 @@ export function AddRecordModal({
         <div className="row-detail-header">
           <div className="row-detail-title">
             <Plus size={18} style={{ flexShrink: 0, color: 'var(--navy)' }} />
-            <h2 style={{ fontSize: '18px', margin: 0, color: 'var(--navy)' }}>Add Record</h2>
+            <h2 style={{ fontSize: '18px', margin: 0, color: 'var(--navy)' }}>Add Record (Row #{existingEntries.length + 1})</h2>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button className="row-detail-close" onClick={onClose} aria-label="Close" title="Close">✕</button>
@@ -312,6 +314,106 @@ export function AddRecordModal({
                           <label htmlFor={`ar-col-${col.id}`} style={{ marginLeft: '10px', fontSize: '13px', color: 'var(--muted)', cursor: 'pointer' }}>
                             {val === 'true' ? 'Checked' : 'Unchecked'}
                           </label>
+                        </div>
+                      ) : col.type === 'image' ? (
+                        <div style={{ position: 'relative', width: '100%' }}>
+                          {val ? (
+                            <div style={{
+                              position: 'relative',
+                              width: '100%',
+                              height: '140px',
+                              borderRadius: '8px',
+                              border: '1px solid var(--border)',
+                              overflow: 'hidden',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: '#f8fafc',
+                            }}>
+                              <img 
+                                src={val.split('|||')[0]}
+                                alt={col.name} 
+                                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setValues(prev => ({ ...prev, [colIdStr]: '' }))}
+                                style={{
+                                  position: 'absolute',
+                                  top: '8px',
+                                  right: '8px',
+                                  background: 'rgba(15, 23, 42, 0.6)',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '4px',
+                                  color: 'white',
+                                  borderRadius: '50%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'background-color 0.15s',
+                                  zIndex: 10,
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.9)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'rgba(15, 23, 42, 0.6)'; }}
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <label style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '100%',
+                              height: '100px',
+                              border: '2px dashed #cbd5e1',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              background: '#f8fafc',
+                              transition: 'all 0.15s',
+                              boxSizing: 'border-box',
+                              padding: '16px',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = '#86efac'; e.currentTarget.style.backgroundColor = '#f0fdf4'; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                            >
+                              {uploadingImageCol === colIdStr ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                  <Loader2 size={24} color="#16a34a" style={{ animation: 'spin 1s linear infinite' }} />
+                                  <span style={{ fontSize: '12px', color: '#64748b' }}>Uploading & compressing...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <CloudUpload size={24} color="#64748b" style={{ marginBottom: '6px' }} />
+                                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#475569' }}>Click to upload photo</span>
+                                  <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>JPEG, PNG, WebP</span>
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                                disabled={uploadingImageCol === colIdStr}
+                                onChange={async (e) => {
+                                  const f = e.target.files?.[0];
+                                  if (!f) return;
+                                  setUploadingImageCol(colIdStr);
+                                  try {
+                                    const compressed = await ImageCompressionModule.compressImage(f);
+                                    setValues(prev => ({ ...prev, [colIdStr]: compressed }));
+                                    toast.success('Image loaded & compressed successfully!');
+                                  } catch (err) {
+                                    toast.error('Failed to compress image');
+                                    console.error(err);
+                                  } finally {
+                                    setUploadingImageCol(null);
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
                         </div>
                       ) : col.type === 'date' ? (
                         <input type="text" id={`ar-col-${col.id}`} className={inputCls}

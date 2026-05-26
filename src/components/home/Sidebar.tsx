@@ -1,10 +1,13 @@
-import { useCallback, memo, useState, startTransition, useDeferredValue, useMemo } from 'react';
-import { Menu, Search, Plus, FileText, X, Folder, FileSpreadsheet, ClipboardPaste, Pencil, Trash2, PlusCircle, FolderPlus, Bell, User, Activity, LayoutTemplate, LogOut, CloudUpload, Clock, CheckCircle2, XCircle, Shield, Sparkles } from 'lucide-react';
+import { useCallback, memo, useState, useEffect, useRef, startTransition, useDeferredValue, useMemo } from 'react';
+import { Menu, Search, Plus, FileText, X, Folder, FileSpreadsheet, ClipboardPaste, Pencil, Trash2, PlusCircle, FolderPlus, Bell, User, Activity, LayoutTemplate, LogOut, CloudUpload, Clock, CheckCircle2, XCircle, Shield, Sparkles, PenLine, ChevronDown, ChevronRight, ArrowLeft, Check, Loader2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '../../lib/auth';
 import type { RegisterSummary, Business } from '../../lib/api';
-import { getRegister, listFolders, createFolder, renameFolder, deleteFolder, moveRegisterToFolder, duplicateRegister, searchAllRegisters } from '../../lib/api';
+import { getRegister, getRegisterColumnsOnly, addEntry, formatDateToDDMMYYYY, listFolders, createFolder, renameFolder, deleteFolder, moveRegisterToFolder, duplicateRegister, searchAllRegisters } from '../../lib/api';
+import toast from 'react-hot-toast';
+import { ImageCompressionModule } from '../../lib/imageCompressionModule';
 interface SidebarProps {
   businesses?: Business[];
   filtered?: RegisterSummary[];
@@ -59,6 +62,27 @@ export const Sidebar = memo(function Sidebar({
 
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isFooterMenuOpen, setIsFooterMenuOpen] = useState(false);
+  const [isEntryPanelOpen, setIsEntryPanelOpen] = useState(false);
+  const [entryExpandedFolders, setEntryExpandedFolders] = useState<Record<string, boolean>>({});
+  const [entrySearch, setEntrySearch] = useState('');
+  // Quick Entry form state
+  const [entrySelectedReg, setEntrySelectedReg] = useState<{ id: number; name: string; iconColor?: string } | null>(null);
+  const [entryColumns, setEntryColumns] = useState<any[]>([]);
+  const [entryExistingEntries, setEntryExistingEntries] = useState<any[]>([]);
+  const [entryValues, setEntryValues] = useState<Record<string, string>>({});
+  const [entryLoading, setEntryLoading] = useState(false);
+  const [entrySubmitting, setEntrySubmitting] = useState(false);
+  const [entrySavedCount, setEntrySavedCount] = useState(0);
+  const entryFirstInputRef = useRef<HTMLElement | null>(null);
+  const [entryUploadingImageCol, setEntryUploadingImageCol] = useState<string | null>(null);
+
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  const isMobile = windowWidth < 768;
 
   const businessId = businesses?.[0]?.id;
   const deferredSearch = useDeferredValue(search);
@@ -80,17 +104,17 @@ export const Sidebar = memo(function Sidebar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(() => {
     try {
-      return localStorage.getItem('seen_version_1.5.2') !== 'true';
+      return localStorage.getItem('seen_version_1.5.5') !== 'true';
     } catch {
       return false;
     }
   });
-  const [versionTab, setVersionTab] = useState<'1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.5.2');
+  const [versionTab, setVersionTab] = useState<'1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.5.5');
 
   const handleCloseVersionModal = useCallback(() => {
     setShowVersionModal(false);
     try {
-      localStorage.setItem('seen_version_1.5.2', 'true');
+      localStorage.setItem('seen_version_1.5.5', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -410,6 +434,45 @@ export const Sidebar = memo(function Sidebar({
         </div>
         )}
 
+        {/* Entry Button — Quick Add Entry to any register */}
+        {!isCollapsed && (
+          <div style={{ padding: '0 12px 8px' }}>
+            <button
+              onClick={() => setIsEntryPanelOpen(true)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '9px 14px',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+                color: '#15803d',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: 600,
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #dcfce7 0%, #d1fae5 100%)';
+                e.currentTarget.style.borderColor = '#86efac';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(22,163,74,0.15)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)';
+                e.currentTarget.style.borderColor = '#e2e8f0';
+                e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
+              }}
+              title="Quick add entry to any register"
+            >
+              <PenLine size={15} />
+              <span>Entry</span>
+            </button>
+          </div>
+        )}
+
         {/* Global Search Bar */}
         {!isCollapsed && (
           <div style={{ padding: '4px 16px 12px' }}>
@@ -662,7 +725,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.5.2');
+                  setVersionTab('1.5.5');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -671,9 +734,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.5.2"
+                title="View what's new in v1.5.5"
               >
-                v1.5.2
+                v1.5.5
               </span>
             </span>
           </div>
@@ -728,6 +791,700 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
           </>
+        )}
+
+        {/* ── Quick Entry Panel Modal ── */}
+        {isEntryPanelOpen && createPortal(
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.5)',
+              zIndex: 10000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backdropFilter: 'blur(4px)',
+              animation: 'fadeIn 0.2s ease-out',
+            }}
+            onClick={() => { setIsEntryPanelOpen(false); setEntrySearch(''); setEntrySelectedReg(null); setEntryColumns([]); setEntryValues({}); setEntrySavedCount(0); }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                width: isMobile ? (entrySelectedReg ? '480px' : '400px') : '1000px',
+                maxWidth: '95vw',
+                height: isMobile ? undefined : '700px',
+                maxHeight: '85vh',
+                background: 'white',
+                borderRadius: '16px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05)',
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                overflow: 'hidden',
+                transition: 'all 0.25s ease',
+              }}
+            >
+              {/* Left Column (Register Picker Pane) */}
+              {(!isMobile || !entrySelectedReg) && (
+                <div style={{
+                  width: isMobile ? '100%' : '360px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  borderRight: isMobile ? 'none' : '1px solid #e2e8f0',
+                  flexShrink: 0,
+                  background: 'white',
+                  height: '100%',
+                }}>
+                  {/* Header */}
+                  <div style={{
+                    padding: '20px 24px 16px',
+                    borderBottom: '1px solid #f1f5f9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{
+                        background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)',
+                        padding: '8px',
+                        borderRadius: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        <PenLine size={18} color="#16a34a" />
+                      </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>Quick Entry</h3>
+                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                          {entrySavedCount > 0 ? `${entrySavedCount} entries saved` : 'Select a register below'}
+                        </span>
+                      </div>
+                    </div>
+                    {(isMobile || !entrySelectedReg) && (
+                      <button
+                        onClick={() => { setIsEntryPanelOpen(false); setEntrySearch(''); setEntrySelectedReg(null); setEntryColumns([]); setEntryValues({}); setEntrySavedCount(0); }}
+                        style={{
+                          background: '#f1f5f9',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '6px',
+                          color: '#64748b',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#e2e8f0'; }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search */}
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid #f8fafc' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      background: '#f8fafc',
+                      borderRadius: '8px',
+                      border: '1px solid #e2e8f0',
+                    }}>
+                      <Search size={14} color="#94a3b8" />
+                      <input
+                        type="text"
+                        placeholder="Search registers…"
+                        value={entrySearch}
+                        onChange={e => setEntrySearch(e.target.value)}
+                        autoFocus
+                        style={{
+                          border: 'none',
+                          outline: 'none',
+                          background: 'transparent',
+                          fontSize: '13px',
+                          color: '#0f172a',
+                          width: '100%',
+                          font: 'inherit',
+                        }}
+                      />
+                      {entrySearch && (
+                        <button
+                          onClick={() => setEntrySearch('')}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#94a3b8', display: 'flex' }}
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Register List */}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+                    {(() => {
+                      const searchLower = entrySearch.toLowerCase().trim();
+                      const matchesSearch = (name: string) => !searchLower || name.toLowerCase().includes(searchLower);
+
+                      const visibleFolders = folders.filter(f => {
+                        if (!user || (user as any).permissions?.isAdmin || (user as any).role === 'superadmin' || (user as any).role === 'admin' || (user as any).role === 'sheet_admin') return true;
+                        const allowedFolders = (user as any).permissions?.allowedFolders;
+                        return Array.isArray(allowedFolders) && allowedFolders.map(String).includes(f.id.toString());
+                      });
+
+                      const foldersWithRegs = visibleFolders.map(folder => {
+                        const folderRegs = (filtered || []).filter(r => r.folderId === folder.id && matchesSearch(r.name));
+                        return { folder, regs: folderRegs };
+                      }).filter(f => f.regs.length > 0 || (!searchLower && f.regs.length === 0));
+
+                      const unassignedRegs = (filtered || []).filter(r => !r.folderId && matchesSearch(r.name));
+
+                      const handleSelectRegister = async (reg: RegisterSummary) => {
+                        setEntryLoading(true);
+                        setEntrySelectedReg({ id: reg.id, name: reg.name, iconColor: reg.iconColor });
+                        try {
+                          const detail = await getRegister(reg.id);
+                          const cols = (detail.columns || []).filter((c: any) => c.type !== 'formula');
+                          setEntryColumns(detail.columns || []);
+                          setEntryExistingEntries(detail.entries || []);
+                          const init: Record<string, string> = {};
+                          cols.forEach((c: any) => { init[c.id.toString()] = ''; });
+                          setEntryValues(init);
+                        } catch (err) {
+                          toast.error('Failed to load register columns');
+                          setEntrySelectedReg(null);
+                        } finally {
+                          setEntryLoading(false);
+                        }
+                      };
+
+                      const renderEntryRegItem = (reg: RegisterSummary, indent: number = 0) => {
+                        const isSelected = entrySelectedReg?.id === reg.id;
+                        return (
+                          <div
+                            key={reg.id}
+                            onClick={() => handleSelectRegister(reg)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              padding: `8px 12px 8px ${indent ? `${indent}px` : '12px'}`,
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s',
+                              backgroundColor: isSelected ? '#f0fdf4' : 'transparent',
+                              borderLeft: isSelected ? '3px solid #16a34a' : 'none',
+                              paddingLeft: isSelected ? `${(indent || 12) - 3}px` : `${indent || 12}px`,
+                              transform: isSelected ? 'translateX(2px)' : 'none',
+                            }}
+                            onMouseEnter={e => {
+                              if (!isSelected) {
+                                e.currentTarget.style.backgroundColor = '#f8fafc';
+                                e.currentTarget.style.transform = 'translateX(2px)';
+                              }
+                            }}
+                            onMouseLeave={e => {
+                              if (!isSelected) {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.transform = 'translateX(0)';
+                              }
+                            }}
+                          >
+                            <div style={{
+                              width: '28px', height: '28px', borderRadius: '6px',
+                              background: isSelected ? '#dcfce7' : (reg.iconColor ? `${reg.iconColor}15` : '#f1f5f9'),
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            }}>
+                              <FileText size={14} color={isSelected ? '#16a34a' : (reg.iconColor || '#64748b')} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '13px', fontWeight: isSelected ? 600 : 500, color: isSelected ? '#15803d' : '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{reg.name}</div>
+                              <div style={{ fontSize: '11px', color: isSelected ? '#16a34a' : '#94a3b8', opacity: isSelected ? 0.8 : 1 }}>{reg.entryCount} entries</div>
+                            </div>
+                            <PenLine size={14} color="#16a34a" style={{ opacity: isSelected ? 1 : 0.6, flexShrink: 0 }} />
+                          </div>
+                        );
+                      };
+
+                      if (searchLower && foldersWithRegs.every(f => f.regs.length === 0) && unassignedRegs.length === 0) {
+                        return (
+                          <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                            <Search size={24} style={{ opacity: 0.3, marginBottom: '8px' }} />
+                            <div>No registers found for "{entrySearch}"</div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <>
+                          {foldersWithRegs.map(({ folder, regs }) => {
+                            const isExp = entryExpandedFolders[folder.id] ?? (!!searchLower);
+                            return (
+                              <div key={folder.id} style={{ marginBottom: '2px' }}>
+                                <div
+                                  onClick={() => setEntryExpandedFolders(prev => ({ ...prev, [folder.id]: !isExp }))}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', gap: '8px',
+                                    padding: '8px 12px', borderRadius: '8px',
+                                    cursor: 'pointer', transition: 'all 0.15s', userSelect: 'none',
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                  {isExp ? <ChevronDown size={14} color="#94a3b8" /> : <ChevronRight size={14} color="#94a3b8" />}
+                                  <Folder size={15} fill="#fbbf24" color="#f59e0b" />
+                                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#334155', flex: 1 }}>{folder.name}</span>
+                                  <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>{regs.length}</span>
+                                </div>
+                                {isExp && regs.map(reg => renderEntryRegItem(reg, 40))}
+                              </div>
+                            );
+                          })}
+
+                          {unassignedRegs.length > 0 && (
+                            <>
+                              {foldersWithRegs.length > 0 && (
+                                <div style={{ padding: '4px 12px', marginTop: '4px' }}>
+                                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unassigned</span>
+                                </div>
+                              )}
+                              {unassignedRegs.map(reg => renderEntryRegItem(reg))}
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* Right Column (Form / Empty State Pane) */}
+              {(!isMobile || entrySelectedReg) && (
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%',
+                  minWidth: 0,
+                  background: '#f8fafc',
+                }}>
+                  {entrySelectedReg ? (
+                    <>
+                      {/* Header with Back button */}
+                      <div style={{
+                        padding: '16px 20px',
+                        borderBottom: '1px solid #f1f5f9',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        background: 'white',
+                      }}>
+                        <button
+                          onClick={() => { setEntrySelectedReg(null); setEntryColumns([]); setEntryValues({}); setEntryExistingEntries([]); }}
+                          style={{
+                            background: '#f1f5f9',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '6px',
+                            color: '#64748b',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s',
+                            flexShrink: 0,
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#e2e8f0'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                          title={isMobile ? "Back to register list" : "Deselect register"}
+                        >
+                          <ArrowLeft size={16} />
+                        </button>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{
+                              width: '24px', height: '24px', borderRadius: '6px',
+                              background: entrySelectedReg.iconColor ? `${entrySelectedReg.iconColor}15` : '#f0fdf4',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            }}>
+                              <FileText size={12} color={entrySelectedReg.iconColor || '#16a34a'} />
+                            </div>
+                            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {entrySelectedReg.name}
+                            </h3>
+                          </div>
+                          <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '32px' }}>
+                            Add new entry (Row #{entryExistingEntries.length + entrySavedCount + 1})
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => { setIsEntryPanelOpen(false); setEntrySearch(''); setEntrySelectedReg(null); setEntryColumns([]); setEntryValues({}); setEntrySavedCount(0); }}
+                          style={{
+                            background: '#f1f5f9',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '6px',
+                            color: '#64748b',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s',
+                            flexShrink: 0,
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#e2e8f0'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      {entryLoading ? (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', flexDirection: 'column', gap: '12px', background: 'white' }}>
+                          <Loader2 size={28} color="#16a34a" style={{ animation: 'spin 1s linear infinite' }} />
+                          <span style={{ fontSize: '13px', color: '#94a3b8' }}>Loading columns…</span>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Form Fields */}
+                          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', background: 'white' }}>
+                            {entryColumns.filter((c: any) => c.type !== 'formula').length === 0 ? (
+                              <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '16px 0' }}>
+                                No columns found. Add columns first.
+                              </p>
+                            ) : (
+                              entryColumns.filter((c: any) => c.type !== 'formula').map((col: any, idx: number) => {
+                                const colIdStr = col.id.toString();
+                                const val = entryValues[colIdStr] ?? '';
+                                const isAutoIncr = col.type === 'auto_increment';
+
+                                return (
+                                  <div key={col.id} style={{ marginBottom: '14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                      <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        {col.name}
+                                        {col.mandatory && <span style={{ color: '#ef4444', fontSize: 14 }}>*</span>}
+                                      </label>
+                                      <span style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 500 }}>{col.type.replace('_', ' ')}</span>
+                                    </div>
+                                    {col.type === 'dropdown' ? (
+                                      <select
+                                        value={val}
+                                        onChange={e => setEntryValues(prev => ({ ...prev, [colIdStr]: e.target.value }))}
+                                        ref={idx === 0 ? (el: any) => { entryFirstInputRef.current = el; } : undefined}
+                                        style={{
+                                          width: '100%', padding: '10px 14px', fontSize: '13px',
+                                          borderRadius: '8px', border: '1px solid #e2e8f0',
+                                          background: 'white', color: '#0f172a',
+                                          outline: 'none', transition: 'border-color 0.15s',
+                                          font: 'inherit',
+                                        }}
+                                      >
+                                        <option value="">-- Select --</option>
+                                        {(col.dropdownOptions || []).map((opt: string) => (
+                                          <option key={opt} value={opt}>{opt}</option>
+                                        ))}
+                                      </select>
+                                    ) : col.type === 'checkbox' ? (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '40px' }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={val === 'true'}
+                                          onChange={e => setEntryValues(prev => ({ ...prev, [colIdStr]: e.target.checked ? 'true' : 'false' }))}
+                                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                        />
+                                        <span style={{ fontSize: '13px', color: '#64748b' }}>{val === 'true' ? 'Checked' : 'Unchecked'}</span>
+                                      </div>
+                                    ) : col.type === 'image' ? (
+                                      <div style={{ position: 'relative' }}>
+                                        {val ? (
+                                          <div style={{
+                                            position: 'relative',
+                                            width: '100%',
+                                            height: '140px',
+                                            borderRadius: '10px',
+                                            border: '1px solid #e2e8f0',
+                                            overflow: 'hidden',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            background: '#f8fafc',
+                                          }}>
+                                            <img 
+                                              src={val.split('|||')[0]}
+                                              alt={col.name} 
+                                              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} 
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => setEntryValues(prev => ({ ...prev, [colIdStr]: '' }))}
+                                              style={{
+                                                position: 'absolute',
+                                                top: '8px',
+                                                right: '8px',
+                                                background: 'rgba(15, 23, 42, 0.6)',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                color: 'white',
+                                                borderRadius: '50%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                transition: 'background-color 0.15s',
+                                                zIndex: 10,
+                                              }}
+                                              onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.9)'; }}
+                                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'rgba(15, 23, 42, 0.6)'; }}
+                                            >
+                                              <X size={14} />
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <label style={{
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            width: '100%',
+                                            height: '100px',
+                                            border: '2px dashed #cbd5e1',
+                                            borderRadius: '10px',
+                                            cursor: 'pointer',
+                                            background: '#f8fafc',
+                                            transition: 'all 0.15s',
+                                            boxSizing: 'border-box',
+                                            padding: '16px',
+                                          }}
+                                          onMouseEnter={e => { e.currentTarget.style.borderColor = '#86efac'; e.currentTarget.style.backgroundColor = '#f0fdf4'; }}
+                                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                                          >
+                                            {entryUploadingImageCol === colIdStr ? (
+                                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                                <Loader2 size={24} color="#16a34a" style={{ animation: 'spin 1s linear infinite' }} />
+                                                <span style={{ fontSize: '12px', color: '#64748b' }}>Uploading & compressing...</span>
+                                              </div>
+                                            ) : (
+                                              <>
+                                                <CloudUpload size={24} color="#64748b" style={{ marginBottom: '6px' }} />
+                                                <span style={{ fontSize: '13px', fontWeight: 500, color: '#475569' }}>Click to upload photo</span>
+                                                <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>JPEG, PNG, WebP</span>
+                                              </>
+                                            )}
+                                            <input
+                                              type="file"
+                                              accept="image/*"
+                                              style={{ display: 'none' }}
+                                              disabled={entryUploadingImageCol === colIdStr}
+                                              onChange={async (e) => {
+                                                const f = e.target.files?.[0];
+                                                if (!f) return;
+                                                setEntryUploadingImageCol(colIdStr);
+                                                try {
+                                                  const compressed = await ImageCompressionModule.compressImage(f);
+                                                  setEntryValues(prev => ({ ...prev, [colIdStr]: compressed }));
+                                                  toast.success('Image loaded & compressed successfully!');
+                                                } catch (err) {
+                                                  toast.error('Failed to compress image');
+                                                  console.error(err);
+                                                } finally {
+                                                  setEntryUploadingImageCol(null);
+                                                }
+                                              }}
+                                            />
+                                          </label>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <input
+                                        type={col.type === 'number' || col.type === 'currency' || col.type === 'rating' ? 'number' : col.type === 'email' ? 'email' : col.type === 'phone' ? 'tel' : col.type === 'url' ? 'url' : col.type === 'date' ? 'text' : 'text'}
+                                        value={val}
+                                        onChange={e => setEntryValues(prev => ({ ...prev, [colIdStr]: e.target.value }))}
+                                        placeholder={isAutoIncr ? 'Auto-generated if blank' : col.type === 'date' ? 'DD-MM-YYYY' : col.type === 'email' ? 'email@example.com' : col.type === 'phone' ? '+91 XXXXX XXXXX' : col.type === 'url' ? 'https://' : `Enter ${col.name}…`}
+                                        ref={idx === 0 ? (el: any) => { entryFirstInputRef.current = el; } : undefined}
+                                        min={col.type === 'rating' ? 1 : undefined}
+                                        max={col.type === 'rating' ? 5 : undefined}
+                                        style={{
+                                          width: '100%', padding: '10px 14px', fontSize: '13px',
+                                          borderRadius: '8px', border: '1px solid #e2e8f0',
+                                          background: 'white', color: '#0f172a',
+                                          outline: 'none', transition: 'border-color 0.15s',
+                                          font: 'inherit',
+                                          boxSizing: 'border-box',
+                                        }}
+                                        onFocus={e => { e.currentTarget.style.borderColor = '#86efac'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(22,163,74,0.08)'; }}
+                                        onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          {/* Footer */}
+                          <div style={{
+                            padding: '14px 20px',
+                            borderTop: '1px solid #f1f5f9',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: '10px',
+                            background: '#fafbfc',
+                          }}>
+                            {isMobile && (
+                              <button
+                                type="button"
+                                onClick={() => { setEntrySelectedReg(null); setEntryColumns([]); setEntryValues({}); setEntryExistingEntries([]); }}
+                                style={{
+                                  padding: '9px 18px', fontSize: '13px', fontWeight: 600,
+                                  borderRadius: '8px', border: '1px solid #e2e8f0',
+                                  background: 'white', color: '#64748b', cursor: 'pointer',
+                                  transition: 'all 0.15s',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.backgroundColor = 'white'; }}
+                              >
+                                Back
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={entrySubmitting || entryColumns.filter((c: any) => c.type !== 'formula').length === 0}
+                              onClick={async () => {
+                                for (const col of entryColumns) {
+                                  if (col.mandatory && col.type !== 'formula' && col.type !== 'auto_increment') {
+                                    const v = entryValues[col.id.toString()];
+                                    if (!v || v.trim() === '') {
+                                      toast.error(`${col.name} is a mandatory field.`);
+                                      return;
+                                    }
+                                  }
+                                }
+                                const cells: Record<string, string> = {};
+                                Object.entries(entryValues).forEach(([k, v]) => {
+                                  const col = entryColumns.find((c: any) => c.id.toString() === k);
+                                  if (col?.type === 'formula') return;
+                                  let finalVal = v.trim();
+                                  if (col?.type === 'date' && finalVal !== '') {
+                                    finalVal = formatDateToDDMMYYYY(finalVal);
+                                  }
+                                  if (finalVal !== '') cells[k] = finalVal;
+                                });
+                                setEntrySubmitting(true);
+                                try {
+                                  await addEntry(entrySelectedReg!.id, cells);
+                                  toast.success(`Entry added to ${entrySelectedReg!.name}`, {
+                                    style: { background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 600, fontSize: '13px' },
+                                    icon: '✅',
+                                    duration: 2500,
+                                  });
+                                  setEntrySavedCount(c => c + 1);
+                                  queryClient.invalidateQueries({ queryKey: ['register', entrySelectedReg!.id] });
+                                  queryClient.invalidateQueries({ queryKey: ['registers', businessId] });
+                                  
+                                  // Reset form fields so they can add another entry to the SAME register immediately
+                                  const init: Record<string, string> = {};
+                                  const cols = (entryColumns || []).filter((c: any) => c.type !== 'formula');
+                                  cols.forEach((c: any) => { init[c.id.toString()] = ''; });
+                                  setEntryValues(init);
+                                  
+                                  // Refocus first input if possible
+                                  setTimeout(() => {
+                                    if (entryFirstInputRef.current) {
+                                      entryFirstInputRef.current.focus();
+                                    }
+                                  }, 100);
+                                } catch (err: any) {
+                                  toast.error(err.message || 'Failed to add entry');
+                                } finally {
+                                  setEntrySubmitting(false);
+                                }
+                              }}
+                              style={{
+                                padding: '9px 24px', fontSize: '13px', fontWeight: 600,
+                                borderRadius: '8px', border: 'none',
+                                background: entrySubmitting ? '#86efac' : 'linear-gradient(135deg, #16a34a, #15803d)',
+                                color: 'white', cursor: entrySubmitting ? 'wait' : 'pointer',
+                                transition: 'all 0.2s',
+                                display: 'flex', alignItems: 'center', gap: '6px',
+                                boxShadow: '0 2px 8px rgba(22,163,74,0.2)',
+                              }}
+                              onMouseEnter={e => { if (!entrySubmitting) e.currentTarget.style.boxShadow = '0 4px 14px rgba(22,163,74,0.3)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(22,163,74,0.2)'; }}
+                            >
+                              {entrySubmitting ? (
+                                <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving…</>
+                              ) : (
+                                <><Check size={14} /> Save Entry</>
+                              )}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    /* Desktop Empty State */
+                    <div style={{
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '40px',
+                      textAlign: 'center',
+                      background: 'white',
+                    }}>
+                      <div style={{
+                        width: '80px',
+                        height: '80px',
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '20px',
+                        boxShadow: '0 8px 24px rgba(22, 163, 74, 0.1)',
+                      }}>
+                        <PenLine size={32} color="#16a34a" />
+                      </div>
+                      <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>Quick Entry Pane</h3>
+                      <p style={{ margin: 0, fontSize: '13px', color: '#64748b', maxWidth: '320px', lineHeight: 1.6 }}>
+                        Select a register from the left list to instantly start entering data without leaving this view.
+                      </p>
+                      <button
+                        onClick={() => { setIsEntryPanelOpen(false); setEntrySearch(''); setEntrySelectedReg(null); setEntryColumns([]); setEntryValues({}); setEntrySavedCount(0); }}
+                        style={{
+                          marginTop: '20px',
+                          padding: '8px 18px',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#64748b',
+                          background: '#f1f5f9',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
         )}
       </div>
       
@@ -853,6 +1610,24 @@ export const Sidebar = memo(function Sidebar({
             {/* Version Tabs */}
             <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
               <button
+                onClick={() => setVersionTab('1.5.5')}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.5.5' ? 'white' : 'transparent',
+                  color: versionTab === '1.5.5' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.5.5' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                }}
+              >
+                v1.5.5 (New)
+              </button>
+              <button
                 onClick={() => setVersionTab('1.5.2')}
                 style={{
                   flex: 1,
@@ -868,7 +1643,7 @@ export const Sidebar = memo(function Sidebar({
                   boxShadow: versionTab === '1.5.2' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                 }}
               >
-                v1.5.2 (New)
+                v1.5.2
               </button>
               <button
                 onClick={() => setVersionTab('1.5.1')}
@@ -944,7 +1719,50 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.5.2' ? (
+            {versionTab === '1.5.5' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 26, 2026 (Latest)</span>
+                
+                {/* Feature 1: Split-Pane Quick Entry */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Split-Pane Quick Entry Modal</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Redesigned the centered Quick Entry modal into a highly productive split-pane dashboard. View folders & registers on the left, and fill out the active entry form on the right without closing the view! Switch registers with a single click.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: High-Performance Image Uploader */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Drag-and-Drop Image Uploader</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Implemented direct image uploading with client-side Canvas compression inside both the Quick Entry form and the Add Record modal! Select local photos directly, see instant previews, and enjoy error-free, compressed base64 photo saves.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 3: Accelerated Continuous Entry */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>Accelerated Continuous Multi-Entry Flow</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Keep register selections active after clicking "Save Entry". Inputs automatically clear and the cursor refocuses on the first field, allowing lightning-fast data entry. Dynamic row sequence numbers (e.g. <em>Row #15</em>) are displayed in form headers for clear real-time feedback.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : versionTab === '1.5.2' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 23, 2026 (Latest)</span>
                 

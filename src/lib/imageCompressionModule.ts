@@ -1,3 +1,6 @@
+import { storage } from './firebase';
+import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
+
 export interface CompressionConfig {
   maxWidth: number;
   maxHeight: number;
@@ -463,6 +466,37 @@ export class ImageCompressionModule {
       };
       img.src = base64;
     });
+  }
+
+  /**
+   * Compresses an image and attempts to upload it directly to Firebase Storage.
+   * If the upload fails, it automatically falls back to returning the compressed Base64 string.
+   */
+  public static async compressAndUploadImage(
+    file: File,
+    registerId: number | string,
+    entryId: number | string,
+    columnId: string
+  ): Promise<string> {
+    // 1. Compress image to Base64 first using existing high-quality module
+    const compressedBase64 = await this.compressImage(file);
+    
+    // 2. Try direct client-side Firebase Storage upload
+    try {
+      const filename = `${registerId}_${entryId}_${columnId}_${Date.now()}.jpg`;
+      const path = `registers/${registerId}/entries/${entryId}/${filename}`;
+      const imageRef = storageRef(storage, path);
+      
+      console.log(`[Cloud Upload] Starting direct Firebase Storage upload for ${path}...`);
+      const snapshot = await uploadString(imageRef, compressedBase64, 'data_url');
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      console.log(`[Cloud Upload] Direct upload successful! URL:`, downloadURL);
+      return downloadURL;
+    } catch (storageErr) {
+      console.warn(`[Cloud Upload] Firebase Storage direct upload failed (falling back to Base64):`, storageErr);
+      // Fallback to storing the compressed base64 directly
+      return compressedBase64;
+    }
   }
 }
 

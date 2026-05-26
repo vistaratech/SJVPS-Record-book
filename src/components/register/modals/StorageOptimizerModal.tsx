@@ -13,10 +13,17 @@ interface StorageOptimizerModalProps {
   onClose: () => void;
   entries: Entry[];
   registerId: number;
+  defaultTab?: 'analytics' | 'config' | 'sandbox' | 'chunks' | 'ledger';
 }
 
-export function StorageOptimizerModal({ isOpen, onClose, entries, registerId }: StorageOptimizerModalProps) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'config' | 'sandbox' | 'chunks' | 'ledger'>('analytics');
+export function StorageOptimizerModal({ isOpen, onClose, entries, registerId, defaultTab = 'analytics' }: StorageOptimizerModalProps) {
+  const [activeTab, setActiveTab] = useState<'analytics' | 'config' | 'sandbox' | 'chunks' | 'ledger'>(defaultTab);
+  
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(defaultTab);
+    }
+  }, [isOpen, defaultTab]);
   
   // Compression state
   const [config, setConfig] = useState<CompressionConfig>(ImageCompressionModule.getConfig());

@@ -1,11 +1,11 @@
-import { AlertCircle, X, Plus, AlertTriangle, Check } from 'lucide-react';
+import { AlertCircle, X, Plus, AlertTriangle, Check, ChevronRight, ChevronDown, FolderClosed, FolderOpen, Database } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { 
   Calculator, PlusCircle, MinusCircle, XCircle, DivideCircle, 
   Percent, Settings2, Trash2 
 } from 'lucide-react';
 import { evaluateFormula, getRegister, linkColumn } from '../../../lib/api';
-import type { RegisterSummary, Column as ApiColumn } from '../../../lib/api';
+import type { RegisterSummary, Column as ApiColumn, Folder } from '../../../lib/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 function FormulaBuilder({ formula, onChange, columns, entries, outputName, excludeId }: { formula: string, onChange: (v: string) => void, columns: any[], entries?: any[], outputName?: string, excludeId?: number | null }) {
@@ -726,6 +726,7 @@ interface ColumnModalsProps {
   activeModalColId: number | null;
 
   allRegisters?: RegisterSummary[];
+  allFolders?: Folder[];
   currentRegisterId?: number;
 
   COL_TYPES: any[];
@@ -745,7 +746,7 @@ export function ColumnModals(props: ColumnModalsProps) {
     linkColumnModal, setLinkColumnModal,
     activeModalColId,
     COL_TYPES, columns, entries,
-    allRegisters, currentRegisterId
+    allRegisters, allFolders, currentRegisterId
   } = props;
 
   return (
@@ -946,6 +947,7 @@ export function ColumnModals(props: ColumnModalsProps) {
         <LinkColumnModal
           onClose={() => setLinkColumnModal(false)}
           allRegisters={allRegisters || []}
+          allFolders={allFolders || []}
           currentRegisterId={currentRegisterId}
           sourceColumn={columns.find(c => c.id === activeModalColId)}
         />
@@ -955,14 +957,21 @@ export function ColumnModals(props: ColumnModalsProps) {
 }
 
 /** Self-contained Link Column modal — fetches target register columns on selection */
-function LinkColumnModal({ onClose, allRegisters, currentRegisterId, sourceColumn }: {
+function LinkColumnModal({ onClose, allRegisters, allFolders, currentRegisterId, sourceColumn }: {
   onClose: () => void;
   allRegisters: RegisterSummary[];
+  allFolders: Folder[];
   currentRegisterId?: number;
   sourceColumn?: any;
 }) {
   const [selectedRegisterId, setSelectedRegisterId] = useState<string>('');
   const [selectedColumnId, setSelectedColumnId] = useState<string>('');
+  const [expandedFolders, setExpandedFolders] = useState<Record<number, boolean>>({});
+
+  const toggleFolder = (folderId: number) => {
+    setExpandedFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
+  };
+
   const [targetColumns, setTargetColumns] = useState<ApiColumn[]>([]);
   const [loadingColumns, setLoadingColumns] = useState(false);
   const queryClient = useQueryClient();
@@ -1013,19 +1022,187 @@ function LinkColumnModal({ onClose, allRegisters, currentRegisterId, sourceColum
         </p>
 
         <label className="modal-label">Select Register</label>
-        <select
-          className="modal-input"
-          value={selectedRegisterId}
-          onChange={(e) => handleRegisterChange(e.target.value)}
-          style={{ marginBottom: '16px' }}
-        >
-          <option value="" disabled>Select a register...</option>
-          {availableRegisters.map(reg => (
-            <option key={reg.id} value={reg.id.toString()}>
-              {reg.name} ({reg.entryCount} entries)
-            </option>
-          ))}
-        </select>
+        <div className="custom-folder-tree-container" style={{
+          maxHeight: '280px',
+          overflowY: 'auto',
+          border: '1px solid var(--border)',
+          borderRadius: '12px',
+          background: 'var(--bg-light)',
+          padding: '12px',
+          marginBottom: '16px',
+          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
+        }}>
+          {allFolders.map(folder => {
+            const folderRegisters = availableRegisters.filter(r => r.folderId === folder.id);
+            if (folderRegisters.length === 0) return null;
+            const isExpanded = expandedFolders[folder.id];
+
+            return (
+              <div key={folder.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {/* Folder Header */}
+                <div 
+                  onClick={() => toggleFolder(folder.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    background: 'white',
+                    border: '1px solid var(--border)',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    color: 'var(--navy)',
+                    userSelect: 'none',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', color: 'var(--muted)' }}>
+                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', color: '#f59e0b' }}>
+                    {isExpanded ? <FolderOpen size={16} /> : <FolderClosed size={16} />}
+                  </span>
+                  <span style={{ flex: 1, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{folder.name}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--muted)', background: 'var(--bg-light)', padding: '2px 6px', borderRadius: '12px', fontWeight: 600 }}>
+                    {folderRegisters.length}
+                  </span>
+                </div>
+
+                {/* Folder Content (Registers) */}
+                {isExpanded && (
+                  <div style={{ marginLeft: '22px', display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '2px dashed rgba(0,0,0,0.06)', paddingLeft: '8px', marginTop: '2px' }}>
+                    {folderRegisters.map(reg => {
+                      const isSelected = selectedRegisterId === reg.id.toString();
+                      return (
+                        <div
+                          key={reg.id}
+                          onClick={() => handleRegisterChange(reg.id.toString())}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '12.5px',
+                            fontWeight: 600,
+                            transition: 'all 0.2s',
+                            background: isSelected ? 'rgba(26, 35, 126, 0.08)' : 'transparent',
+                            color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                            border: isSelected ? '1px solid rgba(26, 35, 126, 0.18)' : '1px solid transparent'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = 'rgba(0,0,0,0.02)';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', color: isSelected ? 'var(--primary)' : 'var(--muted)' }}>
+                            <Database size={13} />
+                          </span>
+                          <span style={{ flex: 1, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{reg.name}</span>
+                          <span style={{ fontSize: '10.5px', opacity: 0.6 }}>({reg.entryCount} rows)</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* General/Unassigned group */}
+          {availableRegisters.filter(r => !r.folderId).length > 0 && (() => {
+            const unassignedRegs = availableRegisters.filter(r => !r.folderId);
+            const isExpanded = expandedFolders[-1] ?? true; // Default open for general
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div 
+                  onClick={() => toggleFolder(-1)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    background: 'white',
+                    border: '1px solid var(--border)',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    color: 'var(--navy)',
+                    userSelect: 'none',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', color: 'var(--muted)' }}>
+                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', color: 'var(--muted)' }}>
+                    {isExpanded ? <FolderOpen size={16} /> : <FolderClosed size={16} />}
+                  </span>
+                  <span style={{ flex: 1 }}>General / Unassigned</span>
+                  <span style={{ fontSize: '10px', color: 'var(--muted)', background: 'var(--bg-light)', padding: '2px 6px', borderRadius: '12px', fontWeight: 600 }}>
+                    {unassignedRegs.length}
+                  </span>
+                </div>
+
+                {isExpanded && (
+                  <div style={{ marginLeft: '22px', display: 'flex', flexDirection: 'column', gap: '4px', borderLeft: '2px dashed rgba(0,0,0,0.06)', paddingLeft: '8px', marginTop: '2px' }}>
+                    {unassignedRegs.map(reg => {
+                      const isSelected = selectedRegisterId === reg.id.toString();
+                      return (
+                        <div
+                          key={reg.id}
+                          onClick={() => handleRegisterChange(reg.id.toString())}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '12.5px',
+                            fontWeight: 600,
+                            transition: 'all 0.2s',
+                            background: isSelected ? 'rgba(26, 35, 126, 0.08)' : 'transparent',
+                            color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                            border: isSelected ? '1px solid rgba(26, 35, 126, 0.18)' : '1px solid transparent'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = 'rgba(0,0,0,0.02)';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', color: isSelected ? 'var(--primary)' : 'var(--muted)' }}>
+                            <Database size={13} />
+                          </span>
+                          <span style={{ flex: 1, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{reg.name}</span>
+                          <span style={{ fontSize: '10.5px', opacity: 0.6 }}>({reg.entryCount} rows)</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
 
         {selectedRegisterId && (
           <>

@@ -35,6 +35,7 @@ interface RegisterToolbarProps {
   uploadingImagesCount?: number;
   pendingDebounceCount?: number;
   pendingTempRowEditsCount?: number;
+  onOpenStorageOptimizer?: (tab?: 'analytics' | 'config' | 'sandbox' | 'chunks' | 'ledger') => void;
 }
 
 export const RegisterToolbar = memo(function RegisterToolbar({
@@ -51,7 +52,8 @@ export const RegisterToolbar = memo(function RegisterToolbar({
   isSaving = false,
   uploadingImagesCount = 0,
   pendingDebounceCount = 0,
-  pendingTempRowEditsCount = 0
+  pendingTempRowEditsCount = 0,
+  onOpenStorageOptimizer
 }: RegisterToolbarProps) {
 
   const isSyncing = isSaving || uploadingImagesCount > 0 || pendingDebounceCount > 0 || pendingTempRowEditsCount > 0;
@@ -74,6 +76,7 @@ export const RegisterToolbar = memo(function RegisterToolbar({
       {isSyncing && (
         <div 
           className="header-sync-status-badge"
+          onClick={() => onOpenStorageOptimizer?.('ledger')}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -88,16 +91,25 @@ export const RegisterToolbar = memo(function RegisterToolbar({
             border: '1px solid rgba(16, 185, 129, 0.18)',
             marginRight: '8px',
             userSelect: 'none',
+            cursor: 'pointer',
           }}
           title={
             uploadingImagesCount > 0 
-              ? `Compressing & uploading ${uploadingImagesCount} photo(s)... Do NOT close tab.`
+              ? `Compressing & uploading ${uploadingImagesCount} photo(s)... Click to view sync log.`
               : pendingTempRowEditsCount > 0
-                ? `Buffered ${pendingTempRowEditsCount} offline edit(s)... Do NOT close tab.`
-                : pendingDebounceCount > 0 && !isSaving
-                  ? `Saving ${pendingDebounceCount} change(s)... Do NOT close tab.`
-                  : 'Saving updates in the background... Do NOT close tab.'
+                ? `Buffered ${pendingTempRowEditsCount} offline edit(s)... Click to view sync log.`
+                : pendingDebounceCount > 0
+                  ? `Saving ${pendingDebounceCount} change(s)... Click to view sync log.`
+                  : 'Saving updates in the background... Click to view sync log.'
           }
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.15)';
+            e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.08)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
         >
           <span 
             className="mini-sync-spinner"
@@ -113,10 +125,12 @@ export const RegisterToolbar = memo(function RegisterToolbar({
           />
           <span className="mini-sync-text" style={{ letterSpacing: '0.1px' }}>
             {uploadingImagesCount > 0 
-              ? 'Uploading Photos...'
+              ? `Uploading Photos (${uploadingImagesCount})...`
               : pendingTempRowEditsCount > 0
                 ? `Offline (${pendingTempRowEditsCount})`
-                : 'Saving...'
+                : pendingDebounceCount > 0
+                  ? `Saving (${pendingDebounceCount})...`
+                  : 'Saving...'
             }
           </span>
         </div>

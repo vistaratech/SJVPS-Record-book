@@ -770,9 +770,9 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
                       setUploadingImageCols(prev => ({ ...prev, [col.id]: true }));
                       props.onImageUploadStart?.();
                       console.log(`[Inline Grid - Image Upload] Starting compression & upload...`);
-                      ImageCompressionModule.compressImage(f)
+                      ImageCompressionModule.compressAndUploadImage(f, entry.registerId || 0, entry.id, col.id.toString())
                         .then(c => {
-                          console.log(`[Inline Grid - Image Upload] Compression succeeded. Persisting to database...`);
+                          console.log(`[Inline Grid - Image Upload] Upload / Compression succeeded. Persisting to database...`);
                           return handleCellChange(entry.id, col.id.toString(), c);
                         })
                         .then(() => {

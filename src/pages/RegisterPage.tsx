@@ -16,7 +16,8 @@ import {
   subscribeToMutationStatus, updateEntriesOrder, flushAllPendingWrites,
   updateEntryCellStyles, unlinkColumn,
   formatDateToDDMMYYYY,
-  type Entry, type CellStyle, type HistoryEntry,
+  listFolders,
+  type Entry, type CellStyle, type HistoryEntry, type Folder,
 } from '../lib/api';
 // xlsx, jsPDF, and jspdf-autotable are now dynamically imported via useExport hook
 import { useExport } from '../hooks/useExport';
@@ -269,6 +270,14 @@ export default function RegisterPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch all folders for the Link Column feature
+  const { data: allFolders = [] } = useQuery({
+    queryKey: ['folders', register?.businessId],
+    queryFn: () => listFolders(register!.businessId),
+    enabled: !!register?.businessId,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // ── State ──
   const [search, setSearch] = useState(() => localStorage.getItem(`rb_search_${registerId}`) || '');
   const [currentPageIndex, setCurrentPageIndex] = useState(() => {
@@ -332,6 +341,16 @@ export default function RegisterPage() {
   const [renamePageModal, setRenamePageModal] = useState(false);
   const [filterModal, setFilterModal] = useState(false);
   const [storageOptimizerOpen, setStorageOptimizerOpen] = useState(false);
+  const [storageOptimizerTab, setStorageOptimizerTab] = useState<'analytics' | 'config' | 'sandbox' | 'chunks' | 'ledger'>('analytics');
+  const [activeSyncCount, setActiveSyncCount] = useState(0);
+
+  useEffect(() => {
+    const unsubscribe = DataPersistenceModule.subscribe((ledger) => {
+      const pendingCount = ledger.filter(item => item.status === 'pending' || item.status === 'persisting').length;
+      setActiveSyncCount(pendingCount);
+    });
+    return unsubscribe;
+  }, []);
 
   const isLocalStorageInitializedRef = useRef(false);
 
@@ -2298,8 +2317,8 @@ export default function RegisterPage() {
             // Check if the chunk is already full even without this new image
             let baseChunkSize = estimatedSize - value.length;
             if (baseChunkSize > 980000) {
-              console.log(`[handleCellChange] Base chunk is already ${baseChunkSize} bytes. Cleaning existing images to make room...`);
-              toast("Chunk is full. Cleaning up existing photos to make room...", { icon: 'ℹ️' });
+              console.log(`[handleCellChange] Base chunk is already ${baseChunkSize} bytes. Optimizing storage space to make room...`);
+              toast("Optimizing database storage space to make room...", { icon: 'ℹ️' });
               
               for (let i = 0; i < chunkEntriesCopy.length; i++) {
                 const chunkEntry = chunkEntriesCopy[i];
@@ -2349,10 +2368,10 @@ export default function RegisterPage() {
               baseChunkSize = estimatedSize - value.length;
               
               if (baseChunkSize > 980000) {
-                console.log(`[handleCellChange] Still too big after cleaning. Aborting.`);
+                console.log(`[handleCellChange] Still too big after optimization. Aborting.`);
                 throw new Error(`Write size safety check failed: Chunk is full.`);
               }
-              toast.success("Cleanup successful. Resuming upload...");
+              toast.success("Storage space optimized. Resuming upload...");
             }
 
             console.log(`[handleCellChange] Initiating fallback compression...`);
@@ -2501,7 +2520,7 @@ export default function RegisterPage() {
           // 5. Show descriptive toast error message
           let errorMsg = "Issue in the image update: Failed to save photo to database.";
           if (err?.message?.includes("exceeds the maximum allowed size") || err?.toString()?.includes("exceeds the maximum allowed size") || err?.message?.includes("Chunk is full")) {
-            errorMsg = "Cell size limit exceeded. The image could not be saved because the chunk is full.";
+            errorMsg = "Database size limit reached for this section. Please allow background synchronization to complete before uploading more photos.";
           }
           toast.error(errorMsg, { duration: 6000 });
           
@@ -3143,8 +3162,12 @@ export default function RegisterPage() {
             setIsPreviewSelectedColumns={setIsPreviewSelectedColumns}
             isSaving={isSaving}
             uploadingImagesCount={uploadingImagesCount}
-            pendingDebounceCount={pendingDebounceCount}
+            pendingDebounceCount={activeSyncCount}
             pendingTempRowEditsCount={Object.values(pendingTempRowEdits.current).reduce((acc, edits) => acc + Object.keys(edits).length, 0)}
+            onOpenStorageOptimizer={(tab) => {
+              setStorageOptimizerTab(tab || 'analytics');
+              setStorageOptimizerOpen(true);
+            }}
           />
           
           <RegisterHeader 
@@ -3154,7 +3177,10 @@ export default function RegisterPage() {
             canDownload={_canDownloadAny}
             canEdit={_canEditAny}
             onViewReminders={() => setShowRemindersSummary(true)}
-            onOpenStorageOptimizer={() => setStorageOptimizerOpen(true)}
+            onOpenStorageOptimizer={() => {
+              setStorageOptimizerTab('analytics');
+              setStorageOptimizerOpen(true);
+            }}
           />
         </div>
       </div>
@@ -3613,6 +3639,7 @@ export default function RegisterPage() {
         columns={columns}
         entries={localEntries}
         allRegisters={allRegisters}
+        allFolders={allFolders}
         currentRegisterId={registerId}
       />
 
@@ -3773,6 +3800,7 @@ export default function RegisterPage() {
         onClose={() => setStorageOptimizerOpen(false)}
         entries={localEntries}
         registerId={registerId}
+        defaultTab={storageOptimizerTab}
       />
 
       {/* ── Add Record Modal ── */}
@@ -4136,9 +4164,9 @@ export default function RegisterPage() {
                                             setUploadingCells(prev => ({ ...prev, [colKey]: true }));
                                             setUploadingImagesCount(prev => prev + 1);
                                             console.log(`[Detail View - Image Upload] Starting compression & upload...`);
-                                            ImageCompressionModule.compressImage(file)
+                                            ImageCompressionModule.compressAndUploadImage(file, registerId, detailViewEntry.id, colKey)
                                               .then(async (newImg) => {
-                                                console.log(`[Detail View - Image Upload] Compression succeeded. Persisting to database...`);
+                                                console.log(`[Detail View - Image Upload] Upload / Compression succeeded. Persisting to database...`);
                                                 const current = detailEdits[colKey] ?? detailViewEntry.cells?.[colKey] ?? '';
                                                 const updated = current ? `${current}|||${newImg}` : newImg;
                                                 const res = handleCellChange(detailViewEntry.id, colKey, updated);
@@ -4183,9 +4211,9 @@ export default function RegisterPage() {
                                         setUploadingCells(prev => ({ ...prev, [colKey]: true }));
                                         setUploadingImagesCount(prev => prev + 1);
                                         console.log(`[Detail View - Image Upload] Starting compression & upload...`);
-                                        ImageCompressionModule.compressImage(file)
+                                        ImageCompressionModule.compressAndUploadImage(file, registerId, detailViewEntry.id, colKey)
                                           .then(async (newImg) => {
-                                            console.log(`[Detail View - Image Upload] Compression succeeded. Persisting to database...`);
+                                            console.log(`[Detail View - Image Upload] Upload / Compression succeeded. Persisting to database...`);
                                             const res = handleCellChange(detailViewEntry.id, colKey, newImg);
                                             if (res === false) throw new Error("Cell change rejected");
                                             await res;
@@ -4527,9 +4555,9 @@ export default function RegisterPage() {
                             setUploadingCells(prev => ({ ...prev, [previewImage.colId!]: true }));
                             setUploadingImagesCount(prev => prev + 1);
                             console.log(`[Preview View - Image Upload] Starting compression & upload...`);
-                            ImageCompressionModule.compressImage(file)
+                            ImageCompressionModule.compressAndUploadImage(file, registerId, previewImage.entryId!, previewImage.colId!)
                               .then(async (newUrl) => {
-                                console.log(`[Preview View - Image Upload] Compression succeeded. Persisting to database...`);
+                                console.log(`[Preview View - Image Upload] Upload / Compression succeeded. Persisting to database...`);
                                 const updated = [...urls, newUrl].join('|||');
                                 const res = handleCellChange(previewImage.entryId!, previewImage.colId!, updated);
                                 if (res === false) throw new Error("Cell change rejected");
