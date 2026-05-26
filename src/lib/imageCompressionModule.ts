@@ -468,16 +468,65 @@ export class ImageCompressionModule {
     });
   }
 
-  private static async sha1(string: string): Promise<string> {
-    const utf8 = new TextEncoder().encode(string);
-    const hashBuffer = await crypto.subtle.digest('SHA-1', utf8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    return hashHex;
+  /**
+   * Pure-JS SHA-1 fallback for environments where crypto.subtle is unavailable (HTTP / non-secure context).
+   */
+  private static sha1Pure(str: string): string {
+    function rotl(n: number, s: number) { return (n << s) | (n >>> (32 - s)); }
+    const utf8 = new TextEncoder().encode(str);
+    const msgLen = utf8.length;
+    // Pre-processing: pad message
+    const byteLen = ((msgLen + 9 + 63) & ~63); // multiple of 64
+    const buf = new Uint8Array(byteLen);
+    buf.set(utf8);
+    buf[msgLen] = 0x80;
+    const view = new DataView(buf.buffer);
+    // Append length in bits as big-endian 64-bit
+    const bitLen = msgLen * 8;
+    view.setUint32(byteLen - 4, bitLen, false);
+
+    let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+    const w = new Int32Array(80);
+    for (let offset = 0; offset < byteLen; offset += 64) {
+      for (let i = 0; i < 16; i++) w[i] = view.getInt32(offset + i * 4, false);
+      for (let i = 16; i < 80; i++) w[i] = rotl(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+      let a = h0, b = h1, c = h2, d = h3, e = h4;
+      for (let i = 0; i < 80; i++) {
+        let f: number, k: number;
+        if (i < 20) { f = (b & c) | (~b & d); k = 0x5A827999; }
+        else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+        else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+        else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+        const temp = (rotl(a, 5) + f + e + k + w[i]) | 0;
+        e = d; d = c; c = rotl(b, 30); b = a; a = temp;
+      }
+      h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0; h4 = (h4 + e) | 0;
+    }
+    return [h0, h1, h2, h3, h4].map(v => (v >>> 0).toString(16).padStart(8, '0')).join('');
+  }
+
+  /**
+   * SHA-1 hash using Web Crypto API (preferred) with pure-JS fallback.
+   */
+  private static async sha1(str: string): Promise<string> {
+    // crypto.subtle is only available in secure contexts (HTTPS / localhost on some browsers)
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      try {
+        const utf8 = new TextEncoder().encode(str);
+        const hashBuffer = await crypto.subtle.digest('SHA-1', utf8);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      } catch (e) {
+        console.warn('[SHA-1] crypto.subtle.digest failed, using pure-JS fallback:', e);
+      }
+    }
+    console.log('[SHA-1] Using pure-JS SHA-1 implementation (crypto.subtle unavailable)');
+    return this.sha1Pure(str);
   }
 
   /**
    * Compresses an image file and uploads it directly to Cloudinary using a secure signed upload.
+   * Returns the Cloudinary HTTPS URL on success, or falls back to compressed base64 on failure.
    */
   public static async compressAndUploadToCloudinary(file: File): Promise<string> {
     // 1. Compress image to Base64 first using existing high-quality module
@@ -491,9 +540,11 @@ export class ImageCompressionModule {
       const timestamp = Math.round(new Date().getTime() / 1000).toString();
       const folder = 'record_book_images';
       
-      // Calculate signature: alphabetically sorted parameters
+      // Calculate signature: alphabetically sorted parameters + secret appended
       const signatureString = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
+      console.log(`[Cloudinary Upload] Generating SHA-1 signature...`);
       const signature = await this.sha1(signatureString);
+      console.log(`[Cloudinary Upload] Signature generated: ${signature.substring(0, 10)}...`);
       
       const formData = new FormData();
       formData.append('file', compressedBase64);
@@ -502,7 +553,7 @@ export class ImageCompressionModule {
       formData.append('signature', signature);
       formData.append('folder', folder);
       
-      console.log(`[Cloudinary Upload] Starting upload of compressed image to Cloudinary...`);
+      console.log(`[Cloudinary Upload] Starting upload to https://api.cloudinary.com/v1_1/${cloudName}/image/upload ...`);
       const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
         method: 'POST',
         body: formData
@@ -510,18 +561,21 @@ export class ImageCompressionModule {
       
       if (!res.ok) {
         const errText = await res.text();
+        console.error(`[Cloudinary Upload] HTTP ${res.status} Error:`, errText);
         throw new Error(`Cloudinary responded with status ${res.status}: ${errText}`);
       }
       
       const data = await res.json();
       if (!data.secure_url) {
+        console.error('[Cloudinary Upload] Response missing secure_url:', data);
         throw new Error('No secure_url returned from Cloudinary response');
       }
       
-      console.log(`[Cloudinary Upload] Upload successful! URL:`, data.secure_url);
+      console.log(`[Cloudinary Upload] ✅ Upload successful! URL:`, data.secure_url);
       return data.secure_url;
-    } catch (error) {
-      console.error('[Cloudinary Upload] Failed, falling back to Base64:', error);
+    } catch (error: any) {
+      console.error('[Cloudinary Upload] ❌ FAILED:', error?.message || error);
+      console.warn('[Cloudinary Upload] Falling back to local Base64 storage. Image will show as "Local Photo" in exports.');
       // Fallback to storing the compressed base64 directly
       return compressedBase64;
     }
