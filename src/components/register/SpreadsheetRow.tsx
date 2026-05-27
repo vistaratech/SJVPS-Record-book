@@ -66,7 +66,7 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
   useEffect(() => { setVal(rawValue); }, [rawValue]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape' || e.key === 'Enter') { 
+    if (e.key === 'Escape') { 
       setEditing(false); 
       e.currentTarget.blur(); 
       return;
@@ -81,6 +81,29 @@ const CurrencyCell = React.memo(({ idx, col, entry, colIdx, totalRows, visibleCo
         if (el) el.focus();
       }, 50);
     };
+
+    if (e.key === 'Tab' || e.key === 'Enter') {
+      e.preventDefault();
+      setEditing(false);
+      if (e.shiftKey) {
+        const prevCol = visibleColumns[colIdx - 1];
+        if (prevCol) {
+          focusNext(idx, prevCol.id, colIdx - 1);
+        } else {
+          const lastCol = visibleColumns[visibleColumns.length - 1];
+          if (lastCol) focusNext(idx > 0 ? idx - 1 : totalRows - 1, lastCol.id, visibleColumns.length - 1);
+        }
+      } else {
+        const nextCol = visibleColumns[colIdx + 1];
+        if (nextCol) {
+          focusNext(idx, nextCol.id, colIdx + 1);
+        } else {
+          const firstCol = visibleColumns[0];
+          if (firstCol) focusNext(idx < totalRows - 1 ? idx + 1 : 0, firstCol.id, 0);
+        }
+      }
+      return;
+    }
 
     if (e.key === 'ArrowUp') {
       if (idx > 0) {
@@ -233,7 +256,7 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
     }, 150);
   }, [val, entry, col.id, handleCellChange, readOnly]);
 
-  const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = useCallback((e: React.KeyboardEvent<any>) => {
     if (col.type === 'date' && (e.key === 'Backspace' || e.key === 'Delete')) {
       e.preventDefault();
       return;
@@ -313,6 +336,16 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
     // Enable edit mode when user starts typing printable characters
     if (!isEditing && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       setIsEditing(true);
+      setVal(e.key);
+      e.preventDefault();
+      return;
+    }
+
+    // Enable edit mode on Enter
+    if (!isEditing && e.key === 'Enter') {
+      e.preventDefault();
+      setIsEditing(true);
+      return;
     }
 
     // Arrow navigation when NOT actively editing text
@@ -339,43 +372,54 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         }
         return;
       }
-    }
-
-    // Row navigation is always cell-by-cell
-    if (e.key === 'ArrowDown') {
-      if (idx < totalRows - 1) {
-        e.preventDefault();
-        setIsEditing(false); // Reset editing on vertical navigation
-        focusNext(idx + 1, col.id, colIdx);
+      if (e.key === 'ArrowDown') {
+        if (idx < totalRows - 1) {
+          e.preventDefault();
+          focusNext(idx + 1, col.id, colIdx);
+        }
+        return;
       }
-    } else if (e.key === 'ArrowUp') {
-      if (idx > 0) {
-        e.preventDefault();
-        setIsEditing(false); // Reset editing on vertical navigation
-        focusNext(idx - 1, col.id, colIdx);
+      if (e.key === 'ArrowUp') {
+        if (idx > 0) {
+          e.preventDefault();
+          focusNext(idx - 1, col.id, colIdx);
+        }
+        return;
       }
     }
   }, [idx, col.id, visibleColumns, colIdx, totalRows, readOnly, val, entry, handleCellChange, showDropdown, highlightIdx, filteredSuggestions, selectSuggestion, scrollToColumn, isEditing]);
-
-
 
   const hasHighlight = !!searchTerm && !!val && val.toLowerCase().includes(searchTerm.toLowerCase());
 
   const handleFocus = useCallback(() => !readOnly && setFocused(true), [readOnly]);
 
-  // Show highlighted overlay when search matches and not focused
-  if (hasHighlight && !focused) {
+
+  if (!isEditing) {
     return (
       <div
         id={`cell-${idx}-${col.id}`}
         data-cell={`cell-${idx}-${col.id}`}
-        className={`cell-input cell-input-highlight-wrap ${readOnly ? 'cell-readonly' : ''}`}
+        className={`cell-input cell-display-mode ${readOnly ? 'cell-readonly' : ''} ${hasHighlight && !focused ? 'cell-input-highlight-wrap' : ''}`}
         tabIndex={readOnly ? -1 : 0}
         onFocus={handleFocus}
+        onBlur={onBlur}
         onKeyDown={onKeyDown}
-        style={{ cursor: readOnly ? 'default' : 'text' }}
+        onDoubleClick={() => !readOnly && setIsEditing(true)}
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          cursor: readOnly ? 'default' : 'cell',
+          userSelect: 'none',
+          outline: 'none',
+        }}
       >
-        <HighlightedText text={val} searchTerm={searchTerm} />
+        {hasHighlight && !focused ? (
+          <HighlightedText text={val} searchTerm={searchTerm} />
+        ) : (
+          val || <span className="cell-placeholder" style={{ opacity: 0.4 }}>—</span>
+        )}
       </div>
     );
   }
@@ -392,15 +436,16 @@ const SpreadsheetTextInput = React.memo(({ idx, col, entry, visibleColumns, colI
         onBlur={onBlur}
         onFocus={handleFocus}
         onKeyDown={onKeyDown}
-        onDoubleClick={() => !readOnly && setIsEditing(true)}
         type={type}
         placeholder={placeholder}
         inputMode={col.type === 'number' ? 'decimal' : undefined}
         autoComplete="off"
         readOnly={readOnly}
+        autoFocus
         style={{
-          caretColor: isEditing ? 'auto' : 'transparent',
-          userSelect: isEditing ? 'text' : 'none'
+          width: '100%',
+          height: '100%',
+          boxSizing: 'border-box'
         }}
       />
       {showDropdown && dropdownPos && createPortal(
@@ -678,7 +723,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
         
         if (isFrozen) {
           const left = frozenLeftOffsets?.[col.id] || 50;
-          cellStyle = { ...cellStyle, position: 'sticky', left, zIndex: 5, background: cs?.bgColor || 'var(--table-bg)' };
+          cellStyle = { ...cellStyle, position: 'sticky', left, zIndex: 10, background: cs?.bgColor || 'var(--table-bg)' };
         }
         
         const isEditable = !editableColumnIds || editableColumnIds.has(col.id);
@@ -887,7 +932,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
               <span><HighlightedText text={entry.cells?.[col.id.toString()] || '–'} searchTerm={searchTerm} /></span>
             </div>
           ) : col.type === 'currency' ? (
-            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} scrollToColumn={scrollToColumn} />
+            <CurrencyCell idx={idx} col={col} entry={entry} colIdx={colIdx} handleCellChange={handleCellChange} visibleColumns={visibleColumns} totalRows={totalRows} readOnly={!isEditable} scrollToColumn={scrollToColumn} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} />
           ) : (
             <SpreadsheetTextInput 
               idx={idx}

@@ -1900,7 +1900,7 @@ a {
   cursor: default;
   position: sticky;
   left: 0;
-  z-index: 12;
+  z-index: 15;
   background: var(--surface);
   padding: 0 4px;
   border-right: 1px solid var(--grid-line);
@@ -1912,7 +1912,7 @@ a {
   min-width: 40px;
   position: sticky;
   left: 0;
-  z-index: 12;
+  z-index: 15;
   background: var(--table-bg);
 }
 
@@ -2032,7 +2032,7 @@ a {
   min-width: 64px;
   position: sticky;
   left: 0;
-  z-index: 11;
+  z-index: 12;
   overflow: visible;
   padding: 0 4px;
 }
@@ -2042,7 +2042,7 @@ a {
   min-width: 40px;
   position: sticky;
   left: 0;
-  z-index: 11;
+  z-index: 12;
   background: var(--surface);
 }
 
@@ -2233,11 +2233,16 @@ a {
 
 /* Keep sticky columns above the focused cell */
 .spreadsheet tr:focus-within td.serial {
-  z-index: 11;
+  z-index: 12;
 }
 
 .spreadsheet tr:focus-within td.serial-header-checkbox {
-  z-index: 11;
+  z-index: 12;
+}
+
+/* Active focus on frozen cells should pop slightly above non-focused frozen cells but below serial column */
+.spreadsheet td.frozen-col:focus-within {
+  z-index: 11 !important;
 }
 
 .cell-date,

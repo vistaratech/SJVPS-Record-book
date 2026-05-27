@@ -3120,6 +3120,11 @@ export default function RegisterPage() {
   });
   colVirtualizerRef.current = colVirtualizer;
 
+  // Remeasure columns when they are frozen/unfrozen, hidden/shown, or resized
+  useEffect(() => {
+    colVirtualizer.measure();
+  }, [visibleColumns, colWidths, colVirtualizer]);
+
   const virtualRows = useVirtual ? rowVirtualizer.getVirtualItems() : displayEntries.map((e, i) => ({ index: i, start: i * dynamicRowHeight, end: (i + 1) * dynamicRowHeight, size: dynamicRowHeight, key: e?.id ?? i, lane: 0 }));
   const virtualCols = useColVirtual ? colVirtualizer.getVirtualItems() : visibleColumns.map((_, i) => ({ index: i, start: 0, end: 0, size: colWidths[visibleColumns[i]?.id] || defaultColWidth, key: i, lane: 0 }));
 
