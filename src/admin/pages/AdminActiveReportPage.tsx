@@ -30,6 +30,10 @@ const ACTION_COLORS: Record<string, string> = {
   'Restore Register': '#10b981',
   'Rename Register': '#8b5cf6',
   'Rename Column': '#8b5cf6',
+  'Edit Row': '#3b82f6',
+  'Add Row': '#10b981',
+  'Insert Row': '#10b981',
+  'Change Column Type': '#8b5cf6',
   other: '#94a3b8'
 };
 
@@ -50,6 +54,10 @@ const ACTION_LABELS: Record<string, string> = {
   'Restore Register': 'Restore Register',
   'Rename Register': 'Rename Register',
   'Rename Column': 'Rename Column',
+  'Edit Row': 'Cell Edit',
+  'Add Row': 'Add Row',
+  'Insert Row': 'Insert Row',
+  'Change Column Type': 'Change Column Type',
 };
 
 const sty = {
@@ -118,7 +126,8 @@ export default function AdminActiveReportPage() {
       // Include all data entries and register modification activities
       const validActions = [
         'edit_cells', 'add_row', 'delete_row', 'bulk_delete_rows', 'add_column', 'delete_column',
-        'Delete Row', 'Delete Rows', 'Add Column', 'Delete Column', 'Create Register', 'Trash Register', 'Restore Register', 'Rename Register', 'Rename Column'
+        'Delete Row', 'Delete Rows', 'Add Column', 'Delete Column', 'Create Register', 'Trash Register', 'Restore Register', 'Rename Register', 'Rename Column',
+        'Edit Row', 'Add Row', 'Insert Row', 'Change Column Type'
       ];
       const dataActivities = allActivities.filter((a: any) => validActions.includes(a.action));
       

@@ -261,6 +261,8 @@ const chunkDoc = (registerId: number, chunkIndex: number) =>
 
 // In-memory cache so reads never hit Firestore after the first load
 const firestoreRegisterCache = new Map<number, RegisterDetail>();
+// Tracks active, pending Firestore fetches to deduplicate concurrent loads
+const inFlightRegisterFetches = new Map<number, Promise<RegisterDetail>>();
 
 export function clearRegisterCache(registerId?: number): void {
   if (registerId !== undefined) {
@@ -275,6 +277,8 @@ export function clearRegisterCache(registerId?: number): void {
 const registerMutationQueues = new Map<string | number, Promise<any>>();
 // Tracks how many mutations are currently pending/running globally
 let pendingMutationsCount = 0;
+// Tracks active mutations specifically per register to avoid cache conflicts
+const activeMutationsPerRegister = new Map<string, number>();
 const mutationListeners = new Set<(count: number) => void>();
 let lastGeneratedId = 0;
 
@@ -304,8 +308,17 @@ async function runQueuedMutation<T>(registerId: number | string, op: () => Promi
   const key = registerId.toString();
   const currentQueue = registerMutationQueues.get(key) || Promise.resolve();
   updateMutationCount(1);
+  const currentActive = activeMutationsPerRegister.get(key) || 0;
+  activeMutationsPerRegister.set(key, currentActive + 1);
+
   const next = currentQueue.then(op).finally(() => {
     updateMutationCount(-1);
+    const count = activeMutationsPerRegister.get(key) || 1;
+    if (count <= 1) {
+      activeMutationsPerRegister.delete(key);
+    } else {
+      activeMutationsPerRegister.set(key, count - 1);
+    }
   }).catch((err) => {
     console.error(`Mutation failed for register ${key}:`, err);
     throw err;
@@ -366,51 +379,61 @@ async function getRegDoc(registerId: number): Promise<RegisterDetail> {
     return structuredClone(cached);
   }
 
-  const snap = await getDoc(regDoc(registerId));
-  if (!snap.exists()) throw new Error('Register not found');
-  const data = snap.data() as RegisterDetail;
+  // Deduplicate concurrent loads: if this register is already loading, reuse the same promise
+  let fetchPromise = inFlightRegisterFetches.get(registerId);
+  if (!fetchPromise) {
+    fetchPromise = (async () => {
+      try {
+        const snap = await getDoc(regDoc(registerId));
+        if (!snap.exists()) throw new Error('Register not found');
+        const data = snap.data() as RegisterDetail;
 
-  // Ensure basic arrays exist so mutations don't crash
-  if (!data.columns) data.columns = [];
-  data.columns.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-  if (!data.pages) data.pages = [];
-  if (!data.sharedWith) data.sharedWith = [];
+        // Ensure basic arrays exist so mutations don't crash
+        if (!data.columns) data.columns = [];
+        data.columns.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+        if (!data.pages) data.pages = [];
+        if (!data.sharedWith) data.sharedWith = [];
 
-  // ── Chunked entry loading ──
-  // If the main document has no inline entries, load from subcollection chunks.
-  // Legacy registers that still have entries[] inline will use those directly.
-  if (!data.entries || data.entries.length === 0) {
-    // Use getDocsFromServer to always bypass Firestore SDK cache and get fresh chunk data
-    const chunkSnap = await getDocsFromServer(chunksCol(registerId));
-    const allEntries: Entry[] = [];
+        // ── Chunked entry loading ──
+        if (!data.entries || data.entries.length === 0) {
+          const chunkSnap = await getDocsFromServer(chunksCol(registerId));
+          const allEntries: Entry[] = [];
 
-    // Parse, sort numerically, and ensure unique chunk IDs to guarantee stable ordering
-    const sortedDocs = [...chunkSnap.docs]
-      .map(d => ({ idNum: parseInt(d.id, 10), doc: d }))
-      .filter(item => !isNaN(item.idNum))
-      .sort((a, b) => a.idNum - b.idNum);
+          const sortedDocs = [...chunkSnap.docs]
+            .map(d => ({ idNum: parseInt(d.id, 10), doc: d }))
+            .filter(item => !isNaN(item.idNum))
+            .sort((a, b) => a.idNum - b.idNum);
 
-    const seenChunkIds = new Set<number>();
-    sortedDocs.forEach(({ idNum, doc }) => {
-      if (seenChunkIds.has(idNum)) return;
-      seenChunkIds.add(idNum);
+          const seenChunkIds = new Set<number>();
+          sortedDocs.forEach(({ idNum, doc }) => {
+            if (seenChunkIds.has(idNum)) return;
+            seenChunkIds.add(idNum);
 
-      const chunkData = doc.data() as { entries: Entry[] };
-      if (chunkData.entries) {
-        allEntries.push(...chunkData.entries);
+            const chunkData = doc.data() as { entries: Entry[] };
+            if (chunkData.entries) {
+              allEntries.push(...chunkData.entries);
+            }
+          });
+
+          data.entries = allEntries;
+        }
+
+        // Ensure every entry has a cells object and sequential rowNumber
+        data.entries.forEach(e => { if (!e.cells) e.cells = {}; });
+        renumberRows(data);
+
+        // Store the raw Firestore data in cache
+        firestoreRegisterCache.set(registerId, data);
+        return data;
+      } finally {
+        inFlightRegisterFetches.delete(registerId);
       }
-    });
-
-    data.entries = allEntries;
+    })();
+    inFlightRegisterFetches.set(registerId, fetchPromise);
   }
 
-  // Ensure every entry has a cells object and sequential rowNumber
-  data.entries.forEach(e => { if (!e.cells) e.cells = {}; });
-  renumberRows(data);
-
-  // Store the raw Firestore data in cache; return a clone so mutations stay isolated
-  firestoreRegisterCache.set(registerId, data);
-  return structuredClone(data);
+  const result = await fetchPromise;
+  return structuredClone(result);
 }
 
 /**
@@ -623,6 +646,12 @@ export async function getRegisterColumnsOnly(registerId: number): Promise<Regist
 }
 
 export async function getRegister(registerId: number): Promise<RegisterDetail> {
+  const key = registerId.toString();
+  const hasActiveLocalMutations = (activeMutationsPerRegister.get(key) || 0) > 0;
+  if (!hasActiveLocalMutations) {
+    firestoreRegisterCache.delete(registerId);
+  }
+
   const reg = await getRegDoc(registerId);
   if (!reg.pages || reg.pages.length === 0) reg.pages = [{ id: 1, name: 'Page 1', index: 0 }];
   if (!reg.entries) reg.entries = [];
