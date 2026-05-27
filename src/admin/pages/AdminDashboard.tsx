@@ -2,17 +2,18 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { firebaseLogout } from '../../lib/firebaseAuth';
-import { LayoutDashboard, Users, Activity, LogOut, BarChart3, Menu, X, ShieldAlert, FileSpreadsheet } from 'lucide-react';
+import { LayoutDashboard, Users, Activity, LogOut, BarChart3, Menu, X, ShieldAlert, FileSpreadsheet, Trash2 } from 'lucide-react';
 import AdminUsersPage from './AdminUsersPage';
 import AdminActivityPage from './AdminActivityPage';
 import AdminDownloadRequestsPage from './AdminDownloadRequestsPage';
 import AdminAnalyticsPage from './AdminAnalyticsPage';
 import AdminActiveReportPage from './AdminActiveReportPage';
+import RecycleBinPage from '../../pages/RecycleBinPage';
 
 export default function AdminDashboard() {
   const { user, logout, token } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'users'|'activity'|'report'|'downloads'|'analytics'>('users');
+  const [activeTab, setActiveTab] = useState<'users'|'activity'|'report'|'downloads'|'analytics'|'recycle'>('users');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Clear workspace mode when entering admin dashboard
@@ -38,6 +39,7 @@ export default function AdminDashboard() {
     { key: 'report', icon: <FileSpreadsheet size={18}/>, label: 'Active Report' },
     { key: 'downloads', icon: <ShieldAlert size={18}/>, label: 'Approval Requests' },
     { key: 'analytics', icon: <BarChart3 size={18}/>, label: 'Analytics' },
+    { key: 'recycle', icon: <Trash2 size={18}/>, label: 'Recycle Bin' },
   ];
 
   return (
@@ -111,6 +113,7 @@ export default function AdminDashboard() {
         {activeTab === 'report' && <AdminActiveReportPage />}
         {activeTab === 'downloads' && <AdminDownloadRequestsPage />}
         {activeTab === 'analytics' && <AdminAnalyticsPage />}
+        {activeTab === 'recycle' && <RecycleBinPage isAdminPanel={true} />}
       </div>
 
       {/* Responsive CSS injected inline */}

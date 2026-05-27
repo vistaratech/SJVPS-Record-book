@@ -12,6 +12,7 @@ interface Column {
   dropdownOptions?: string[];
   mandatory?: boolean;
   unique?: boolean;
+  doubleEntryWarning?: boolean;
 }
 
 interface Entry {
@@ -95,12 +96,13 @@ export function AddRecordModal({
 
       const col = columns.find(c => c.id.toString() === colId);
       const isUnique = !!col?.unique;
-
-      // Only check types that make sense to be unique (or if explicitly marked as unique)
-      if (!DUPLICATE_CHECK_TYPES.has(colType) && !isUnique) return;
+      
+      const nameLower = (colName || '').toLowerCase();
+      const keywords = ['id', 'mobile', 'phone', 'email', 'roll', 'register', 'reg', 'aadhaar', 'pan', 'contact', 'number'];
+      const isImportantField = isUnique || colType === 'phone' || colType === 'email' || keywords.some(k => nameLower.includes(k));
 
       const trimmed = val.trim().toLowerCase();
-      if (!trimmed) {
+      if (!isImportantField || trimmed.length < 3) {
         setDuplicates(prev => { const n = new Set(prev); n.delete(colId); return n; });
         toastedRef.current.delete(colId);
         return;

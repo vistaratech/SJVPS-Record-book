@@ -7904,7 +7904,7 @@ body.modal-open {
 /* Search Bar Overrides */
 .pab-search {
   flex-direction: row !important;
-  max-width: 200px !important;
+  max-width: 130px !important;
   border-radius: 6px !important;
   border: 1px solid rgba(26, 35, 126, 0.2) !important;
   background: #ffffff !important;
@@ -7915,7 +7915,7 @@ body.modal-open {
 }
 
 .pab-search.active {
-  max-width: 320px !important;
+  max-width: 220px !important;
   border-color: #2563EB !important;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.10) !important;
 }
@@ -7923,12 +7923,12 @@ body.modal-open {
 .pab-search:focus-within {
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 2px rgba(232, 96, 76, 0.08) !important;
-  max-width: 320px !important;
+  max-width: 220px !important;
 }
 
 .pab-search-input {
-  width: 150px !important;
-  min-width: 100px !important;
+  width: 100% !important;
+  min-width: 40px !important;
   padding: 0 !important;
   flex: 1 !important;
 }

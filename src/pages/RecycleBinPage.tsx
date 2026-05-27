@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   listBusinesses, listDeletedRegisters, restoreRegister, permanentlyDeleteRegister,
-  getAllDeletedItems, restoreDeletedItem, permanentlyDeleteItem,
+  getAllDeletedItems, restoreDeletedItem, permanentlyDeleteItem, emptyRecycleBin,
   type RegisterSummary, type DeletedItem
 } from '../lib/api';
 import {
@@ -10,18 +10,36 @@ import {
   ChevronDown, ChevronUp, Search
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../lib/auth';
+import toast from 'react-hot-toast';
 
 type TabType = 'registers' | 'items';
 type FilterType = 'all' | 'row' | 'column';
 
-export default function RecycleBinPage() {
+interface RecycleBinPageProps {
+  isAdminPanel?: boolean;
+}
+
+export default function RecycleBinPage({ isAdminPanel = false }: RecycleBinPageProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<TabType>('registers');
+  const { user } = useAuth();
+  
+  const isPageAdmin = useMemo(() => {
+    return isAdminPanel || (user as any)?.role === 'admin' || (user as any)?.role === 'superadmin' || (user as any)?.permissions?.isAdmin === true;
+  }, [isAdminPanel, user]);
+
+  const [activeTab, setActiveTab] = useState<TabType>(isPageAdmin ? 'registers' : 'items');
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isPageAdmin) {
+      setActiveTab('items');
+    }
+  }, [isPageAdmin]);
 
   const { data: businesses } = useQuery({ queryKey: ['businesses'], queryFn: listBusinesses });
   const businessId = businesses?.[0]?.id;
@@ -91,6 +109,19 @@ export default function RecycleBinPage() {
     },
   });
 
+  const emptyRecycleBinMutation = useMutation({
+    mutationFn: () => emptyRecycleBin(businessId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deletedRegisters', businessId] });
+      queryClient.invalidateQueries({ queryKey: ['deletedItems', businessId] });
+      queryClient.invalidateQueries({ queryKey: ['registers', businessId] });
+      toast.success('Recycle bin successfully emptied');
+    },
+    onError: () => {
+      toast.error('Failed to empty recycle bin');
+    }
+  });
+
   const handleCopyData = (item: DeletedItem) => {
     let text = '';
     if (item.type === 'row' && item.entry) {
@@ -124,38 +155,57 @@ export default function RecycleBinPage() {
     <div className="rbin-page">
       {/* Header */}
       <div className="rbin-header">
-        <button className="rbin-back" onClick={() => navigate('/')}>
-          <ArrowLeft size={18} />
-        </button>
+        {!isPageAdmin && (
+          <button className="rbin-back" onClick={() => navigate('/')}>
+            <ArrowLeft size={18} />
+          </button>
+        )}
         <div className="rbin-header-text">
           <h1>Recycle Bin</h1>
-          <p>Restore or permanently delete items</p>
+          <p>{isPageAdmin ? 'Restore or permanently delete items' : 'View deleted rows & columns'}</p>
         </div>
+        {isPageAdmin && (
+          <button 
+            className="rbin-btn danger" 
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }}
+            disabled={emptyRecycleBinMutation.isPending || ((deletedRegisters?.length ?? 0) === 0 && (deletedItems?.length ?? 0) === 0)}
+            onClick={() => {
+              if (confirm('Are you sure you want to PERMANENTLY delete all items in the Recycle Bin? This action is irreversible.')) {
+                emptyRecycleBinMutation.mutate();
+              }
+            }}
+          >
+            <Trash2 size={14} /> 
+            {emptyRecycleBinMutation.isPending ? 'Emptying...' : 'Empty Recycle Bin'}
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
-      <div className="rbin-tabs">
-        <button
-          className={`rbin-tab${activeTab === 'registers' ? ' active' : ''}`}
-          onClick={() => setActiveTab('registers')}
-        >
-          <FileText size={14} />
-          Registers
-          {deletedRegisters && deletedRegisters.length > 0 && (
-            <span className="rbin-badge">{deletedRegisters.length}</span>
-          )}
-        </button>
-        <button
-          className={`rbin-tab${activeTab === 'items' ? ' active' : ''}`}
-          onClick={() => setActiveTab('items')}
-        >
-          <Trash2 size={14} />
-          Rows & Columns
-          {deletedItems && deletedItems.length > 0 && (
-            <span className="rbin-badge">{deletedItems.length}</span>
-          )}
-        </button>
-      </div>
+      {isPageAdmin && (
+        <div className="rbin-tabs">
+          <button
+            className={`rbin-tab${activeTab === 'registers' ? ' active' : ''}`}
+            onClick={() => setActiveTab('registers')}
+          >
+            <FileText size={14} />
+            Registers
+            {deletedRegisters && deletedRegisters.length > 0 && (
+              <span className="rbin-badge">{deletedRegisters.length}</span>
+            )}
+          </button>
+          <button
+            className={`rbin-tab${activeTab === 'items' ? ' active' : ''}`}
+            onClick={() => setActiveTab('items')}
+          >
+            <Trash2 size={14} />
+            Rows & Columns
+            {deletedItems && deletedItems.length > 0 && (
+              <span className="rbin-badge">{deletedItems.length}</span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       <div className="rbin-body">
@@ -309,17 +359,21 @@ export default function RecycleBinPage() {
                             <button className="rbin-btn copy" onClick={() => handleCopyData(item)}>
                               <Copy size={13} /> {copiedId === item.id ? 'Copied!' : 'Copy Data'}
                             </button>
-                            <button className="rbin-btn restore" onClick={() =>
-                              restoreItemMutation.mutate({ registerId: item.registerId, itemId: item.id })
-                            }>
-                              <RefreshCw size={13} /> Restore
-                            </button>
-                            <button className="rbin-btn danger" onClick={() => {
-                              if (confirm('Permanently delete this item? This cannot be undone.'))
-                                deleteItemMutation.mutate({ registerId: item.registerId, itemId: item.id });
-                            }}>
-                              <XCircle size={13} /> Delete Forever
-                            </button>
+                            {isPageAdmin && (
+                              <>
+                                <button className="rbin-btn restore" onClick={() =>
+                                  restoreItemMutation.mutate({ registerId: item.registerId, itemId: item.id })
+                                }>
+                                  <RefreshCw size={13} /> Restore
+                                </button>
+                                <button className="rbin-btn danger" onClick={() => {
+                                  if (confirm('Permanently delete this item? This cannot be undone.'))
+                                    deleteItemMutation.mutate({ registerId: item.registerId, itemId: item.id });
+                                }}>
+                                  <XCircle size={13} /> Delete Forever
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       )}

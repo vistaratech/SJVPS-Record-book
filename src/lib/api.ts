@@ -132,6 +132,7 @@ export interface Column {
   linkedTo?: { registerId: number; columnId: number; role?: 'source' | 'target' };
   mandatory?: boolean;
   unique?: boolean;
+  doubleEntryWarning?: boolean;
 }
 
 export interface CellStyle {
@@ -882,6 +883,22 @@ export async function moveRegisterToFolder(registerId: number, folderId: number 
     }
     await saveRegDocImmediate(reg);
   });
+}
+
+export async function moveRegistersToFolder(registerIds: number[], folderId: number | null): Promise<void> {
+  await Promise.all(
+    registerIds.map(registerId =>
+      runQueuedMutation(registerId, async () => {
+        const reg = await getRegDoc(registerId);
+        if (folderId !== null) {
+          reg.folderId = folderId;
+        } else {
+          delete reg.folderId;
+        }
+        await saveRegDocImmediate(reg);
+      })
+    )
+  );
 }
 
 // ── Excel Import: Column-type alias map ──────────────────────────────────────
@@ -1771,6 +1788,17 @@ export async function setColumnUnique(registerId: number, columnId: number, uniq
   });
 }
 
+export async function setColumnDoubleEntryWarning(registerId: number, columnId: number, doubleEntryWarning: boolean): Promise<RegisterDetail> {
+  return runQueuedMutation(registerId, async () => {
+    const reg = await getRegDoc(registerId);
+    const col = reg.columns.find((c) => c.id.toString() === columnId.toString());
+    if (!col) throw new Error('Column not found');
+    (col as any).doubleEntryWarning = doubleEntryWarning;
+    await saveRegDocImmediate(reg);
+    return reg;
+  });
+}
+
 export async function clearColumnData(registerId: number, columnId: number): Promise<RegisterDetail> {
   return runQueuedMutation(registerId, async () => {
     const reg = await getRegDoc(registerId);
@@ -2188,12 +2216,13 @@ export async function linkColumn(
 
 export async function unlinkColumn(
   registerId: number,
-  columnId: number
+  columnId: number,
+  clearData?: boolean
 ): Promise<void> {
   let targetRegisterId: number | undefined;
   let targetColumnId: number | undefined;
 
-  // 1. Clear linkedTo on current column
+  // 1. Clear linkedTo on current column and optionally clear data
   await runQueuedMutation(registerId, async () => {
     const reg = await getRegDoc(registerId);
     const col = reg.columns.find(c => c.id === columnId);
@@ -2201,6 +2230,12 @@ export async function unlinkColumn(
       targetRegisterId = col.linkedTo.registerId;
       targetColumnId = col.linkedTo.columnId;
       delete col.linkedTo;
+      if (clearData) {
+        const colIdStr = columnId.toString();
+        reg.entries.forEach(entry => {
+          if (entry.cells) delete entry.cells[colIdStr];
+        });
+      }
       await saveRegDocImmediate(reg);
     }
   });
@@ -2214,6 +2249,12 @@ export async function unlinkColumn(
       const col = reg.columns.find(c => c.id === finalTargetColumnId);
       if (col) {
         delete col.linkedTo;
+        if (clearData) {
+          const colIdStr = finalTargetColumnId.toString();
+          reg.entries.forEach(entry => {
+            if (entry.cells) delete entry.cells[colIdStr];
+          });
+        }
         await saveRegDocImmediate(reg);
       }
     });
@@ -2639,6 +2680,24 @@ export async function emptyRegisterBin(registerId: number): Promise<void> {
     reg.deletedItems = [];
     await saveRegDocImmediate(reg);
   });
+}
+
+/**
+ * Permanently empty the entire recycle bin for a business.
+ * This deletes all deleted registers permanently AND clears deletedItems in all active registers.
+ */
+export async function emptyRecycleBin(businessId: number): Promise<void> {
+  // 1. Permanently delete all deleted registers
+  const deletedRegs = await listDeletedRegisters(businessId);
+  for (const reg of deletedRegs) {
+    await permanentlyDeleteRegister(reg.id);
+  }
+
+  // 2. Clear all deleted items from active registers
+  const summaries = await listRegisters(businessId);
+  for (const reg of summaries) {
+    await emptyRegisterBin(reg.id);
+  }
 }
 
 // ==================== BACKUPS ====================

@@ -21,6 +21,8 @@ export default function AdminUserSettingsPage() {
   const [newPw, setNewPw] = useState('');
   const [showNewPw, setShowNewPw] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
 
   const [sheetAccessGranted, setSheetAccessGranted] = useState<Record<string, boolean>>({});
   const [folderAccessGranted, setFolderAccessGranted] = useState<Record<string, boolean>>({});
@@ -54,6 +56,8 @@ export default function AdminUserSettingsPage() {
         }
         setUser(foundUser);
         setUserRole(foundUser.role || 'user');
+        setEditName(foundUser.name || '');
+        setEditPhone(foundUser.phone || '');
         if ((foundUser as any).password) {
           setNewPw((foundUser as any).password);
         }
@@ -184,6 +188,24 @@ export default function AdminUserSettingsPage() {
     }
   };
 
+  const handleSaveProfile = async () => {
+    if (!user || !token) return;
+    if (!editName.trim()) {
+      addNotification({ title: 'Validation', message: 'Name cannot be empty', type: 'error' });
+      return;
+    }
+    setSaving(true);
+    try {
+      await firebaseUpdateUser(user.id, { name: editName.trim(), phone: editPhone.trim() });
+      setUser((prev: any) => ({ ...prev, name: editName.trim(), phone: editPhone.trim() }));
+      addNotification({ title: 'Success', message: 'User profile updated successfully!', type: 'success' });
+    } catch (err: any) {
+      addNotification({ title: 'Error', message: err.message || 'Failed to update profile', type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
 
 
 
@@ -211,22 +233,21 @@ export default function AdminUserSettingsPage() {
         <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '30px' }}>
           
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            {/* Global Permissions */}
+            {/* Profile Details */}
             <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Shield size={18} /> Global Permissions
+                <Edit3 size={18} /> Profile Details
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {[
-                  { k: 'canCreateSheets', l: 'Can Create Folders & Sheets', icon: <FileText size={16}/>, desc: 'Can add new folders and sheets' },
-                  { k: 'isAdmin', l: 'Admin Access', icon: <Shield size={16}/>, desc: 'Full admin access' }
-                ].map(({ k, l, icon, desc }) => (
-                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={(globalPerms as any)[k]} onChange={() => setGlobalPerms(p => ({ ...p, [k]: !(p as any)[k] }))} style={{ width: '18px', height: '18px', accentColor: 'var(--brand-green)' }} />
-                    <span style={{ color: 'var(--foreground)', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500 }}>{icon} {l}</span>
-                    <span style={{ fontSize: '12px', color: 'var(--muted)', marginLeft: 'auto' }}>{desc}</span>
-                  </label>
-                ))}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginBottom: '4px' }}>Full Name</label>
+                  <input type="text" value={editName} onChange={e => setEditName(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '14px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--muted)', marginBottom: '4px' }}>Phone Number</label>
+                  <input type="text" value={editPhone} onChange={e => setEditPhone(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '14px', outline: 'none' }} />
+                </div>
+                <button onClick={handleSaveProfile} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, var(--brand-green), var(--brand-green-dark))', color: 'white', fontWeight: 700, fontSize: '13px', cursor: 'pointer', alignSelf: 'flex-start', marginTop: '4px', boxShadow: 'var(--shadow-button)' }}>Save Profile</button>
               </div>
             </div>
 
@@ -247,6 +268,26 @@ export default function AdminUserSettingsPage() {
               <p style={{ margin: '10px 0 0', fontSize: '12px', color: 'var(--muted)' }}>You can view or update the user's password here.</p>
             </div>
           </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            {/* Global Permissions */}
+            <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+              <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Shield size={18} /> Global Permissions
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {[
+                  { k: 'canCreateSheets', l: 'Can Create Folders & Sheets', icon: <FileText size={16}/>, desc: 'Can add new folders and sheets' },
+                  { k: 'isAdmin', l: 'Admin Access', icon: <Shield size={16}/>, desc: 'Full admin access' }
+                ].map(({ k, l, icon, desc }) => (
+                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={(globalPerms as any)[k]} onChange={() => setGlobalPerms(p => ({ ...p, [k]: !(p as any)[k] }))} style={{ width: '18px', height: '18px', accentColor: 'var(--brand-green)' }} />
+                    <span style={{ color: 'var(--foreground)', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500 }}>{icon} {l}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--muted)', marginLeft: 'auto' }}>{desc}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
 
           {/* Role Selector */}
           <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
@@ -288,6 +329,7 @@ export default function AdminUserSettingsPage() {
               ))}
             </div>
           </div>
+        </div>
 
           {/* Full Sheet & Folder Access Toggle */}
           <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: `1px solid ${(globalPerms as any).fullSheetAccess ? '#6366f1' : 'var(--border)'}`, boxShadow: 'var(--shadow-sm)', transition: 'border-color 0.2s' }}>

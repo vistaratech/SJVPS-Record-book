@@ -1,4 +1,4 @@
-import { Hash, Calendar, ChevronDown, FlaskConical, Type as TypeIcon, SortAsc, SortDesc, Pencil, ArrowLeftRight, Copy, ArrowRight, ChevronsLeftRight, Pin, Eye, EyeOff, Eraser, Trash2, FileText, FileSpreadsheet, Share2, ArrowLeft, Link as LinkIcon, Plus } from 'lucide-react';
+import { Hash, Calendar, ChevronDown, FlaskConical, Type as TypeIcon, SortAsc, SortDesc, Pencil, ArrowLeftRight, Copy, ArrowRight, ChevronsLeftRight, Pin, Eye, EyeOff, Eraser, Trash2, FileText, FileSpreadsheet, Share2, ArrowLeft, Link as LinkIcon, Plus, AlertTriangle } from 'lucide-react';
 import { type Column } from '../../../lib/api';
 import { ColumnIcon } from '../ColumnIcon';
 
@@ -35,6 +35,7 @@ interface RegisterContextMenusProps {
   deleteColumnMutation: any;
   setColumnMandatoryMutation: any;
   setColumnUniqueMutation: any;
+  setColumnDoubleEntryWarningMutation: any;
 
 
   // Row Menu
@@ -67,6 +68,7 @@ export function RegisterContextMenus(props: RegisterContextMenusProps) {
     moveColumnMutation, frozenColumns, setFrozenColumns, freezeColumn, registerId,
     hiddenColumns, setHiddenColumns, hideColumn, clearColumnDataMutation, deleteColumnMutation,
     setColumnMandatoryMutation, setColumnUniqueMutation,
+    setColumnDoubleEntryWarningMutation,
     rowMenuId, setRowMenuId, duplicateEntryMutation, deleteEntryMutation, insertEntryMutation, localEntries,
     handleRowDownloadPDF, handleRowDownloadExcel, handleRowShareText,
     calcTypes, updateCalcType,

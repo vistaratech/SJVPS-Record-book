@@ -36,6 +36,7 @@ export default function AdminUsersPage() {
   // Role is always 'user' by default for new accounts created here
   const [newRole, setNewRole] = useState<'user'|'sheet_admin'>('user');
   const [showNewPass, setShowNewPass] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
   const [creating, setCreating] = useState(false);
 
   const fetch_ = async () => {
@@ -50,8 +51,8 @@ export default function AdminUsersPage() {
     e.preventDefault(); if(!newName||!newEmail||!newPass) return;
     setCreating(true); setError('');
     try {
-      await firebaseCreateUser({ name:newName, email:newEmail, password:newPass, role:newRole });
-      setNewName(''); setNewEmail(''); setNewPass(''); setNewRole('user'); setShowCreate(false); fetch_();
+      await firebaseCreateUser({ name:newName, email:newEmail, password:newPass, role:newRole, phone:newPhone });
+      setNewName(''); setNewEmail(''); setNewPass(''); setNewPhone(''); setNewRole('user'); setShowCreate(false); fetch_();
     } catch(e:any) { setError(e.message); } finally { setCreating(false); }
   };
 
@@ -91,6 +92,7 @@ export default function AdminUsersPage() {
           <form onSubmit={handleCreate} style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
             <div><label style={s.label}>Name</label><input style={s.input} value={newName} onChange={e=>setNewName(e.target.value)} required placeholder="Full name"/></div>
             <div><label style={s.label}>Email</label><input type="email" style={s.input} value={newEmail} onChange={e=>setNewEmail(e.target.value)} required placeholder="user@example.com"/></div>
+            <div><label style={s.label}>Phone Number</label><input style={s.input} value={newPhone} onChange={e=>setNewPhone(e.target.value)} placeholder="e.g. +91 XXXXX XXXXX"/></div>
             <div><label style={s.label}>Password</label>
               <div style={{position:'relative'}}>
                 <input type={showNewPass?'text':'password'} style={{...s.input,paddingRight:'36px'}} value={newPass} onChange={e=>setNewPass(e.target.value)} required placeholder="Min 6 chars"/>

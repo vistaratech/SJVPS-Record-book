@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import {
   getRegister, listRegisters, addColumn, deleteColumn, renameColumn, updateColumnDropdownOptions,
   duplicateColumn, moveColumn, reorderColumn, changeColumnType, clearColumnData, insertColumn, updateColumnWidth, updateColumnSummary,
-  freezeColumn, hideColumn, setColumnMandatory, setColumnUnique,
+  freezeColumn, hideColumn, setColumnMandatory, setColumnUnique, setColumnDoubleEntryWarning,
   addEntry, updateEntry, updateEntryDirect, deleteEntry, duplicateEntry, bulkDeleteEntries, insertEntry,
   clearRegisterCache,
   listRowHistory,
@@ -1221,15 +1221,16 @@ export default function RegisterPage() {
   });
 
   const unlinkColumnMutation = useMutation({
-    mutationFn: (colId: number) => unlinkColumn(registerId, colId),
-    onSuccess: () => {
+    mutationFn: ({ colId, clearData }: { colId: number; clearData: boolean }) => unlinkColumn(registerId, colId, clearData),
+    onSuccess: (_, { clearData }) => {
       queryClient.invalidateQueries({ queryKey: ['register', registerId] });
       if (linkInfoModal?.linkedRegisterId) {
         queryClient.invalidateQueries({ queryKey: ['register', linkInfoModal.linkedRegisterId] });
       }
-      toast.success('Column link successfully removed');
+      toast.success(clearData ? 'Column link removed & data cleared' : 'Column link successfully removed');
       setLinkInfoModal(null);
-      _logWork('update_permissions', `Removed link on column: ${linkInfoModal?.columnName || 'Unknown'}`);
+      setShowUnlinkConfirm(false);
+      _logWork('update_permissions', `Removed link on column: ${linkInfoModal?.columnName || 'Unknown'} (${clearData ? 'without data' : 'with data'})`);
     },
     onError: () => {
       toast.error('Failed to remove column link');
@@ -1839,6 +1840,32 @@ export default function RegisterPage() {
     },
   });
 
+  const setColumnDoubleEntryWarningMutation = useMutation({
+    mutationFn: ({ colId, doubleEntryWarning }: { colId: number; doubleEntryWarning: boolean }) =>
+      setColumnDoubleEntryWarning(registerId, colId, doubleEntryWarning),
+    onMutate: async ({ colId, doubleEntryWarning }) => {
+      await queryClient.cancelQueries({ queryKey: ['register', registerId] });
+      const prev = queryClient.getQueryData(['register', registerId]) as any;
+      if (prev) {
+        queryClient.setQueryData(['register', registerId], {
+          ...prev,
+          columns: (prev.columns || []).map((c: any) =>
+            c.id === colId ? { ...c, doubleEntryWarning } : c
+          ),
+        });
+      }
+      setColMenuId(null);
+      return { prev };
+    },
+    onSuccess: (updatedReg) => {
+      queryClient.setQueryData(['register', registerId], updatedReg);
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev) queryClient.setQueryData(['register', registerId], context.prev);
+      toast.error('Failed to update double entry warning setting');
+    },
+  });
+
   const insertColumnMutation = useMutation({
     mutationFn: (vars: { 
       pos: number,           // pre-calculated, snapshot at click time
@@ -2267,23 +2294,29 @@ export default function RegisterPage() {
           );
           return false; // Return false to indicate rejection
         } else {
-          toast(
-            `Double Entry Warning: The value "${value}" already exists in column "${col.name}".`,
-            {
-              id: `dup-warning-${columnId}-${value}`,
-              duration: 5000,
-              position: 'top-right',
-              style: {
-                background: '#fff7ed',
-                color: '#92400e',
-                border: '1px solid #f59e0b',
-                fontWeight: 600,
-                fontSize: '13px',
-                maxWidth: '340px',
-              },
-              icon: '⚠️',
-            }
-          );
+          const nameLower = (col.name || '').toLowerCase();
+          const keywords = ['id', 'mobile', 'phone', 'email', 'roll', 'register', 'reg', 'aadhaar', 'pan', 'contact', 'number'];
+          const isImportantField = col.type === 'phone' || col.type === 'email' || keywords.some(k => nameLower.includes(k));
+          
+          if (isImportantField && value.trim().length >= 3) {
+            toast(
+              `Double Entry Warning: The value "${value}" already exists in column "${col.name}".`,
+              {
+                id: `dup-warning-${columnId}-${value}`,
+                duration: 5000,
+                position: 'top-right',
+                style: {
+                  background: '#fff7ed',
+                  color: '#92400e',
+                  border: '1px solid #f59e0b',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  maxWidth: '340px',
+                },
+                icon: '⚠️',
+              }
+            );
+          }
         }
       }
     }
@@ -3180,8 +3213,22 @@ export default function RegisterPage() {
           <h1 className="register-header-title">{register.name}</h1>
           
           {_canEditAny && (
-            <button className="pab-tab-action-btn primary header-add-btn" onClick={() => setShowAddRecordModal(true)}>
-              <Plus size={12} /> Add Row
+            <button 
+              className="pab-tab-action-btn primary header-add-btn" 
+              onClick={() => setShowAddRecordModal(true)}
+              title="Add Row"
+              style={{
+                width: '30px',
+                height: '30px',
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                minWidth: '30px'
+              }}
+            >
+              <Plus size={18} />
             </button>
           )}
         </div>
@@ -3656,6 +3703,7 @@ export default function RegisterPage() {
         clearColumnDataMutation={clearColumnDataMutation} deleteColumnMutation={deleteColumnMutation}
         setColumnMandatoryMutation={setColumnMandatoryMutation}
         setColumnUniqueMutation={setColumnUniqueMutation}
+        setColumnDoubleEntryWarningMutation={setColumnDoubleEntryWarningMutation}
         rowMenuId={rowMenuId} setRowMenuId={setRowMenuId}
         duplicateEntryMutation={duplicateEntryMutation} deleteEntryMutation={deleteEntryMutation}
         insertEntryMutation={insertEntryMutation}
@@ -3744,23 +3792,33 @@ export default function RegisterPage() {
                 borderRadius: '8px'
               }}>
                 <h4 style={{ color: '#dc2626', fontSize: '13px', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
-                  <AlertTriangle size={16} /> Are you absolutely sure?
+                  <AlertTriangle size={16} /> Choose how to Unlink:
                 </h4>
                 <p style={{ fontSize: '12px', color: 'var(--text-main)', margin: '0 0 12px 0', lineHeight: '1.4' }}>
-                  Unlinking will disconnect the live data sync. The columns will stop mirroring each other. Existing values will remain, but the <strong>To Column</strong> will be unlocked for manual edits again.
+                  Unlinking will disconnect the live data sync. The columns will stop mirroring each other. Choose whether to keep or clear the mirrored values.
                 </p>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button 
-                    className="modal-confirm-btn" 
-                    style={{ flex: 1, background: '#dc2626', borderColor: '#dc2626', color: '#fff', fontSize: '12px', padding: '8px', fontWeight: 600 }}
-                    onClick={() => unlinkColumnMutation.mutate(linkInfoModal.columnId)}
-                    disabled={unlinkColumnMutation.isPending}
-                  >
-                    {unlinkColumnMutation.isPending ? 'Unlinking...' : 'Yes, Unlink'}
-                  </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      className="modal-confirm-btn" 
+                      style={{ flex: 1, background: 'var(--navy)', borderColor: 'var(--navy)', color: '#fff', fontSize: '11px', padding: '8px', fontWeight: 600 }}
+                      onClick={() => unlinkColumnMutation.mutate({ colId: linkInfoModal.columnId, clearData: false })}
+                      disabled={unlinkColumnMutation.isPending}
+                    >
+                      {unlinkColumnMutation.isPending ? 'Unlinking...' : 'Keep Data'}
+                    </button>
+                    <button 
+                      className="modal-confirm-btn" 
+                      style={{ flex: 1, background: '#dc2626', borderColor: '#dc2626', color: '#fff', fontSize: '11px', padding: '8px', fontWeight: 600 }}
+                      onClick={() => unlinkColumnMutation.mutate({ colId: linkInfoModal.columnId, clearData: true })}
+                      disabled={unlinkColumnMutation.isPending}
+                    >
+                      {unlinkColumnMutation.isPending ? 'Unlinking...' : 'Clear Data'}
+                    </button>
+                  </div>
                   <button 
                     className="modal-cancel-btn" 
-                    style={{ flex: 1, fontSize: '12px', padding: '8px' }}
+                    style={{ width: '100%', fontSize: '11px', padding: '6px' }}
                     onClick={() => setShowUnlinkConfirm(false)}
                   >
                     Cancel

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '../../lib/auth';
 import type { RegisterSummary, Business } from '../../lib/api';
-import { getRegister, getRegisterColumnsOnly, addEntry, formatDateToDDMMYYYY, listFolders, createFolder, renameFolder, deleteFolder, moveRegisterToFolder, duplicateRegister, searchAllRegisters } from '../../lib/api';
+import { getRegister, getRegisterColumnsOnly, addEntry, formatDateToDDMMYYYY, listFolders, createFolder, renameFolder, deleteFolder, moveRegisterToFolder, moveRegistersToFolder, duplicateRegister, searchAllRegisters } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { ImageCompressionModule } from '../../lib/imageCompressionModule';
 import { firebaseLogWorkspaceAction } from '../../lib/firebaseAuth';
@@ -60,6 +60,8 @@ export const Sidebar = memo(function Sidebar({
   const [newFolderName, setNewFolderName] = useState('');
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [folderMenuId, setFolderMenuId] = useState<number | null>(null);
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedRegIds, setSelectedRegIds] = useState<Set<number>>(new Set());
 
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isFooterMenuOpen, setIsFooterMenuOpen] = useState(false);
@@ -105,17 +107,17 @@ export const Sidebar = memo(function Sidebar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(() => {
     try {
-      return localStorage.getItem('seen_version_1.5.6') !== 'true';
+      return localStorage.getItem('seen_version_1.6.0') !== 'true';
     } catch {
       return false;
     }
   });
-  const [versionTab, setVersionTab] = useState<'1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.5.6');
+  const [versionTab, setVersionTab] = useState<'1.6.0' | '1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.6.0');
 
   const handleCloseVersionModal = useCallback(() => {
     setShowVersionModal(false);
     try {
-      localStorage.setItem('seen_version_1.5.6', 'true');
+      localStorage.setItem('seen_version_1.6.0', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -216,6 +218,24 @@ export const Sidebar = memo(function Sidebar({
     },
   });
 
+  const moveMultipleMutation = useMutation({
+    mutationFn: ({ regIds, fId }: { regIds: number[]; fId: number | null }) => moveRegistersToFolder(regIds, fId),
+    onSuccess: (_, variables) => {
+      queryClient.setQueryData(['registers', businessId], (old: RegisterSummary[] | undefined) => {
+        const targetFolderId = variables.fId === null ? undefined : variables.fId;
+        const idSet = new Set(variables.regIds);
+        return (old || []).map(r => idSet.has(r.id) ? { ...r, folderId: targetFolderId } : r);
+      });
+      queryClient.invalidateQueries({ queryKey: ['registers', businessId] });
+      setIsMultiSelectMode(false);
+      setSelectedRegIds(new Set());
+      toast.success(`Successfully moved ${variables.regIds.length} registers`);
+    },
+    onError: () => {
+      toast.error('Failed to move registers');
+    }
+  });
+
   const handlePaste = async (folderId: number | null) => {
     if (!clipboard) return;
     if (clipboard.type === 'move') {
@@ -254,15 +274,57 @@ export const Sidebar = memo(function Sidebar({
       key={reg.id}
       draggable
       onDragStart={(e) => {
-        e.dataTransfer.setData('text/plain', reg.id.toString());
+        const ids = isMultiSelectMode && selectedRegIds.has(reg.id)
+          ? Array.from(selectedRegIds)
+          : [reg.id];
+        e.dataTransfer.setData('text/plain', JSON.stringify(ids));
         e.dataTransfer.effectAllowed = 'move';
       }}
       className={`register-item ${Number(currentRegId) === reg.id ? 'active' : ''}`}
-      onClick={() => { startTransition(() => { navigate(`/register/${reg.id}`); closeSidebar(); }); }}
+      onClick={(e) => {
+        if (isMultiSelectMode) {
+          e.stopPropagation();
+          setSelectedRegIds(prev => {
+            const next = new Set(prev);
+            if (next.has(reg.id)) {
+              next.delete(reg.id);
+            } else {
+              next.add(reg.id);
+            }
+            return next;
+          });
+        } else {
+          startTransition(() => { navigate(`/register/${reg.id}`); closeSidebar(); });
+        }
+      }}
       onMouseEnter={() => prefetchRegister(reg.id)}
-      style={!isCollapsed && indent ? { paddingLeft: `${16 + indent}px` } : undefined}
+      style={{
+        ...(!isCollapsed && indent ? { paddingLeft: `${16 + indent}px` } : {}),
+        backgroundColor: isMultiSelectMode && selectedRegIds.has(reg.id) ? 'rgba(30, 45, 120, 0.06)' : undefined,
+      }}
       data-tooltip={isCollapsed ? reg.name : undefined}
     >
+      {isMultiSelectMode && !isCollapsed && (
+        <div 
+          style={{
+            width: '16px',
+            height: '16px',
+            borderRadius: '4px',
+            border: `2px solid ${selectedRegIds.has(reg.id) ? 'var(--primary)' : '#cbd5e1'}`,
+            backgroundColor: selectedRegIds.has(reg.id) ? 'var(--primary)' : 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '8px',
+            flexShrink: 0,
+            transition: 'all 0.15s ease',
+          }}
+        >
+          {selectedRegIds.has(reg.id) && (
+            <Check size={10} color="#ffffff" strokeWidth={3} />
+          )}
+        </div>
+      )}
       <div
         className="register-icon-bg"
         {...{ style: { '--dyn-bg': reg.iconColor ? `${reg.iconColor}20` : 'rgba(27,42,74,0.08)' } as React.CSSProperties }}
@@ -274,15 +336,17 @@ export const Sidebar = memo(function Sidebar({
         <div className="register-item-meta">{reg.entryCount} entries {!isCollapsed && `• ${new Date(reg.updatedAt).toLocaleDateString()}`}</div>
         {!isCollapsed && reg.lastActivity && <div className="register-item-activity">{reg.lastActivity}</div>}
       </div>
-      <button
-        className="register-item-menu"
-        title="Register options"
-        aria-label="Register options"
-        onClick={(e) => { e.stopPropagation(); setMenuId(menuId === reg.id ? null : reg.id); }}
-        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--muted)' }}
-      >
-        <span style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-1px', lineHeight: 1 }}>⋮</span>
-      </button>
+      {!isMultiSelectMode && (
+        <button
+          className="register-item-menu"
+          title="Register options"
+          aria-label="Register options"
+          onClick={(e) => { e.stopPropagation(); setMenuId(menuId === reg.id ? null : reg.id); }}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--muted)' }}
+        >
+          <span style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-1px', lineHeight: 1 }}>⋮</span>
+        </button>
+      )}
     </div>
   );
 
@@ -605,6 +669,41 @@ export const Sidebar = memo(function Sidebar({
             </>
           ) : (
             <>
+              {/* Multiselect controls */}
+              {!isCollapsed && (
+                <div style={{ padding: '4px 20px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: isMultiSelectMode ? '1px solid #f1f5f9' : 'none', marginBottom: isMultiSelectMode ? '8px' : '0' }}>
+                  <button
+                    onClick={() => {
+                      setIsMultiSelectMode(prev => !prev);
+                      setSelectedRegIds(new Set());
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: isMultiSelectMode ? 'var(--primary)' : 'var(--muted)',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      backgroundColor: isMultiSelectMode ? 'rgba(30,45,120,0.08)' : 'transparent',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <CheckCircle2 size={13} />
+                    {isMultiSelectMode ? 'Cancel Selection' : 'Select Multiple'}
+                  </button>
+                  {isMultiSelectMode && selectedRegIds.size > 0 && (
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--primary)' }}>
+                      {selectedRegIds.size} selected (Drag to move)
+                    </span>
+                  )}
+                </div>
+              )}
+
               {folders.filter(f => {
                 if (!user || (user as any).permissions?.isAdmin || (user as any).role === 'superadmin' || (user as any).role === 'admin' || (user as any).role === 'sheet_admin') return true;
                 const allowedFolders = (user as any).permissions?.allowedFolders;
@@ -627,9 +726,21 @@ export const Sidebar = memo(function Sidebar({
                       onDrop={(e) => {
                         e.preventDefault();
                         e.currentTarget.style.backgroundColor = 'transparent';
-                        const regIdStr = e.dataTransfer.getData('text/plain');
-                        if (regIdStr) {
-                          moveMutation.mutate({ regId: parseInt(regIdStr, 10), fId: folder.id });
+                        const dragData = e.dataTransfer.getData('text/plain');
+                        if (dragData) {
+                          try {
+                            const ids = JSON.parse(dragData);
+                            if (Array.isArray(ids)) {
+                              moveMultipleMutation.mutate({ regIds: ids, fId: folder.id });
+                            } else {
+                              moveMutation.mutate({ regId: Number(ids), fId: folder.id });
+                            }
+                          } catch (err) {
+                            const regId = parseInt(dragData, 10);
+                            if (!isNaN(regId)) {
+                              moveMutation.mutate({ regId, fId: folder.id });
+                            }
+                          }
                         }
                       }}
                       onClick={() => setExpandedFolders(prev => ({...prev, [folder.id]: !prev[folder.id] ? true : false}))}
@@ -687,9 +798,21 @@ export const Sidebar = memo(function Sidebar({
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
-                  const regIdStr = e.dataTransfer.getData('text/plain');
-                  if (regIdStr) {
-                    moveMutation.mutate({ regId: parseInt(regIdStr, 10), fId: null });
+                  const dragData = e.dataTransfer.getData('text/plain');
+                  if (dragData) {
+                    try {
+                      const ids = JSON.parse(dragData);
+                      if (Array.isArray(ids)) {
+                        moveMultipleMutation.mutate({ regIds: ids, fId: null });
+                      } else {
+                        moveMutation.mutate({ regId: Number(ids), fId: null });
+                      }
+                    } catch (err) {
+                      const regId = parseInt(dragData, 10);
+                      if (!isNaN(regId)) {
+                        moveMutation.mutate({ regId, fId: null });
+                      }
+                    }
                   }
                 }}
                 style={{ paddingBottom: '20px', minHeight: '100px' }}
@@ -726,7 +849,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.5.6');
+                  setVersionTab('1.6.0');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -735,9 +858,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.5.6"
+                title="View what's new in v1.6.0"
               >
-                v1.5.6
+                v1.6.0
               </span>
             </span>
           </div>
@@ -1619,7 +1742,26 @@ export const Sidebar = memo(function Sidebar({
             </div>
 
             {/* Version Tabs */}
-            <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', overflowX: 'auto' }}>
+              <button
+                onClick={() => setVersionTab('1.6.0')}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.6.0' ? 'white' : 'transparent',
+                  color: versionTab === '1.6.0' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.6.0' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                v1.6.0 (New)
+              </button>
               <button
                 onClick={() => setVersionTab('1.5.6')}
                 style={{
@@ -1633,10 +1775,11 @@ export const Sidebar = memo(function Sidebar({
                   transition: 'all 0.2s',
                   background: versionTab === '1.5.6' ? 'white' : 'transparent',
                   color: versionTab === '1.5.6' ? '#0f172a' : '#64748b',
-                  boxShadow: versionTab === '1.5.6' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                  boxShadow: versionTab === '1.5.6' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                v1.5.6 (New)
+                v1.5.6
               </button>
               <button
                 onClick={() => setVersionTab('1.5.5')}
@@ -1748,9 +1891,78 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.5.6' ? (
+            {versionTab === '1.6.0' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 26, 2026 (Latest)</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 27, 2026 (Latest)</span>
+                
+                {/* Feature 1: Batched Drag and Drop */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#dbeafe', color: '#2563eb', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>📁 Batched Registers Drag & Drop</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Organize multiple registers at once! Toggle "Select Multiple" in the sidebar, tick registers, and drag them as a single batch to any folder or unassigned zone.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: Auto Double Entry Warning */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>⚠️ Smart Double Entry Detection</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      No manual toggles needed! Important fields (IDs, Phone numbers, Roll numbers, Emails, etc.) automatically trigger double entry alerts when duplicates &gt;= 3 chars are entered.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 3: Manageable Admin Recycle Bin */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>🗑️ Recycle Bin Management & View-Only Mode</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Embedded Recycle Bin into the Admin panel with "Empty Recycle Bin" capabilities. Standard user recycle bin is restricted to a read-only list for security.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 4: Conditional Column Unlinking */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>🔗 Clear or Keep Unlinked Column Data</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Choose to preserve or wipe clean the cell values on both sides when unlinking connected columns.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 5: Sync User Profile Details */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>👤 Dynamic User Profile & Admin Edits</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Admin can set and update names and phone numbers in the User Settings card, which immediately updates the dynamic fields and role tags in the User Profile.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : versionTab === '1.5.6' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 26, 2026</span>
                 
                 {/* Feature 1: Cell Arrow Key Navigation */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>

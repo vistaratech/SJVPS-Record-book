@@ -47,6 +47,7 @@ export interface AppUser {
   role: 'superadmin' | 'admin' | 'sheet_admin' | 'user';
   status: 'active' | 'inactive';
   createdAt: string;
+  phone?: string;
   lastLogin?: string;
   permissions: {
     canView: boolean;
@@ -243,7 +244,7 @@ export async function firebaseGetUsers() {
 }
 
 export async function firebaseCreateUser(data: {
-  name: string; email: string; password: string; role?: string;
+  name: string; email: string; password: string; role?: string; phone?: string;
 }) {
   const email = data.email.toLowerCase().trim();
 
@@ -262,6 +263,7 @@ export async function firebaseCreateUser(data: {
     id,
     name: data.name.trim(),
     email,
+    phone: data.phone?.trim() || '',
     passwordHash: hash,
     role,
     status: 'active',
