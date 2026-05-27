@@ -237,6 +237,38 @@ export function useExport({
     try {
       const ws = XLSX.utils.aoa_to_sheet(dataAOA);
 
+      // Auto-fit column widths to prevent ### date display bugs in Excel
+      const colWidthsArray = visibleColumns.map((col) => {
+        let maxLength = col.name.length;
+        entriesToExport.forEach((entry) => {
+          let val = entry.cells?.[col.id.toString()] || '';
+          if (col.type === 'formula') {
+            val = evaluateFormula(col.formula || '', entry, columns);
+          } else if (col.type === 'currency') {
+            val = formatCurrency(val).replace('₹', '');
+          } else if (col.type === 'image' && val) {
+            const urls = (val.includes('|||') ? val.split('|||') : [val]) as string[];
+            const cleanUrls = urls.filter(url => !url.startsWith('data:image/'));
+            if (cleanUrls.length === 0) {
+              val = '[Local Photo (Base64)]';
+            } else if (cleanUrls.length === 1) {
+              val = 'View Photo';
+            } else {
+              val = `View Photo 1 (+${cleanUrls.length - 1} more)`;
+            }
+          }
+          if (val) {
+            const length = val.toString().length;
+            if (length > maxLength) maxLength = length;
+          }
+        });
+        return { wch: Math.max(maxLength + 3, 12) }; // Min width 12 characters
+      });
+      ws['!cols'] = [
+        { wch: 8 }, // S.No. column width
+        ...colWidthsArray
+      ];
+
       const getColLetter = (n: number) => {
         let s = '';
         while (n >= 0) {
@@ -602,6 +634,26 @@ export function useExport({
       })];
 
       const ws = XLSX.utils.aoa_to_sheet([headerRow, dataRow]);
+
+      // Auto-fit column widths for single row download
+      const colWidthsArray = visibleCols.map((col, colIdx) => {
+        const headerLen = col.name.length;
+        const val = dataRow[colIdx + 1];
+        let valLen = 0;
+        if (val) {
+          if (typeof val === 'object' && val !== null && 'v' in val) {
+            valLen = val.v ? val.v.toString().length : 0;
+          } else {
+            valLen = val.toString().length;
+          }
+        }
+        return { wch: Math.max(headerLen + 3, valLen + 3, 12) }; // Min width 12 characters
+      });
+      ws['!cols'] = [
+        { wch: 8 }, // S.No.
+        ...colWidthsArray
+      ];
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Row Data');
       XLSX.writeFile(wb, `${register.name || 'Record'}_Row${rowIdx}.xlsx`);
