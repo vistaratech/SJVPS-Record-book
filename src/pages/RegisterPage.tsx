@@ -900,6 +900,38 @@ export default function RegisterPage() {
     return () => document.removeEventListener('keydown', handler);
   }, [registerId, queryClient]);
 
+  // Periodic auto-flush: save pending debounced edits every 5 seconds to prevent
+  // data loss if the user closes the tab before debounce timers fire.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const timers = debounceTimers.current;
+      const pendingKeys = Object.keys(timers);
+      if (pendingKeys.length > 0) {
+        pendingKeys.forEach(key => {
+          clearTimeout(timers[key]);
+          delete timers[key];
+        });
+        setPendingDebounceCount(0);
+        const currentRegData = queryClient.getQueryData(['register', registerId]) as any;
+        if (currentRegData) {
+          const localMap = new Map(localEntriesRef.current.map(e => [e.id, e]));
+          for (const entry of currentRegData.entries || []) {
+            const local = localMap.get(entry.id);
+            if (!local) continue;
+            const diff: Record<string, string> = {};
+            for (const [colId, val] of Object.entries(local.cells || {})) {
+              if ((entry.cells?.[colId] || '') !== (val || '')) diff[colId] = val as string;
+            }
+            if (Object.keys(diff).length > 0) {
+              updateEntryDirect(registerId, entry.id, diff);
+            }
+          }
+        }
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [registerId, queryClient]);
+
   // Apply row-level view restrictions before any search/filter/sort
   const rowFilteredEntries = useMemo(() => {
     if (!rowViewRange) return localEntries;
@@ -1734,8 +1766,10 @@ export default function RegisterPage() {
       // We now receive the full register from the backend to ensure entries are synced (e.g. for auto_increment)
       queryClient.setQueryData(['register', registerId], updatedReg);
       setLocalEntries(updatedReg.entries || []);
-      // Invalidate to ensure any formula or sequential changes are fully propagated
-      queryClient.invalidateQueries({ queryKey: ['register', registerId] });
+      // NOTE: Do NOT call invalidateQueries here — it clears the in-memory
+      // cache (firestoreRegisterCache) and triggers a fresh Firestore read
+      // that can overwrite recent cell edits with stale chunk data.
+      // setQueryData above already sets the authoritative state.
 
       const col = columnsRef.current.find(c => c.id === activeModalColId);
       if (col?.linkedTo) {
@@ -2620,6 +2654,8 @@ export default function RegisterPage() {
       if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
       else setPendingDebounceCount(prev => prev + 1);
 
+
+
       debounceTimers.current[key] = setTimeout(() => {
         delete debounceTimers.current[key];
         setPendingDebounceCount(prev => Math.max(0, prev - 1));
@@ -2628,18 +2664,31 @@ export default function RegisterPage() {
         const targetChunkIndex = Math.floor(localEntriesRef.current.findIndex(e => e.id === entryId) / 50);
         const ledgerId = DataPersistenceModule.addLedgerItem(`Update Cell (Row #${localEntriesRef.current.findIndex(e => e.id === entryId) + 1})`, targetChunkIndex, payloadSize, 'persisting');
 
-        updateEntryDirect(registerId, entryId, { [columnId]: value }).then(() => {
-          DataPersistenceModule.updateLedgerStatus(ledgerId, 'success');
-          const col = columnsRef.current.find(c => c.id.toString() === columnId);
-          if (col?.linkedTo) {
-            queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
+        // Save with auto-retry (3 attempts) to handle transient network failures
+        const saveWithRetry = async (attempt = 1): Promise<void> => {
+          try {
+            await updateEntryDirect(registerId, entryId, { [columnId]: value });
+            DataPersistenceModule.updateLedgerStatus(ledgerId, 'success');
+
+            const col = columnsRef.current.find(c => c.id.toString() === columnId);
+            if (col?.linkedTo) {
+              queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
+            }
+            const rowIdx = localEntriesRef.current.findIndex(e => e.id === entryId);
+            const displayVal = value.length > 50 ? value.substring(0, 50) + '...' : value;
+            _logWork('edit_cells', `Updated value to "${displayVal}" in cell [Row #${rowIdx + 1}, Column: ${col?.name || columnId}]`);
+          } catch (err: any) {
+            if (attempt < 3) {
+              console.warn(`[CellSave] Attempt ${attempt}/3 failed, retrying in ${attempt}s...`);
+              await new Promise(r => setTimeout(r, attempt * 1000));
+              return saveWithRetry(attempt + 1);
+            }
+            DataPersistenceModule.updateLedgerStatus(ledgerId, 'failed', err?.message || err?.toString());
+
+            toast.error('Failed to save edit. Please check your connection and try again.', { duration: 4000 });
           }
-          const rowIdx = localEntriesRef.current.findIndex(e => e.id === entryId);
-          const displayVal = value.length > 50 ? value.substring(0, 50) + '...' : value;
-          _logWork('edit_cells', `Updated value to "${displayVal}" in cell [Row #${rowIdx + 1}, Column: ${col?.name || columnId}]`);
-        }).catch((err) => {
-          DataPersistenceModule.updateLedgerStatus(ledgerId, 'failed', err?.message || err?.toString());
-        });
+        };
+        saveWithRetry();
       }, 300);
     }
     return true;

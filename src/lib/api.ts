@@ -491,6 +491,21 @@ async function saveRegDocImmediate(reg: RegisterDetail): Promise<void> {
 }
 
 /**
+ * Lightweight save: writes ONLY the main register document (metadata, columns,
+ * pages, settings) without touching any entry chunks. Use this when only column
+ * metadata changed (e.g. type, name, options) and entry data is unmodified.
+ * This avoids the race condition where a full saveRegDocImmediate could
+ * overwrite chunks that were recently written by updateEntryDirect.
+ */
+async function saveMainDocOnly(reg: RegisterDetail): Promise<void> {
+  firestoreRegisterCache.set(reg.id, reg);
+  const mainDoc: any = JSON.parse(JSON.stringify(reg));
+  mainDoc.entries = [];
+  mainDoc.entryCount = (reg.entries || []).length;
+  await setDoc(regDoc(reg.id), mainDoc);
+}
+
+/**
  * Lightweight save for appending: updates ONLY the main doc's entryCount
  * and writes the affected chunk. Skips rewriting columns/pages/metadata
  * since only entries changed.
@@ -1107,10 +1122,10 @@ export function formatDateToDDMMYYYY(val: any): string {
 }
 
 
-/** Check if a value looks like an Excel serial date (number between ~1 and ~60000). */
+/** Check if a value looks like a plausible Excel serial date (roughly 1968 to 2077). */
 function looksLikeExcelSerial(val: unknown): boolean {
   if (typeof val !== 'number') return false;
-  return val > 1 && val < 200000 && Number.isInteger(val);
+  return val >= 25000 && val <= 65000 && Number.isInteger(val);
 }
 
 /**
@@ -1170,9 +1185,13 @@ function resolveColumnType(
     }
 
     // Check if values are Excel serial dates (all numbers in a plausible date range)
-    const serialDateCount = nonEmpty.filter((v) => looksLikeExcelSerial(v)).length;
-    if (serialDateCount >= nonEmpty.length * 0.6) {
-      return { type: 'date' };
+    // ONLY do this if the header suggests a date, to avoid converting IDs, roll numbers, or amounts.
+    const hasDateKeyword = lowerH.includes('date') || lowerH.includes('dob') || lowerH.includes('birth') || lowerH.includes('joining') || lowerH.includes('day') || lowerH.includes('due') || lowerH.includes('expiry');
+    if (hasDateKeyword) {
+      const serialDateCount = nonEmpty.filter((v) => looksLikeExcelSerial(v)).length;
+      if (serialDateCount >= nonEmpty.length * 0.6) {
+        return { type: 'date' };
+      }
     }
 
     // Check if all values are numbers
@@ -1780,7 +1799,19 @@ export async function changeColumnType(
       populateAutoIncrement(reg, columnId);
     }
 
-    await saveRegDocImmediate(reg);
+    // Only rewrite ALL chunks when entry data is actually modified (currency
+    // cleaning or auto_increment population). For simple type changes
+    // (text→dropdown, etc.) only update the main document metadata — this
+    // prevents overwriting chunks that may have been recently written by
+    // updateEntryDirect, fixing the race condition that causes cell edits to
+    // be lost.
+    const entryDataModified = (newType === 'currency') ||
+                               (newType === 'auto_increment' && oldType !== 'auto_increment');
+    if (entryDataModified) {
+      await saveRegDocImmediate(reg);
+    } else {
+      await saveMainDocOnly(reg);
+    }
     await logAction(reg.businessId, 'Change Column Type', `Changed column "${col.name}" type from "${oldType}" to "${newType}" in "${reg.name}"`, { registerId, registerName: reg.name });
     return { reg, col };
   });
@@ -2097,12 +2128,23 @@ export async function updateEntryDirect(
     const chunkStart = chunkIndex * ENTRIES_PER_CHUNK;
     const chunkEntries = reg.entries.slice(chunkStart, chunkStart + ENTRIES_PER_CHUNK);
     const cleaned = JSON.parse(JSON.stringify({ entries: chunkEntries }));
-    try {
-      await setDoc(chunkDoc(reg.id, chunkIndex), cleaned);
-    } catch (err) {
-      entry.cells = oldCells;
-      firestoreRegisterCache.set(reg.id, reg);
-      throw err;
+    // Retry chunk write up to 3 times with exponential backoff to handle
+    // transient network failures that would otherwise silently lose cell edits.
+    const MAX_CHUNK_RETRIES = 3;
+    for (let attempt = 1; attempt <= MAX_CHUNK_RETRIES; attempt++) {
+      try {
+        await setDoc(chunkDoc(reg.id, chunkIndex), cleaned);
+        break; // Success — exit retry loop
+      } catch (err) {
+        if (attempt === MAX_CHUNK_RETRIES) {
+          // All retries exhausted — rollback cache and throw
+          entry.cells = oldCells;
+          firestoreRegisterCache.set(reg.id, reg);
+          throw err;
+        }
+        console.warn(`[updateEntryDirect] Chunk write attempt ${attempt}/${MAX_CHUNK_RETRIES} failed, retrying in ${attempt * 1000}ms...`);
+        await new Promise(r => setTimeout(r, attempt * 1000));
+      }
     }
 
     return { entry, reg, oldCells, safeCells };
