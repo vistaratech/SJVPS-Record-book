@@ -124,6 +124,9 @@ export interface RegisterSummary {
   id: number; businessId: number; folderId?: number; name: string; icon: string; iconColor?: string;
   category: string; template: string; createdAt: string; updatedAt: string; entryCount: number;
   lastActivity?: string; deletedAt?: string;
+  deletedBy?: string;
+  deletedByEmail?: string;
+  deletedById?: string | number;
 }
 
 export interface Column {
@@ -172,6 +175,10 @@ export interface DeletedItem {
   // For columns
   column?: Column;
   columnCellData?: Record<string, string>; // entryId -> cellValue
+  // User metadata who deleted this
+  deletedBy?: string;
+  deletedByEmail?: string;
+  deletedById?: string | number;
 }
 
 export interface HistoryEntry {
@@ -612,6 +619,9 @@ export async function listDeletedRegisters(businessId: number): Promise<Register
         entryCount: r.entryCount ?? (r.entries?.length ?? 0),
         lastActivity: r.lastActivity ?? '',
         deletedAt: r.deletedAt,
+        deletedBy: r.deletedBy,
+        deletedByEmail: r.deletedByEmail,
+        deletedById: r.deletedById,
       };
     });
 
@@ -623,6 +633,9 @@ export async function listDeletedRegisters(businessId: number): Promise<Register
         entryCount: r.entryCount ?? (r.entries?.length ?? 0),
         lastActivity: r.lastActivity ?? '',
         deletedAt: r.deletedAt,
+        deletedBy: r.deletedBy,
+        deletedByEmail: r.deletedByEmail,
+        deletedById: r.deletedById,
       });
     }
   }
@@ -820,7 +833,15 @@ export async function createRegister(data: {
 
 export async function deleteRegister(registerId: number): Promise<void> {
   const reg = await getRegDoc(registerId);
+  const savedUser = JSON.parse(
+    sessionStorage.getItem('recordbook_user') ||
+    localStorage.getItem('recordbook_user') ||
+    'null'
+  );
   reg.deletedAt = new Date().toISOString();
+  reg.deletedBy = savedUser?.name || 'User';
+  reg.deletedByEmail = savedUser?.email || '';
+  reg.deletedById = savedUser?.id || '';
   await saveRegDocImmediate(reg);
   await logAction(reg.businessId, 'Trash Register', `Moved register to recycle bin: ${reg.name}`, { registerId, registerName: reg.name });
 }
@@ -1515,6 +1536,11 @@ export async function deleteColumn(registerId: number, columnId: number): Promis
     });
 
     // Move to bin
+    const savedUser = JSON.parse(
+      sessionStorage.getItem('recordbook_user') ||
+      localStorage.getItem('recordbook_user') ||
+      'null'
+    );
     if (!reg.deletedItems) reg.deletedItems = [];
     reg.deletedItems.push({
       id: generateId(),
@@ -1524,6 +1550,9 @@ export async function deleteColumn(registerId: number, columnId: number): Promis
       registerId: reg.id,
       column: { ...col },
       columnCellData,
+      deletedBy: savedUser?.name || 'User',
+      deletedByEmail: savedUser?.email || '',
+      deletedById: savedUser?.id || '',
     });
 
     reg.columns = reg.columns.filter((c) => c.id.toString() !== columnId.toString());
@@ -2294,6 +2323,11 @@ export async function deleteEntry(registerId: number, entryId: number): Promise<
     const entry = reg.entries[entryIndex];
 
     // Move to bin instead of permanent delete
+    const savedUser = JSON.parse(
+      sessionStorage.getItem('recordbook_user') ||
+      localStorage.getItem('recordbook_user') ||
+      'null'
+    );
     if (!reg.deletedItems) reg.deletedItems = [];
     reg.deletedItems.push({
       id: generateId(),
@@ -2303,6 +2337,9 @@ export async function deleteEntry(registerId: number, entryId: number): Promise<
       registerId: reg.id,
       entry: { ...entry },
       originalIndex: entryIndex,
+      deletedBy: savedUser?.name || 'User',
+      deletedByEmail: savedUser?.email || '',
+      deletedById: savedUser?.id || '',
     });
 
     reg.entries = reg.entries.filter((e) => e.id !== entryId);
@@ -2593,16 +2630,28 @@ export async function getAllDeletedItems(businessId: number): Promise<DeletedIte
 
   for (const regId of allRegIds) {
     try {
-      const reg = await getRegDoc(regId);
-      if (reg.deletedItems && reg.deletedItems.length > 0) {
-        allItems.push(...reg.deletedItems);
+      // Check cache first to avoid Firestore reads if cached
+      const cached = firestoreRegisterCache.get(regId);
+      if (cached) {
+        if (cached.deletedItems && cached.deletedItems.length > 0) {
+          allItems.push(...cached.deletedItems);
+        }
+        continue;
+      }
+      
+      const snap = await getDoc(regDoc(regId));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data && data.deletedItems && data.deletedItems.length > 0) {
+          allItems.push(...data.deletedItems);
+        }
       }
     } catch {
       // Skip registers that can't be loaded
     }
   }
 
-  return allItems.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+  return allItems.sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
 }
 
 /**

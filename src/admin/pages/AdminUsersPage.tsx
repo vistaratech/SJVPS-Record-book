@@ -89,7 +89,7 @@ export default function AdminUsersPage() {
       {showCreate && (
         <div style={{background:'var(--surface)',borderRadius:'12px',padding:'24px',marginBottom:'20px',border:'1px solid var(--border)',boxShadow:'var(--shadow-md)'}}>
           <h3 style={{margin:'0 0 16px',fontSize:'16px',fontWeight:800,color:'var(--foreground)'}}>Create New User</h3>
-          <form onSubmit={handleCreate} style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px'}}>
+          <form onSubmit={handleCreate} className="admin-create-form" style={{display:'grid',gap:'16px'}}>
             <div><label style={s.label}>Name</label><input style={s.input} value={newName} onChange={e=>setNewName(e.target.value)} required placeholder="Full name"/></div>
             <div><label style={s.label}>Email</label><input type="email" style={s.input} value={newEmail} onChange={e=>setNewEmail(e.target.value)} required placeholder="user@example.com"/></div>
             <div><label style={s.label}>Phone Number</label><input style={s.input} value={newPhone} onChange={e=>setNewPhone(e.target.value)} placeholder="e.g. +91 XXXXX XXXXX"/></div>
@@ -119,67 +119,69 @@ export default function AdminUsersPage() {
       {/* Users Table */}
       <div style={{background:'var(--surface)',borderRadius:'12px',overflow:'hidden',border:'1px solid var(--border)',boxShadow:'var(--shadow-md)'}}>
         {loading ? <div style={{padding:'50px',textAlign:'center',color:'var(--muted)'}}>Loading...</div> : (
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead><tr style={{borderBottom:'1.5px solid var(--border)',background:'var(--background)'}}>
-              {['Name','Email','Role','Permissions','Status','Actions'].map(h=>(
-                <th key={h} style={{padding:'14px 16px',textAlign:'left',fontSize:'12px',fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.05em'}}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {filtered.map(u => {
-                const p = u.permissions || { canView:true, canEdit:false, canDownload:false, isAdmin:false };
-                const isSuperAdmin = u.role === 'superadmin';
-                return (
-                  <tr key={u.id} style={{borderBottom:'1px solid var(--border-light)',background:isSuperAdmin?'rgba(30,45,120,0.02)':'transparent',cursor:isSuperAdmin?'default':'pointer'}} onClick={() => !isSuperAdmin && navigate(`/admin/users/${u.id}`)}>
-                    <td style={{padding:'14px 16px',color:'var(--foreground)',fontWeight:600,fontSize:'14px'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                        {u.name}
-                        {isSuperAdmin && <span style={{fontSize:'10px',fontWeight:700,color:'#6366f1',background:'rgba(99,102,241,0.1)',padding:'2px 8px',borderRadius:'4px',border:'1px solid rgba(99,102,241,0.2)'}}>🔒 Protected</span>}
-                      </div>
-                    </td>
-                    <td style={{padding:'14px 16px',color:'var(--muted)',fontSize:'14px'}}>{u.email}</td>
-                    <td style={{padding:'14px 16px'}}>
-                      <span style={s.badge(
-                        u.role==='superadmin'?'rgba(30,45,120,0.1)':u.role==='admin'?'rgba(230,48,18,0.1)':u.role==='sheet_admin'?'rgba(99,102,241,0.1)':'var(--border-light)',
-                        u.role==='superadmin'?'var(--navy)':u.role==='admin'?'var(--accent)':u.role==='sheet_admin'?'#6366f1':'var(--muted)',
-                        u.role==='superadmin'?'rgba(30,45,120,0.2)':u.role==='admin'?'rgba(230,48,18,0.2)':u.role==='sheet_admin'?'rgba(99,102,241,0.2)':'var(--border)'
-                      )}>{u.role === 'sheet_admin' ? 'Sheet Admin' : u.role}</span>
-                    </td>
-                    <td style={{padding:'14px 16px'}}>
-                      <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
-                        {(isSuperAdmin || p.canView) && <span style={s.badge('var(--border-light)','var(--navy)')}>👁 View</span>}
-                        {(isSuperAdmin || p.canEdit) && <span style={s.badge('rgba(76,175,26,0.1)','var(--brand-green)')}>✏ Edit</span>}
-                        {(isSuperAdmin || p.canDownload) && <span style={s.badge('rgba(245,158,11,0.1)','#F59E0B')}>⬇ Download</span>}
-                        {(isSuperAdmin || p.isAdmin) && <span style={s.badge('var(--destructive-bg)','var(--destructive)')}>🛡 Admin</span>}
-                        {isSuperAdmin && <span style={s.badge('rgba(99,102,241,0.1)','#6366f1')}>⚡ Full Access</span>}
-                      </div>
-                    </td>
-                    <td style={{padding:'14px 16px'}}>
-                      <span style={s.badge(u.status==='active'?'rgba(76,175,26,0.1)':'var(--destructive-bg)',u.status==='active'?'var(--brand-green)':'var(--destructive)')}>{u.status||'active'}</span>
-                    </td>
-                    <td style={{padding:'14px 16px'}}>
-                      {isSuperAdmin ? (
-                        <div style={{fontSize:'12px',color:'var(--muted)',fontWeight:600,fontStyle:'italic',display:'flex',alignItems:'center',gap:'4px'}}>
-                          <Shield size={14} color="#6366f1"/> Cannot modify
+          <div className="admin-table-responsive">
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr style={{borderBottom:'1.5px solid var(--border)',background:'var(--background)'}}>
+                {['Name','Email','Role','Permissions','Status','Actions'].map(h=>(
+                  <th key={h} style={{padding:'14px 16px',textAlign:'left',fontSize:'12px',fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'0.05em'}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {filtered.map(u => {
+                  const p = u.permissions || { canView:true, canEdit:false, canDownload:false, isAdmin:false };
+                  const isSuperAdmin = u.role === 'superadmin';
+                  return (
+                    <tr key={u.id} style={{borderBottom:'1px solid var(--border-light)',background:isSuperAdmin?'rgba(30,45,120,0.02)':'transparent',cursor:isSuperAdmin?'default':'pointer'}} onClick={() => !isSuperAdmin && navigate(`/admin/users/${u.id}`)}>
+                      <td style={{padding:'14px 16px',color:'var(--foreground)',fontWeight:600,fontSize:'14px'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                          {u.name}
+                          {isSuperAdmin && <span style={{fontSize:'10px',fontWeight:700,color:'#6366f1',background:'rgba(99,102,241,0.1)',padding:'2px 8px',borderRadius:'4px',border:'1px solid rgba(99,102,241,0.2)'}}>🔒 Protected</span>}
                         </div>
-                      ) : (
-                        <div style={{display:'flex',gap:'6px'}}>
-                          <button onClick={(e)=>{e.stopPropagation(); navigate(`/admin/users/${u.id}`);}} title="Settings & Permissions" style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'6px',cursor:'pointer',color:'var(--navy)',display:'flex',boxShadow:'var(--shadow-sm)'}}>
-                            <Shield size={14}/>
-                          </button>
-                          <button onClick={(e)=>{e.stopPropagation(); handleToggleStatus(u.id,u.status||'active');}} title={u.status==='active'?'Deactivate':'Activate'} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'6px',cursor:'pointer',color:u.status==='active'?'#F59E0B':'var(--brand-green)',display:'flex',boxShadow:'var(--shadow-sm)'}}>
-                            {u.status==='active'?<UserX size={14}/>:<UserCheck size={14}/>}
-                          </button>
-                          <button onClick={(e)=>{e.stopPropagation(); handleDelete(u.id);}} disabled={u.email===user?.email} title="Delete" style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'6px',cursor:'pointer',color:u.email===user?.email?'var(--border)':'var(--destructive)',display:'flex',boxShadow:'var(--shadow-sm)'}}><Trash2 size={14}/></button>
+                      </td>
+                      <td style={{padding:'14px 16px',color:'var(--muted)',fontSize:'14px'}}>{u.email}</td>
+                      <td style={{padding:'14px 16px'}}>
+                        <span style={s.badge(
+                          u.role==='superadmin'?'rgba(30,45,120,0.1)':u.role==='admin'?'rgba(230,48,18,0.1)':u.role==='sheet_admin'?'rgba(99,102,241,0.1)':'var(--border-light)',
+                          u.role==='superadmin'?'var(--navy)':u.role==='admin'?'var(--accent)':u.role==='sheet_admin'?'#6366f1':'var(--muted)',
+                          u.role==='superadmin'?'rgba(30,45,120,0.2)':u.role==='admin'?'rgba(230,48,18,0.2)':u.role==='sheet_admin'?'rgba(99,102,241,0.2)':'var(--border)'
+                        )}>{u.role === 'sheet_admin' ? 'Sheet Admin' : u.role}</span>
+                      </td>
+                      <td style={{padding:'14px 16px'}}>
+                        <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                          {(isSuperAdmin || p.canView) && <span style={s.badge('var(--border-light)','var(--navy)')}>👁 View</span>}
+                          {(isSuperAdmin || p.canEdit) && <span style={s.badge('rgba(76,175,26,0.1)','var(--brand-green)')}>✏ Edit</span>}
+                          {(isSuperAdmin || p.canDownload) && <span style={s.badge('rgba(245,158,11,0.1)','#F59E0B')}>⬇ Download</span>}
+                          {(isSuperAdmin || p.isAdmin) && <span style={s.badge('var(--destructive-bg)','var(--destructive)')}>🛡 Admin</span>}
+                          {isSuperAdmin && <span style={s.badge('rgba(99,102,241,0.1)','#6366f1')}>⚡ Full Access</span>}
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length===0 && <tr><td colSpan={6} style={{padding:'40px',textAlign:'center',color:'var(--muted)'}}>{search?'No matches':'No users'}</td></tr>}
-            </tbody>
-          </table>
+                      </td>
+                      <td style={{padding:'14px 16px'}}>
+                        <span style={s.badge(u.status==='active'?'rgba(76,175,26,0.1)':'var(--destructive-bg)',u.status==='active'?'var(--brand-green)':'var(--destructive)')}>{u.status||'active'}</span>
+                      </td>
+                      <td style={{padding:'14px 16px'}}>
+                        {isSuperAdmin ? (
+                          <div style={{fontSize:'12px',color:'var(--muted)',fontWeight:600,fontStyle:'italic',display:'flex',alignItems:'center',gap:'4px'}}>
+                            <Shield size={14} color="#6366f1"/> Cannot modify
+                          </div>
+                        ) : (
+                          <div style={{display:'flex',gap:'6px'}}>
+                            <button onClick={(e)=>{e.stopPropagation(); navigate(`/admin/users/${u.id}`);}} title="Settings & Permissions" style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'6px',cursor:'pointer',color:'var(--navy)',display:'flex',boxShadow:'var(--shadow-sm)'}}>
+                              <Shield size={14}/>
+                            </button>
+                            <button onClick={(e)=>{e.stopPropagation(); handleToggleStatus(u.id,u.status||'active');}} title={u.status==='active'?'Deactivate':'Activate'} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'6px',cursor:'pointer',color:u.status==='active'?'#F59E0B':'var(--brand-green)',display:'flex',boxShadow:'var(--shadow-sm)'}}>
+                              {u.status==='active'?<UserX size={14}/>:<UserCheck size={14}/>}
+                            </button>
+                            <button onClick={(e)=>{e.stopPropagation(); handleDelete(u.id);}} disabled={u.email===user?.email} title="Delete" style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'6px',padding:'6px',cursor:'pointer',color:u.email===user?.email?'var(--border)':'var(--destructive)',display:'flex',boxShadow:'var(--shadow-sm)'}}><Trash2 size={14}/></button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtered.length===0 && <tr><td colSpan={6} style={{padding:'40px',textAlign:'center',color:'var(--muted)'}}>{search?'No matches':'No users'}</td></tr>}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

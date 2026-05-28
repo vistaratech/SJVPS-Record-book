@@ -213,8 +213,8 @@ export default function AdminUserSettingsPage() {
   if (!user) return null;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--background)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'sticky', top: 0, zIndex: 100, padding: '20px 40px', background: 'white', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div style={{ height: '100vh', maxHeight: '100vh', background: 'var(--background)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="admin-topbar" style={{ position: 'sticky', top: 0, zIndex: 100, background: 'white', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button onClick={() => navigate('/admin/dashboard')} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'transparent', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>
             <ArrowLeft size={16} /> Back
@@ -229,10 +229,10 @@ export default function AdminUserSettingsPage() {
         </div>
       </div>
 
-      <div style={{ padding: '40px', flex: 1, overflowY: 'auto' }}>
+      <div className="admin-content-wrap" style={{ flex: 1, overflowY: 'auto' }}>
         <div style={{ maxWidth: '1000px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '30px' }}>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          <div className="admin-grid-two-col" style={{ display: 'grid', gap: '20px' }}>
             {/* Profile Details */}
             <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -269,7 +269,7 @@ export default function AdminUserSettingsPage() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          <div className="admin-grid-two-col" style={{ display: 'grid', gap: '20px' }}>
             {/* Global Permissions */}
             <div style={{ background: 'white', borderRadius: '12px', padding: '20px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: '16px', color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -280,7 +280,7 @@ export default function AdminUserSettingsPage() {
                   { k: 'canCreateSheets', l: 'Can Create Folders & Sheets', icon: <FileText size={16}/>, desc: 'Can add new folders and sheets' },
                   { k: 'isAdmin', l: 'Admin Access', icon: <Shield size={16}/>, desc: 'Full admin access' }
                 ].map(({ k, l, icon, desc }) => (
-                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
+                  <label key={k} className="admin-global-permission-label" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={(globalPerms as any)[k]} onChange={() => setGlobalPerms(p => ({ ...p, [k]: !(p as any)[k] }))} style={{ width: '18px', height: '18px', accentColor: 'var(--brand-green)' }} />
                     <span style={{ color: 'var(--foreground)', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500 }}>{icon} {l}</span>
                     <span style={{ fontSize: '12px', color: 'var(--muted)', marginLeft: 'auto' }}>{desc}</span>
@@ -380,9 +380,9 @@ export default function AdminUserSettingsPage() {
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
+          <div className="admin-sheet-search-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
             <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--navy)' }}>Granular Sheet Permissions</h3>
-            <div style={{ position: 'relative', width: '300px' }}>
+            <div className="admin-sheet-search-box-wrapper" style={{ position: 'relative', width: '300px' }}>
               <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
               <input
                 type="text"
@@ -415,12 +415,12 @@ export default function AdminUserSettingsPage() {
               const hasAccess = globalPerms.isAdmin || sheetAccessGranted[reg.id] === true;
 
               return (
-                <div key={reg.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden', opacity: hasAccess ? 1 : 0.6 }}>
-                  <div onClick={() => setExpandedRegId(isExpanded ? null : reg.id)} style={{ padding: '16px 20px', borderBottom: isExpanded ? '1px solid var(--border)' : 'none', cursor: 'pointer', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div key={reg.id} className="admin-sheet-card" style={{ background: 'white', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden', opacity: hasAccess ? 1 : 0.6 }}>
+                  <div className="admin-sheet-card-header" onClick={() => setExpandedRegId(isExpanded ? null : reg.id)} style={{ padding: '16px 20px', borderBottom: isExpanded ? '1px solid var(--border)' : 'none', cursor: 'pointer', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                     {isExpanded ? <ChevronDown size={20} color="var(--muted)" /> : <ChevronRight size={20} color="var(--muted)" />}
-                    <FileText size={20} color="var(--accent)" />
-                    <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--navy)', flex: 1 }}>{reg.name} {!hasAccess && <span style={{fontSize: '12px', color: 'var(--destructive)', marginLeft: '8px'}}>(No Access)</span>}</h3>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <FileText size={20} color="var(--accent)" style={{ flexShrink: 0 }} />
+                    <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--navy)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{reg.name} {!hasAccess && <span style={{fontSize: '12px', color: 'var(--destructive)', marginLeft: '8px'}}>(No Access)</span>}</h3>
+                    <div className="admin-sheet-card-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                       {hasAccess && (
                         <>
                           <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#8B5CF6', cursor: 'pointer', padding: '4px 8px', background: 'rgba(139, 92, 246, 0.05)', borderRadius: '6px', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
@@ -454,20 +454,20 @@ export default function AdminUserSettingsPage() {
                           </label>
                         </>
                       )}
-                      <button disabled={globalPerms.isAdmin} onClick={(e) => { e.stopPropagation(); if (globalPerms.isAdmin) return; if (hasAccess) { setSheetAccessGranted(prev => ({ ...prev, [reg.id]: false })); } else { setSheetAccessGranted(prev => ({ ...prev, [reg.id]: true })); } }} style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid', fontSize: '12px', fontWeight: 600, cursor: globalPerms.isAdmin ? 'not-allowed' : 'pointer', background: hasAccess ? '#dcfce7' : 'var(--surface)', color: hasAccess ? '#16a34a' : 'var(--muted)', borderColor: hasAccess ? '#86efac' : 'var(--border)' }}>
+                      <button disabled={globalPerms.isAdmin} onClick={(e) => { e.stopPropagation(); if (globalPerms.isAdmin) return; if (hasAccess) { setSheetAccessGranted(prev => ({ ...prev, [reg.id]: false })); } else { setSheetAccessGranted(prev => ({ ...prev, [reg.id]: true })); } }} style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid', fontSize: '12px', fontWeight: 600, cursor: globalPerms.isAdmin ? 'not-allowed' : 'pointer', background: hasAccess ? '#dcfce7' : 'var(--surface)', color: hasAccess ? '#16a34a' : 'var(--muted)', borderColor: hasAccess ? '#86efac' : 'var(--border)', flexShrink: 0 }}>
                         {hasAccess ? <><Check size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Access Granted</> : 'Grant Access'}
                       </button>
-                      <span style={{ fontSize: '12px', color: 'var(--muted)', background: 'var(--surface)', padding: '4px 10px', borderRadius: '20px', border: '1px solid var(--border)' }}>{cols.length} Columns</span>
+                      <span className="admin-sheet-cols-badge" style={{ fontSize: '12px', color: 'var(--muted)', background: 'var(--surface)', padding: '4px 10px', borderRadius: '20px', border: '1px solid var(--border)', flexShrink: 0 }}>{cols.length} Columns</span>
                     </div>
                   </div>
                   {isExpanded && (
                     <div style={{ padding: '20px' }}>
                       <div style={{ padding: '12px', background: 'rgba(0,45,93,0.02)', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div className="admin-sheet-cols-header-title" style={{ fontSize: '12px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <FileText size={14} /> Sheet Columns ({cols.length})
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <div className="admin-sheet-cols-select-all-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--navy)', cursor: 'pointer', textTransform: 'none', letterSpacing: 'normal' }}>
                               <input 
                                 type="checkbox" 
@@ -510,11 +510,14 @@ export default function AdminUserSettingsPage() {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {cols.map((col, idx) => (
-                            <div key={col.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', background: 'white', padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--border)', color: 'var(--navy)', fontWeight: 500 }}>
-                              <span style={{ color: 'var(--muted)', fontWeight: 600, width: '24px', flexShrink: 0 }}>{idx + 1}.</span> 
-                              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '20px' }}>{col.name}</span>
+                            <div key={col.id} className="admin-column-item-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', background: 'white', padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--border)', color: 'var(--navy)', fontWeight: 500 }}>
+                              <div className="admin-column-item-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                <span style={{ color: 'var(--muted)', fontWeight: 600, width: '24px', flexShrink: 0 }}>{idx + 1}.</span> 
+                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '20px' }}>{col.name}</span>
+                                <span className="admin-column-item-type" style={{ fontSize: '10px', color: 'var(--muted)', background: 'var(--surface)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-light)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.02em', flexShrink: 0 }}>{col.type}</span>
+                              </div>
                               
-                              <div style={{ display: 'flex', gap: '0px', alignItems: 'center', flexShrink: 0 }}>
+                              <div className="admin-column-item-actions" style={{ display: 'flex', gap: '16px', alignItems: 'center', flexShrink: 0 }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: (columnViewRestrictions[reg.id] === undefined || (Array.isArray(columnViewRestrictions[reg.id]) && columnViewRestrictions[reg.id].includes(col.id))) ? '#3B82F6' : 'var(--muted)', cursor: 'pointer', userSelect: 'none', width: '80px', transition: 'color 0.2s' }}>
                                   <input 
                                     type="checkbox" 
@@ -612,10 +615,6 @@ export default function AdminUserSettingsPage() {
                                   />
                                   Unique
                                 </label>
-
-                                <div style={{ width: '80px', textAlign: 'right' }}>
-                                  <span style={{ fontSize: '10px', color: 'var(--muted)', background: 'var(--surface)', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-light)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.02em' }}>{col.type}</span>
-                                </div>
                               </div>
                             </div>
                           ))}

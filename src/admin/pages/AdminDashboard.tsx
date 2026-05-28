@@ -133,8 +133,10 @@ export default function AdminDashboard() {
           .admin-main-content {
             padding: 16px !important;
             padding-top: 60px !important;
-            height: auto !important;
-            min-height: 100vh;
+            height: calc(100vh - 52px) !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch;
+            box-sizing: border-box;
           }
         }
         @media (max-width: 480px) {

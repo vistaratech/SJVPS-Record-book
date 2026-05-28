@@ -8,6 +8,7 @@ import { useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { evaluateFormula, type Entry, type Column } from '../lib/api';
 import { formatCurrency } from '../lib/formatters';
+import { mobileDownloadFile } from '../lib/mobileDownload';
 import type { ExportOptions } from '../components/register/modals/ExportModal';
 
 type CalcType = 'sum' | 'average' | 'count' | 'min' | 'max' | 'filled' | 'empty' | 'distinct' | 'none';
@@ -324,7 +325,9 @@ export function useExport({
         { name: "_metadata_", Hidden: 1 }
       ];
 
-      XLSX.writeFile(wb, `${register.name || 'Export'}.xlsx`);
+      const xlsxData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+      const fileName = `${register.name || 'Export'}.xlsx`;
+      await mobileDownloadFile(new Uint8Array(xlsxData), fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     } catch (err) {
       console.error("Export Error: ", err);
       alert("Failed to export Excel file.");
@@ -481,7 +484,9 @@ export function useExport({
         },
       });
 
-      doc.save(`${register.name || 'Export'}.pdf`);
+      const pdfBlob = doc.output('blob');
+      const fileName = `${register.name || 'Export'}.pdf`;
+      await mobileDownloadFile(pdfBlob, fileName, 'application/pdf');
     } catch (err) {
       console.error('PDF Export Error:', err);
       alert('Failed to export PDF file.');
@@ -555,7 +560,9 @@ export function useExport({
         margin: { left: 14, right: 14 },
       });
 
-      doc.save(`${register.name || 'Record'}_Row${rowIdx}.pdf`);
+      const pdfBlob = doc.output('blob');
+      const fileName = `${register.name || 'Record'}_Row${rowIdx}.pdf`;
+      await mobileDownloadFile(pdfBlob, fileName, 'application/pdf');
     } catch (err) {
       console.error('Row PDF Error:', err);
       alert('Failed to export row as PDF.');
@@ -656,7 +663,9 @@ export function useExport({
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Row Data');
-      XLSX.writeFile(wb, `${register.name || 'Record'}_Row${rowIdx}.xlsx`);
+      const xlsxData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+      const fileName = `${register.name || 'Record'}_Row${rowIdx}.xlsx`;
+      await mobileDownloadFile(new Uint8Array(xlsxData), fileName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     } catch (err) {
       console.error('Row Excel Error:', err);
       alert('Failed to export row as Excel.');

@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
-
-import { firebaseGetActivity, firebaseGetUsers } from '../../lib/firebaseAuth';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { db } from '../../lib/firebase';
+import { collection, query, orderBy, limit, startAfter, getDocs } from 'firebase/firestore';
+import { firebaseGetUsers } from '../../lib/firebaseAuth';
 import { Activity, User, LogIn, LogOut, Shield, Trash2, Edit3, Download, Key, RefreshCw, Filter, X, Calendar, ChevronDown } from 'lucide-react';
 
 const ICONS: Record<string, any> = {
@@ -51,6 +52,14 @@ export default function AdminActivityPage() {
   const [activities, setActivities] = useState<any[]>([]);
   const [users, setUsers] = useState<{id:string;name:string;email:string}[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Pagination states
+  const [lastDoc, setLastDoc] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const PAGE_SIZE = 1000;
 
   // Filters
   const [filterUser, setFilterUser] = useState<string>('all');
@@ -60,19 +69,63 @@ export default function AdminActivityPage() {
   const [filterSingleDate, setFilterSingleDate] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
 
-  const fetch_ = async () => {
-    setLoading(true);
-    try {
-      const [actData, userData] = await Promise.all([
-        firebaseGetActivity(500),
-        firebaseGetUsers()
-      ]);
-      setActivities(actData.activities || []);
-      setUsers((userData.users || []).map((u: any) => ({ id: u.id, name: u.name, email: u.email })));
+  const fetch_ = async (isFirstPage = false) => {
+    if (isFirstPage) {
+      setLoading(true);
+      setLastDoc(null);
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
     }
-    catch { } finally { setLoading(false); }
+
+    try {
+      let usersList = users;
+      if (isFirstPage) {
+        const userData = await firebaseGetUsers();
+        usersList = (userData.users || []).map((u: any) => ({ id: u.id, name: u.name, email: u.email }));
+        setUsers(usersList);
+      }
+
+      const actCol = collection(db, 'app_activity');
+      let q = query(actCol, orderBy('timestamp', 'desc'), limit(PAGE_SIZE));
+      if (!isFirstPage && lastDoc) {
+        q = query(actCol, orderBy('timestamp', 'desc'), startAfter(lastDoc), limit(PAGE_SIZE));
+      }
+
+      const snap = await getDocs(q);
+      const newItems = snap.docs.map(d => d.data());
+
+      if (isFirstPage) {
+        setActivities(newItems);
+      } else {
+        setActivities(prev => {
+          const uniqueMap = new Map<string, any>();
+          prev.forEach(item => { if (item.id) uniqueMap.set(item.id.toString(), item); });
+          newItems.forEach(item => { if (item.id) uniqueMap.set(item.id.toString(), item); });
+          return Array.from(uniqueMap.values()).sort((a: any, b: any) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+        });
+      }
+
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMore(snap.docs.length === PAGE_SIZE);
+    }
+    catch (e) {
+      console.error("Failed to load activity logs:", e);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
   };
-  useEffect(() => { fetch_(); }, []);
+  
+  const handleScroll = () => {
+    if (!containerRef.current || loading || loadingMore || !hasMore) return;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      fetch_(false);
+    }
+  };
+
+  useEffect(() => { fetch_(true); }, []);
 
   // Unique action types from data
   const actionTypes = useMemo(() => {
@@ -103,8 +156,12 @@ export default function AdminActivityPage() {
       if (filterAction !== 'all' && a.action !== filterAction) return false;
       // Single date filter — match the exact day
       if (filterSingleDate) {
-        const actDay = new Date(a.timestamp).toISOString().split('T')[0];
-        if (actDay !== filterSingleDate) return false;
+        const d = new Date(a.timestamp);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const localDateStr = `${year}-${month}-${day}`;
+        if (localDateStr !== filterSingleDate) return false;
       }
       if (filterDateFrom) {
         const from = new Date(filterDateFrom);
@@ -119,6 +176,16 @@ export default function AdminActivityPage() {
       return true;
     });
   }, [activities, filterUser, filterAction, filterDateFrom, filterDateTo, filterSingleDate]);
+
+  const hasActiveFilters = filterUser !== 'all' || filterAction !== 'all' || !!filterSingleDate || !!filterDateFrom || !!filterDateTo;
+
+  useEffect(() => {
+    if (!loading && !loadingMore && hasActiveFilters && filtered.length < 15 && hasMore) {
+      if (activities.length < 1000) {
+        fetch_(false);
+      }
+    }
+  }, [filtered.length, loading, loadingMore, hasActiveFilters, hasMore, activities.length]);
 
   const activeFilterCount = [filterUser !== 'all', filterAction !== 'all', !!filterSingleDate, !!filterDateFrom, !!filterDateTo].filter(Boolean).length;
 
@@ -148,7 +215,7 @@ export default function AdminActivityPage() {
               <span style={{background:'var(--accent)',color:'white',borderRadius:'50%',width:'18px',height:'18px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:700}}>{activeFilterCount}</span>
             )}
           </button>
-          <button onClick={fetch_} style={{background:'var(--surface)',border:'1px solid var(--border)',color:'var(--navy)',cursor:'pointer',padding:'10px',borderRadius:'8px',display:'flex',boxShadow:'var(--shadow-sm)'}}><RefreshCw size={16}/></button>
+          <button onClick={() => fetch_(true)} style={{background:'var(--surface)',border:'1px solid var(--border)',color:'var(--navy)',cursor:'pointer',padding:'10px',borderRadius:'8px',display:'flex',boxShadow:'var(--shadow-sm)'}}><RefreshCw size={16}/></button>
         </div>
       </div>
 
@@ -327,16 +394,29 @@ export default function AdminActivityPage() {
       )}
 
       {/* Results count */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px',flexWrap:'wrap',gap:'10px'}}>
         <div style={{fontSize:'13px',color:'var(--muted)',fontWeight:500}}>
           Showing <strong style={{color:'var(--foreground)'}}>{filtered.length}</strong> of {activities.length} entries
           {activeFilterCount > 0 && <span style={{color:'var(--accent)',marginLeft:'6px'}}>({activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active)</span>}
         </div>
+        {hasMore && (
+          <button 
+            onClick={() => fetch_(false)}
+            disabled={loadingMore}
+            style={{
+              background: 'none', border: 'none', color: 'var(--navy)',
+              fontWeight: 700, cursor: 'pointer', fontSize: '12px', textDecoration: 'underline',
+              padding: 0
+            }}
+          >
+            {loadingMore ? 'Loading older logs...' : 'Load older logs'}
+          </button>
+        )}
       </div>
 
       <div style={{background:'var(--surface)',borderRadius:'12px',border:'1px solid var(--border)',overflow:'hidden',boxShadow:'var(--shadow-md)'}}>
         {loading ? <div style={{padding:'50px',textAlign:'center',color:'var(--muted)'}}>Loading...</div> : (
-          <div style={{maxHeight:'calc(100vh - 260px)',overflowY:'auto'}}>
+          <div style={{maxHeight:'calc(100vh - 260px)',overflowY:'auto'}} ref={containerRef} onScroll={handleScroll}>
             {filtered.map(a => (
               <div key={a.id} style={{display:'flex',alignItems:'center',gap:'14px',padding:'14px 18px',borderBottom:'1px solid var(--border-light)'}}>
                 <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'var(--background)',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
@@ -369,6 +449,26 @@ export default function AdminActivityPage() {
             {filtered.length===0 && <div style={{padding:'40px',textAlign:'center',color:'var(--muted)'}}>
               {activeFilterCount > 0 ? 'No activity matches your filters' : 'No activity yet'}
             </div>}
+            {loadingMore && (
+              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--muted)', background: 'var(--background)', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <RefreshCw size={14} className="animate-spin" style={{ color: 'var(--navy)', display: 'inline-block' }} />
+                Loading more activities...
+              </div>
+            )}
+            {!loadingMore && hasMore && filtered.length > 0 && (
+              <div style={{ padding: '12px', textAlign: 'center', background: 'var(--background)' }}>
+                <button 
+                  onClick={() => fetch_(false)}
+                  style={{
+                    background: 'var(--surface)', border: '1px solid var(--border)',
+                    color: 'var(--navy)', cursor: 'pointer', padding: '6px 16px',
+                    borderRadius: '6px', fontSize: '12px', fontWeight: 600
+                  }}
+                >
+                  Load More Activities
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

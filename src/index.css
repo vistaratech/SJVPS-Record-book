@@ -5008,19 +5008,19 @@ a {
   margin-top: 2px;
 }
 
-/* â”€â”€ File input hidden (replaces inline display:none) â”€â”€â”€â”€â”€â”€ */
+/* ── File input hidden (replaces inline display:none) ────── */
 .hidden-file-input {
   display: none;
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   RESPONSIVE â€” Complete Mobile/Tablet System
-   Mobile  : â‰¤ 768px
-   Tablet  : 769px â€“ 1024px
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE ─ Complete Mobile/Tablet System
+   Mobile  : ≤ 768px
+   Tablet  : 769px ─ 1024px
    Desktop : > 1024px (default styles)
-â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+══════════════════════════════════════════════════════════ */
 
-/* â”€â”€ Elements hidden by default on desktop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Elements hidden by default on desktop ───────────────── */
 .mobile-topbar {
   display: none;
 }
@@ -5257,30 +5257,240 @@ a {
     font-size: 18px;
   }
 
-  /* â”€â”€ Register header (the navy title bar in register view) */
+  /* ── Register header (the navy title bar in register view) */
   .register-header {
-    padding: 0 10px;
-    height: 46px;
-    gap: 6px;
-    flex-wrap: nowrap;
-    overflow: hidden;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    height: auto !important;
+    padding: 10px 12px 8px 12px !important;
+    gap: 10px !important;
+    position: relative !important;
+    background: var(--surface) !important;
+    border-bottom: 1px solid var(--border-light) !important;
+    overflow: visible !important; /* Allow more menu dropdown to expand outward */
+  }
+
+  .register-header-left {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    width: 100% !important;
+    padding-right: 42px !important; /* Reserve space for absolute three-dots actions button */
+    min-width: 0 !important;
+    flex: none !important;
+  }
+
+  .register-header-back-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    border: 1px solid var(--border) !important;
+    background: var(--surface) !important;
+    color: var(--muted) !important;
+    flex-shrink: 0 !important;
   }
 
   .register-header-title {
-    font-size: 13px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-    flex: 1;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    color: var(--navy) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    min-width: 0 !important;
+    flex: 1 !important;
+    margin: 0 !important;
   }
 
-  .register-header-btn {
-    font-size: 11px;
-    padding: 4px 8px;
-    gap: 3px;
-    white-space: nowrap;
-    flex-shrink: 0;
+  /* Compact header Add Row (+) button */
+  .header-add-btn {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    background: var(--primary) !important;
+    color: white !important;
+    flex-shrink: 0 !important;
+    box-shadow: 0 2px 4px rgba(26, 35, 126, 0.15) !important;
+  }
+
+  /* Row 2: Actions toolbar holding search, filter, eye icons */
+  .register-header-right {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    gap: 8px !important;
+    justify-content: space-between !important;
+    flex: none !important;
+  }
+
+  /* Absolute position three-dots action button to Row 1 far right */
+  .register-header-right .register-header-actions {
+    position: absolute !important;
+    top: 10px !important;
+    right: 12px !important;
+    z-index: 101 !important;
+  }
+
+  .register-header-right .register-header-actions .register-header-btn {
+    width: 32px !important;
+    height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    border: 1px solid var(--border) !important;
+    background: var(--surface) !important;
+    color: var(--muted) !important;
+    padding: 0 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .register-header-right .register-header-actions .register-header-btn:active {
+    transform: scale(0.92) !important;
+    background: var(--surface-hover) !important;
+  }
+
+  /* Three-dots menu list wrapper alignment */
+  .register-header-right .header-more-menu {
+    position: absolute !important;
+    top: 100% !important;
+    right: 0 !important;
+    margin-top: 6px !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-md) !important;
+    box-shadow: var(--shadow-lg) !important;
+    width: 190px !important;
+    z-index: 1000 !important;
+  }
+
+  /* Row 2: Grid actions layout */
+  .register-header-right .pages-actions-right {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    gap: 8px !important;
+    justify-content: flex-start !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+  }
+
+  /* Clear screen clutter from row 2 on mobile portrait */
+  .register-header-right .pab-stat,
+  .register-header-right .pab-divider {
+    display: none !important;
+  }
+
+  /* Stretched full-width Search Input box */
+  .register-header-right #pab-search-wrap.pab-search {
+    flex: 1 !important;
+    display: flex !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+    border: 1px solid rgba(26, 35, 126, 0.2) !important;
+    background: #ffffff !important;
+    align-items: center !important;
+    padding: 0 10px !important;
+    gap: 8px !important;
+  }
+
+  .register-header-right #pab-search-wrap.pab-search.active,
+  .register-header-right #pab-search-wrap.pab-search:focus-within {
+    max-width: 100% !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(232, 96, 76, 0.08) !important;
+  }
+
+  .register-header-right .pab-search-input {
+    font-size: 13px !important;
+    height: 100% !important;
+    border: none !important;
+    background: transparent !important;
+    outline: none !important;
+    color: var(--foreground) !important;
+  }
+
+  .register-header-right .pab-filter-wrapper {
+    position: relative !important;
+    display: inline-block !important;
+  }
+
+  /* Clean responsive shortcut buttons next to search */
+  .register-header-right .pab-icon-btn {
+    height: 32px !important;
+    width: 32px !important;
+    min-width: 32px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--muted) !important;
+    flex-shrink: 0 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .register-header-right .pab-icon-btn.active {
+    color: var(--navy) !important;
+    background: rgba(26, 35, 126, 0.08) !important;
+    border-color: rgba(26, 35, 126, 0.18) !important;
+  }
+
+  .register-header-right .pab-icon-btn.danger {
+    color: var(--destructive) !important;
+    border-color: rgba(239, 68, 68, 0.2) !important;
+  }
+
+  .register-header-right .pab-icon-btn.danger:active {
+    background: var(--destructive-bg) !important;
+  }
+
+  .register-header-right .pab-icon-btn:active {
+    transform: scale(0.92) !important;
+    background: var(--surface-hover) !important;
+  }
+
+  /* Badge indicator styles */
+  .register-header-right .pab-icon-btn .pab-badge {
+    position: absolute !important;
+    top: -4px !important;
+    right: -4px !important;
+    min-width: 15px !important;
+    height: 15px !important;
+    border-radius: 50% !important;
+    font-size: 9px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-weight: 700 !important;
+    padding: 0 !important;
+    border: 1.5px solid var(--surface) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15) !important;
+    background: var(--accent) !important;
+    color: white !important;
+  }
+
+  .register-header-right .header-sync-status-badge {
+    height: 32px !important;
+    padding: 0 8px !important;
+    border-radius: 8px !important;
+    margin: 0 !important;
+    flex-shrink: 0 !important;
   }
 
   /* â”€â”€ Toolbar â€” horizontally scrollable row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -5340,12 +5550,13 @@ a {
 
   /* â”€â”€ Spreadsheet â€” horizontal scroll â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   .spreadsheet-wrapper {
-    overflow-x: auto;
-    overflow-y: auto;
-    flex: 1;
-    /* Limit repaint scope to this container so cell edits don't repaint the full page (Fix #8) */
-    contain: layout;
-    overflow-anchor: none;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    flex: 1 !important;
+    contain: layout !important;
+    overflow-anchor: none !important;
+    will-change: transform, scroll-position !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
   .spreadsheet th {
@@ -8955,4 +9166,382 @@ tr.row-selected .row-select-checkbox {
 .col-header-cell:hover .col-header-select-checkbox,
 .col-header-select-checkbox:checked {
   opacity: 1;
+}
+
+/* ==========================================================================
+   MOBILE & TABLET CAPACITOR OPTIMIZATIONS (v1.6.1)
+   ========================================================================== */
+
+/* Disable touch highlight and optimize touch actions for spreadsheet */
+.spreadsheet-wrapper,
+.spreadsheet,
+.spreadsheet td,
+.spreadsheet th,
+.cell-input,
+.cell-date,
+.cell-dropdown,
+.cell-inner-wrapper {
+  -webkit-tap-highlight-color: transparent !important;
+  /* Disable double-tap zoom stutters, but keep swipe/scroll gestures */
+  touch-action: pan-x pan-y;
+}
+
+/* Increase touch hit-areas of standard spreadsheet input elements on touch screens */
+@media (max-width: 768px) {
+  .cell-input,
+  .cell-dropdown,
+  .cell-date {
+    font-size: 13px !important; /* Highly readable mobile size */
+  }
+
+  /* Make sure checkboxes are easy to toggle */
+  .col-header-select-checkbox {
+    width: 18px !important;
+    height: 18px !important;
+    opacity: 0.8 !important;
+  }
+  
+  /* Make mobile menu buttons easy to press */
+  .mobile-menu-btn,
+  .sidebar-close-btn,
+  .register-header-btn {
+    min-width: 36px !important;
+    min-height: 36px !important;
+  }
+
+  /* Hide sidebar resize drag handles completely on touch screens */
+  .sidebar-resize-handle {
+    display: none !important;
+  }
+  
+  /* Ensure container bounds are perfect for native webviews */
+  body, html {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+}
+
+/* Native momentum scrolling for high-performance touch feedback */
+.spreadsheet-wrapper,
+.sidebar-list,
+.gs-results-wrap {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ==========================================================================
+   ADMIN PANEL MOBILE & TABLET RESPONSIVE FIXES (v1.6.1)
+   ========================================================================== */
+
+/* Responsive Grids */
+.admin-create-form {
+  grid-template-columns: 1fr 1fr;
+}
+
+.admin-grid-two-col {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Responsive Table Wrapper */
+.admin-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  /* Stack two-column forms and cards vertically on mobile */
+  .admin-create-form {
+    grid-template-columns: 1fr !important;
+  }
+
+  .admin-grid-two-col {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* Optimize paddings for mobile viewports */
+  .admin-topbar {
+    padding: 12px 16px !important;
+  }
+
+  .admin-content-wrap {
+    padding: 16px !important;
+  }
+
+  /* Hides table header on mobile */
+  .admin-table-responsive thead {
+    display: none !important;
+  }
+
+  /* Make table, tbody, tr, td behave like stacked block cards */
+  .admin-table-responsive table,
+  .admin-table-responsive tbody,
+  .admin-table-responsive tr,
+  .admin-table-responsive td {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-table-responsive tr {
+    background: #ffffff !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: 12px !important;
+    padding: 16px !important;
+    margin-bottom: 16px !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03) !important;
+    position: relative !important;
+  }
+
+  .admin-table-responsive td {
+    padding: 6px 0 !important;
+    border: none !important;
+    font-size: 13px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    min-height: 28px !important;
+  }
+
+  /* Display user name bold at the top */
+  .admin-table-responsive td:nth-child(1) {
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    color: var(--navy) !important;
+    border-bottom: 1.5px solid var(--border-light) !important;
+    padding-bottom: 10px !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* Use CSS pseudoelement ::before to add labels for each field on mobile cards */
+  .admin-table-responsive td:nth-child(2)::before {
+    content: "Email:" !important;
+    font-weight: 700 !important;
+    color: var(--muted) !important;
+    width: 90px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .admin-table-responsive td:nth-child(3)::before {
+    content: "Role:" !important;
+    font-weight: 700 !important;
+    color: var(--muted) !important;
+    width: 90px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .admin-table-responsive td:nth-child(4)::before {
+    content: "Permissions:" !important;
+    font-weight: 700 !important;
+    color: var(--muted) !important;
+    width: 90px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .admin-table-responsive td:nth-child(5)::before {
+    content: "Status:" !important;
+    font-weight: 700 !important;
+    color: var(--muted) !important;
+    width: 90px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Right-align the actions row at the bottom of the card */
+  .admin-table-responsive td:nth-child(6) {
+    border-top: 1.5px solid var(--border-light) !important;
+    margin-top: 10px !important;
+    padding-top: 12px !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+  }
+
+  /* Stack User Detail granular settings sheets */
+  .admin-sheet-card-header {
+    display: grid !important;
+    grid-template-columns: auto auto 1fr !important;
+    grid-template-rows: auto auto !important;
+    padding: 14px 16px !important;
+    gap: 8px 10px !important;
+    align-items: center !important;
+  }
+
+  /* Chevron on Column 1, Row 1 */
+  .admin-sheet-card-header > svg:first-child {
+    grid-column: 1 / 2 !important;
+    grid-row: 1 / 2 !important;
+  }
+
+  /* FileText icon on Column 2, Row 1 */
+  .admin-sheet-card-header > svg:nth-child(2) {
+    grid-column: 2 / 3 !important;
+    grid-row: 1 / 2 !important;
+  }
+
+  /* Title on Column 3, Row 1 - Align perfectly horizontally next to icons! */
+  .admin-sheet-card-header h3 {
+    grid-column: 3 / 4 !important;
+    grid-row: 1 / 2 !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  /* Wrap action buttons beneath title spanning full Row 2 */
+  .admin-sheet-card-actions {
+    grid-column: 1 / 5 !important;
+    grid-row: 2 / 3 !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+    gap: 8px 8px !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    border-top: 1px dashed var(--border) !important;
+    padding-top: 10px !important;
+    margin-top: 4px !important;
+  }
+
+  .admin-sheet-card-actions label {
+    font-size: 12px !important;
+    padding: 4px 10px !important;
+  }
+
+  .admin-sheet-card-actions button {
+    font-size: 11px !important;
+    padding: 6px 12px !important;
+  }
+
+  .admin-sheet-cols-badge {
+    margin-left: auto !important; /* Push columns badge to the right edge */
+  }
+
+  /* Make user detail settings and column checkbox cards wrap cleanly */
+  .admin-column-item-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+
+  .admin-column-item-header {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .admin-column-item-header span:nth-child(2) {
+    flex: 1 !important;
+    margin-right: 12px !important;
+    font-size: 13.5px !important;
+    font-weight: 700 !important;
+    color: var(--navy) !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .admin-column-item-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important; /* Symmetric two-column checkbox grid */
+    gap: 8px 12px !important;
+    width: 100% !important;
+    padding: 10px 0 0 0 !important;
+    border-top: 1.5px dashed var(--border-light) !important;
+    margin-top: 8px !important;
+  }
+
+  .admin-column-item-actions label {
+    width: auto !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  /* Admin Global Permission Description Wrap */
+  .admin-global-permission-label {
+    flex-wrap: wrap !important;
+    gap: 6px 12px !important;
+    align-items: center !important;
+  }
+
+  .admin-global-permission-label span:last-child {
+    width: 100% !important;
+    margin-left: 30px !important; /* Indent description beneath the label! */
+    font-size: 11px !important;
+    color: var(--muted) !important;
+  }
+
+  /* Sheet Granular Permissions Search Header Wrap */
+  .admin-sheet-search-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    margin-top: 16px !important;
+  }
+
+  .admin-sheet-search-box-wrapper {
+    width: 100% !important;
+  }
+
+  /* Sheet Expanded Columns Title Header Wrap */
+  .admin-sheet-cols-header-title {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .admin-sheet-cols-select-all-wrapper {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px 12px !important;
+    width: 100% !important;
+  }
+}
+
+
+/* ==========================================================================
+   NATIVE LAUNCHER & TOUCH PHYSICS FOR HIGH-FIDELITY MOBILE FEEL
+   ========================================================================== */
+
+/* Disable web-like text selections on UI elements to behave like a native App */
+body, html, button, select, a, svg, .sidebar, .mobile-topbar, .register-header, .register-toolbar, .pages-bar, .admin-sidebar, .admin-topbar, .nav-item {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important; /* Disable long-press context popups on links */
+}
+
+/* Ensure text inputs and spreadsheet grid cells can be selected/edited normally */
+input, textarea, .cell-input, .cell-inner-wrapper, td, th {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Prevent native webview overscroll and page drag-down elastic bounces */
+html, body, .app-layout, .admin-main-content {
+  overscroll-behavior-y: none !important;
+  overscroll-behavior-x: none !important;
+}
+
+/* Native-like active press feedback: subtle scaling for a high-fidelity touch response */
+button:active:not(:disabled), 
+.page-tab:active, 
+.register-item:active, 
+.sidebar-business:active, 
+.gs-card:active,
+.sidebar-add-btn:active {
+  transform: scale(0.97) !important;
+  transition: transform 0.08s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
 }

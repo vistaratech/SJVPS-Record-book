@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../../lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
-import { firebaseGetActivity, firebaseGetUsers } from '../../lib/firebaseAuth';
+import { collection, getDocs, query, orderBy, limit, startAfter } from 'firebase/firestore';
+import { firebaseGetUsers } from '../../lib/firebaseAuth';
 import { 
   FileSpreadsheet, User, Calendar, RefreshCw, ChevronDown, 
   Filter, X, Search, Download, ClipboardList, Database, Check, Clock
@@ -74,7 +74,17 @@ export default function AdminActiveReportPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [registers, setRegisters] = useState<RegisterItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Pagination states
+  const [lastDocActivity, setLastDocActivity] = useState<any>(null);
+  const [lastDocHistory, setLastDocHistory] = useState<any>(null);
+  const [hasMoreActivity, setHasMoreActivity] = useState(true);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const PAGE_SIZE = 1000;
 
   // Filters state
   const [filterUser, setFilterUser] = useState<string>('all');
@@ -86,72 +96,132 @@ export default function AdminActiveReportPage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showFilters, setShowFilters] = useState(true);
 
-  const fetch_ = async () => {
-    setLoading(true);
+  const fetch_ = async (isFirstPage = false) => {
+    if (isFirstPage) {
+      setLoading(true);
+      // Reset cursors and states
+      setLastDocActivity(null);
+      setLastDocHistory(null);
+      setHasMoreActivity(true);
+      setHasMoreHistory(true);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      const [actRes, userRes, regSnap, histSnap] = await Promise.all([
-        firebaseGetActivity(3000),
-        firebaseGetUsers(),
-        getDocs(collection(db, 'registers')),
-        getDocs(collection(db, 'history'))
-      ]);
+      let usersList = users;
+      let regsList = registers;
 
-      const rawActivities = actRes.activities || [];
-      
-      const historyList: any[] = [];
-      histSnap.forEach(doc => {
-        const data = doc.data();
-        historyList.push({
-          id: data.id ? data.id.toString() : doc.id,
-          userId: data.userId || '',
-          userName: data.userName || 'User',
-          action: data.action,
-          details: data.details,
-          timestamp: data.timestamp,
-          registerId: data.registerId ? String(data.registerId) : undefined,
-          registerName: data.registerName
+      if (isFirstPage) {
+        const [userRes, regSnap] = await Promise.all([
+          firebaseGetUsers(),
+          getDocs(collection(db, 'registers'))
+        ]);
+        usersList = (userRes.users || []).map((u: any) => ({ id: u.id, name: u.name, email: u.email }));
+        setUsers(usersList);
+
+        const regs: RegisterItem[] = [];
+        regSnap.forEach((doc) => {
+          const data = doc.data();
+          if (data.name && doc.id) {
+            regs.push({ id: doc.id.toString(), name: data.name });
+          }
         });
-      });
+        regsList = regs.sort((a, b) => a.name.localeCompare(b.name));
+        setRegisters(regsList);
+      }
 
-      // Merge activity audits and historical logs, remove duplicates by ID
+      let rawActivities: any[] = [];
+      let historyList: any[] = [];
+      let nextLastDocActivity = isFirstPage ? null : lastDocActivity;
+      let nextHasMoreActivity = isFirstPage ? true : hasMoreActivity;
+      let nextLastDocHistory = isFirstPage ? null : lastDocHistory;
+      let nextHasMoreHistory = isFirstPage ? true : hasMoreHistory;
+
+      // 1. Fetch App Activity batch
+      if (isFirstPage || hasMoreActivity) {
+        const actCol = collection(db, 'app_activity');
+        let qAct = query(actCol, orderBy('timestamp', 'desc'), limit(PAGE_SIZE));
+        if (!isFirstPage && lastDocActivity) {
+          qAct = query(actCol, orderBy('timestamp', 'desc'), startAfter(lastDocActivity), limit(PAGE_SIZE));
+        }
+        const actSnap = await getDocs(qAct);
+        rawActivities = actSnap.docs.map(d => d.data());
+        nextLastDocActivity = actSnap.docs[actSnap.docs.length - 1] || null;
+        nextHasMoreActivity = actSnap.docs.length === PAGE_SIZE;
+      }
+
+      // 2. Fetch History batch
+      if (isFirstPage || hasMoreHistory) {
+        const histCol = collection(db, 'history');
+        let qHist = query(histCol, orderBy('timestamp', 'desc'), limit(PAGE_SIZE));
+        if (!isFirstPage && lastDocHistory) {
+          qHist = query(histCol, orderBy('timestamp', 'desc'), startAfter(lastDocHistory), limit(PAGE_SIZE));
+        }
+        const histSnap = await getDocs(qHist);
+        histSnap.forEach(doc => {
+          const data = doc.data();
+          historyList.push({
+            id: data.id ? data.id.toString() : doc.id,
+            userId: data.userId || '',
+            userName: data.userName || 'User',
+            action: data.action,
+            details: data.details,
+            timestamp: data.timestamp,
+            registerId: data.registerId ? String(data.registerId) : undefined,
+            registerName: data.registerName
+          });
+        });
+        nextLastDocHistory = histSnap.docs[histSnap.docs.length - 1] || null;
+        nextHasMoreHistory = histSnap.docs.length === PAGE_SIZE;
+      }
+
+      // 3. Merge and sort
       const merged = [...rawActivities, ...historyList];
       const uniqueMap = new Map<string, any>();
+
+      let baseActivities = isFirstPage ? [] : activities;
+      baseActivities.forEach(item => {
+        if (item.id) uniqueMap.set(item.id.toString(), item);
+      });
       merged.forEach(item => {
         if (item.id) uniqueMap.set(item.id.toString(), item);
       });
-      
-      const allActivities = Array.from(uniqueMap.values())
+
+      const sorted = Array.from(uniqueMap.values())
         .sort((a: any, b: any) => (b.timestamp || '').localeCompare(a.timestamp || ''));
 
-      // Include all data entries and register modification activities
       const validActions = [
         'edit_cells', 'add_row', 'delete_row', 'bulk_delete_rows', 'add_column', 'delete_column',
         'Delete Row', 'Delete Rows', 'Add Column', 'Delete Column', 'Create Register', 'Trash Register', 'Restore Register', 'Rename Register', 'Rename Column',
         'Edit Row', 'Add Row', 'Insert Row', 'Change Column Type'
       ];
-      const dataActivities = allActivities.filter((a: any) => validActions.includes(a.action));
-      
-      setActivities(dataActivities);
-      setUsers((userRes.users || []).map((u: any) => ({ id: u.id, name: u.name, email: u.email })));
+      const filtered = sorted.filter((a: any) => validActions.includes(a.action));
 
-      const regsList: RegisterItem[] = [];
-      regSnap.forEach((doc) => {
-        const data = doc.data();
-        if (data.name && doc.id) {
-          regsList.push({ id: doc.id.toString(), name: data.name });
-        }
-      });
-      setRegisters(regsList.sort((a, b) => a.name.localeCompare(b.name)));
+      setActivities(filtered);
+      setLastDocActivity(nextLastDocActivity);
+      setLastDocHistory(nextLastDocHistory);
+      setHasMoreActivity(nextHasMoreActivity);
+      setHasMoreHistory(nextHasMoreHistory);
     } catch (e: any) {
       console.error('Failed to load active report:', e);
       toast.error('Failed to retrieve activity reports');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const handleTableScroll = () => {
+    if (!tableContainerRef.current || loading || loadingMore || (!hasMoreActivity && !hasMoreHistory)) return;
+    const { scrollTop, scrollHeight, clientHeight } = tableContainerRef.current;
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      fetch_(false);
     }
   };
 
   useEffect(() => {
-    fetch_();
+    fetch_(true);
   }, []);
 
   // Filtered reports
@@ -170,8 +240,12 @@ export default function AdminActiveReportPage() {
 
       // 4. Specific Date Filter
       if (filterSingleDate) {
-        const actDay = new Date(a.timestamp).toISOString().split('T')[0];
-        if (actDay !== filterSingleDate) return false;
+        const d = new Date(a.timestamp);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const localDateStr = `${year}-${month}-${day}`;
+        if (localDateStr !== filterSingleDate) return false;
       }
 
       // 5. Date From Filter
@@ -201,6 +275,16 @@ export default function AdminActiveReportPage() {
       return true;
     });
   }, [activities, filterUser, filterRegister, filterAction, filterSingleDate, filterDateFrom, filterDateTo, searchQuery]);
+
+  const hasActiveFilters = filterUser !== 'all' || filterRegister !== 'all' || filterAction !== 'all' || !!filterSingleDate || !!filterDateFrom || !!filterDateTo || !!searchQuery.trim();
+
+  useEffect(() => {
+    if (!loading && !loadingMore && hasActiveFilters && filteredReport.length < 15 && (hasMoreActivity || hasMoreHistory)) {
+      if (activities.length < 1000) {
+        fetch_(false);
+      }
+    }
+  }, [filteredReport.length, loading, loadingMore, hasActiveFilters, hasMoreActivity, hasMoreHistory, activities.length]);
 
   // Analytics Metrics
   const metrics = useMemo(() => {
@@ -356,7 +440,7 @@ export default function AdminActiveReportPage() {
             {exporting ? 'Exporting...' : 'Export Excel'}
           </button>
           <button 
-            onClick={fetch_} 
+            onClick={() => fetch_(true)} 
             style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--navy)', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', boxShadow: 'var(--shadow-sm)' }}
           >
             <RefreshCw size={16} />
@@ -503,14 +587,29 @@ export default function AdminActiveReportPage() {
           )}
 
           {/* Filter statistics indicator */}
-          <div style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500 }}>
-            Showing <strong style={{ color: 'var(--foreground)' }}>{filteredReport.length}</strong> audited data actions
-            {activeFilterCount > 0 && <span style={{ color: 'var(--accent)', marginLeft: '6px' }}>({activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active)</span>}
+          <div style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              Showing <strong style={{ color: 'var(--foreground)' }}>{filteredReport.length}</strong> audited data actions
+              {activeFilterCount > 0 && <span style={{ color: 'var(--accent)', marginLeft: '6px' }}>({activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active)</span>}
+            </div>
+            {(hasMoreActivity || hasMoreHistory) && (
+              <button 
+                onClick={() => fetch_(false)}
+                disabled={loadingMore}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--navy)',
+                  fontWeight: 700, cursor: 'pointer', fontSize: '12px', textDecoration: 'underline',
+                  padding: 0
+                }}
+              >
+                {loadingMore ? 'Loading older logs...' : 'Load older logs'}
+              </button>
+            )}
           </div>
 
           {/* Audited Logs Grid */}
           <div style={{ background: 'var(--surface)', borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
-            <div style={{ maxHeight: 'calc(100vh - 290px)', overflowY: 'auto' }}>
+            <div style={{ maxHeight: 'calc(100vh - 290px)', overflowY: 'auto' }} ref={tableContainerRef} onScroll={handleTableScroll}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ background: 'var(--background)', borderBottom: '1px solid var(--border)' }}>
@@ -539,11 +638,11 @@ export default function AdminActiveReportPage() {
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         <span style={{ 
-                          background: `${ACTION_COLORS[a.action] || ACTION_COLORS.other}12`, 
-                          color: ACTION_COLORS[a.action] || ACTION_COLORS.other,
-                          padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
-                          border: `1px solid ${ACTION_COLORS[a.action] || ACTION_COLORS.other}24`
-                        }}>
+                           background: `${ACTION_COLORS[a.action] || ACTION_COLORS.other}12`, 
+                           color: ACTION_COLORS[a.action] || ACTION_COLORS.other,
+                           padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
+                           border: `1px solid ${ACTION_COLORS[a.action] || ACTION_COLORS.other}24`
+                         }}>
                           {ACTION_LABELS[a.action] || a.action.replace(/_/g, ' ')}
                         </span>
                       </td>
@@ -564,6 +663,32 @@ export default function AdminActiveReportPage() {
                           <div style={{ fontSize: '14px', fontWeight: 600 }}>No entry actions match the active filters</div>
                           <button onClick={clearFilters} style={{ background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 700, cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}>Clear all filters</button>
                         </div>
+                      </td>
+                    </tr>
+                  )}
+                  {loadingMore && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: 'var(--muted)', background: 'var(--background)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '13px', fontWeight: 600 }}>
+                          <Clock size={16} className="animate-spin" style={{ color: 'var(--navy)', display: 'inline-block' }} />
+                          Loading more logs...
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {!loadingMore && (hasMoreActivity || hasMoreHistory) && filteredReport.length > 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '12px', textAlign: 'center', background: 'var(--background)' }}>
+                        <button 
+                          onClick={() => fetch_(false)}
+                          style={{
+                            background: 'var(--surface)', border: '1px solid var(--border)',
+                            color: 'var(--navy)', cursor: 'pointer', padding: '6px 16px',
+                            borderRadius: '6px', fontSize: '12px', fontWeight: 600
+                          }}
+                        >
+                          Load More Logs
+                        </button>
                       </td>
                     </tr>
                   )}

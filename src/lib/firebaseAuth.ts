@@ -8,6 +8,7 @@
  *   app_download_requests — download approval requests
  */
 
+import { sha256 } from 'js-sha256';
 import { db } from './firebase';
 import {
   collection, doc, getDocs, getDoc, setDoc, deleteDoc,
@@ -20,13 +21,21 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 }
 
-/** SHA-256 hash using browser-native Web Crypto API */
+/** SHA-256 hash using browser-native Web Crypto API with pure-JS fallback for insecure context support */
 async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + '__sjvps_salt_2024__');
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const saltPassword = password + '__sjvps_salt_2024__';
+  try {
+    if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(saltPassword);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (e) {
+    console.warn('[SHA-256] native crypto failed, utilizing pure-JS fallback:', e);
+  }
+  return sha256(saltPassword);
 }
 
 // ─── Collections ─────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import {
   type BackupMeta,
 } from '../lib/api';
 import JSZip from 'jszip';
+import { mobileDownloadFile } from '../lib/mobileDownload';
 
 import {
   ArrowLeft, CloudUpload, RotateCcw, Trash2, CheckCircle, AlertCircle,
@@ -140,12 +141,7 @@ export default function BackupPage() {
       const timestamp = `${now.getDate().toString().padStart(2, '0')}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}-${now.getMinutes().toString().padStart(2, '0')}`;
       const filename = `AG Trust [${timestamp}].zip`;
 
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(content);
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await mobileDownloadFile(content, filename, 'application/zip');
     },
     onSuccess: () => showToast('success', 'Full backup downloaded successfully!'),
     onError: (err: any) => showToast('error', `Download failed: ${err.message}`),

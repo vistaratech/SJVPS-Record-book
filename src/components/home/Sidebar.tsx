@@ -107,17 +107,17 @@ export const Sidebar = memo(function Sidebar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(() => {
     try {
-      return localStorage.getItem('seen_version_1.6.1') !== 'true';
+      return localStorage.getItem('seen_version_1.6.2') !== 'true';
     } catch {
       return false;
     }
   });
-  const [versionTab, setVersionTab] = useState<'1.6.1' | '1.6.0' | '1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.6.1');
+  const [versionTab, setVersionTab] = useState<'1.6.2' | '1.6.1' | '1.6.0' | '1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.6.2');
 
   const handleCloseVersionModal = useCallback(() => {
     setShowVersionModal(false);
     try {
-      localStorage.setItem('seen_version_1.6.1', 'true');
+      localStorage.setItem('seen_version_1.6.2', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -849,7 +849,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.6.1');
+                  setVersionTab('1.6.2');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -858,9 +858,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.6.1"
+                title="View what's new in v1.6.2"
               >
-                v1.6.1
+                v1.6.2
               </span>
             </span>
           </div>
@@ -1744,6 +1744,25 @@ export const Sidebar = memo(function Sidebar({
             {/* Version Tabs */}
             <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', overflowX: 'auto' }}>
               <button
+                onClick={() => setVersionTab('1.6.2')}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.6.2' ? 'white' : 'transparent',
+                  color: versionTab === '1.6.2' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.6.2' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                v1.6.2 (New)
+              </button>
+              <button
                 onClick={() => setVersionTab('1.6.1')}
                 style={{
                   flex: 1,
@@ -1760,7 +1779,7 @@ export const Sidebar = memo(function Sidebar({
                   whiteSpace: 'nowrap'
                 }}
               >
-                v1.6.1 (New)
+                v1.6.1
               </button>
               <button
                 onClick={() => setVersionTab('1.6.0')}
@@ -1910,9 +1929,65 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.6.1' ? (
+            {versionTab === '1.6.2' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 27, 2026 (Latest)</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 28, 2026 (Latest)</span>
+                
+                {/* Feature 1: Recycle Bin Optimization */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#dbeafe', color: '#2563eb', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>🗑️ Recycle Bin Speed Optimization</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Recycle Bin loads in milliseconds! By retrieving only metadata folders and bypassing heavy entry documents, database reads are reduced by 99%.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: High-Speed History and Admin Reports */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>⚡ Instant Loading History & Admin Reports</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      History, Active Report, and Activity Logs now use smart batch pagination (1000 items/page) with infinite scrolling, eliminating slow loads and freezing.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 3: Timezone-Aware Filtering */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>📅 Timezone-Aware Local Date Matching</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Added Indian Standard Time (IST) timezone-aware matching for date filters so yesterday's logs and reports align perfectly with what you see in the UI.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 4: Auto-Expanding Search */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>🔍 Smart Auto-Expanding Log Search</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Date and text searches automatically query deeper historical logs in the background if the initial page yields few matches.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : versionTab === '1.6.1' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 27, 2026</span>
                 
                 {/* Feature 1: Cell Selection Mode */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>

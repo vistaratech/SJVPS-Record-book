@@ -3169,6 +3169,42 @@ export default function RegisterPage() {
     return offsets;
   }, [visibleColumns, frozenColumns, colWidths, defaultColWidth]);
 
+  const scrollToColumn = useCallback((colIdx: number) => {
+    const container = parentRef.current;
+    if (!container) return;
+
+    const visCols = visibleColumnsRef.current;
+    if (!visCols[colIdx]) return;
+
+    // Calculate total frozen columns width
+    let frozenWidth = 64; // S.No column width
+    for (const col of visCols) {
+      if (frozenColumns.has(col.id)) {
+        frozenWidth += colWidths[col.id] || defaultColWidth;
+      }
+    }
+
+    // Calculate the start position of the target column in normal flow
+    let start = 64; // S.No offset
+    for (let i = 0; i < colIdx; i++) {
+      start += colWidths[visCols[i].id] || defaultColWidth;
+    }
+    const width = colWidths[visCols[colIdx].id] || defaultColWidth;
+    const end = start + width;
+
+    const scrollLeft = container.scrollLeft;
+    const containerWidth = container.clientWidth;
+
+    // If target is to the left of visible scrollport (behind frozen columns)
+    if (start < scrollLeft + frozenWidth) {
+      container.scrollLeft = Math.max(0, start - frozenWidth);
+    } 
+    // If target is to the right of visible scrollport
+    else if (end > scrollLeft + containerWidth) {
+      container.scrollLeft = end - containerWidth;
+    }
+  }, [frozenColumns, colWidths, defaultColWidth]);
+
   const handleLinkIconClick = useCallback(async (e: React.MouseEvent, col: any) => {
     e.stopPropagation();
     if (!col.linkedTo) return;
@@ -3523,7 +3559,7 @@ export default function RegisterPage() {
                   afterVirtualCols={useColVirtual ? afterVirtualCols : undefined}
                   paddingLeft={useColVirtual ? paddingLeft : 0}
                   paddingRight={useColVirtual ? paddingRight : 0}
-                  scrollToColumn={useColVirtual ? (colIdx) => colVirtualizer.scrollToIndex(colIdx, { align: 'auto' }) : undefined}
+                  scrollToColumn={scrollToColumn}
                   isSelected={selectedRows.has(entry.id)}
                   toggleSelectRow={toggleSelectRow}
                   handleCellChange={(eid, cid, val) => {

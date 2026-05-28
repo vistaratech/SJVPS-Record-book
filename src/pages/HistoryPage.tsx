@@ -2,8 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Activity, ArrowLeft, Calendar, FileText, Link as LinkIcon, Pencil, Plus, RotateCcw, Settings, Trash2, User } from 'lucide-react';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listBusinesses, listHistory, type HistoryEntry } from '../lib/api';
+import { listBusinesses, type HistoryEntry } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { db } from '../lib/firebase';
+import { collection, query, where, orderBy, limit, startAfter, getDocs } from 'firebase/firestore';
 
 export default function HistoryPage() {
   const navigate = useNavigate();
@@ -13,14 +15,113 @@ export default function HistoryPage() {
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
-  const { data: history, isLoading, isError, error } = useQuery({
-    queryKey: ['history', businessId],
-    queryFn: () => listHistory(businessId!),
-    enabled: !!businessId,
-    refetchOnWindowFocus: true,
-    staleTime: 0,
-    retry: 1,
-  });
+  const [history, setHistory] = React.useState<HistoryEntry[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isError, setIsError] = React.useState(false);
+  const [error, setError] = React.useState<any>(null);
+  
+  const [lastDoc, setLastDoc] = React.useState<any>(null);
+  const [hasMore, setHasMore] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [fallbackData, setFallbackData] = React.useState<HistoryEntry[] | null>(null);
+
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const PAGE_SIZE = 1000;
+
+  const fetchHistory = async (isFirstPage = false) => {
+    if (isFirstPage) {
+      setIsLoading(true);
+      setIsError(false);
+    } else {
+      setLoadingMore(true);
+    }
+
+    try {
+      if (fallbackData !== null) {
+        const currentCount = isFirstPage ? 0 : history.length;
+        const nextBatch = fallbackData.slice(currentCount, currentCount + PAGE_SIZE);
+        if (isFirstPage) {
+          setHistory(nextBatch);
+        } else {
+          setHistory(prev => [...prev, ...nextBatch]);
+        }
+        setHasMore(currentCount + nextBatch.length < fallbackData.length);
+        setLoadingMore(false);
+        setIsLoading(false);
+        return;
+      }
+
+      const historyColRef = collection(db, 'history');
+      let q = query(
+        historyColRef,
+        where('businessId', '==', businessId),
+        orderBy('timestamp', 'desc'),
+        limit(PAGE_SIZE)
+      );
+
+      if (!isFirstPage && lastDoc) {
+        q = query(
+          historyColRef,
+          where('businessId', '==', businessId),
+          orderBy('timestamp', 'desc'),
+          startAfter(lastDoc),
+          limit(PAGE_SIZE)
+        );
+      }
+
+      const snap = await getDocs(q);
+      const newItems = snap.docs.map(d => d.data() as HistoryEntry);
+      
+      if (isFirstPage) {
+        setHistory(newItems);
+      } else {
+        setHistory(prev => [...prev, ...newItems]);
+      }
+
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMore(snap.docs.length === PAGE_SIZE);
+    } catch (err: any) {
+      console.warn("Paginated listHistory failed, falling back to full fetch:", err);
+      try {
+        const historyColRef = collection(db, 'history');
+        const q = query(historyColRef, where('businessId', '==', businessId));
+        const snap = await getDocs(q);
+        const allItems = snap.docs
+          .map(d => d.data() as HistoryEntry)
+          .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+        
+        setFallbackData(allItems);
+        
+        const firstBatch = allItems.slice(0, PAGE_SIZE);
+        setHistory(firstBatch);
+        setHasMore(firstBatch.length < allItems.length);
+      } catch (fallbackErr: any) {
+        console.error("Fallback fetch failed:", fallbackErr);
+        setIsError(true);
+        setError(fallbackErr);
+      }
+    } finally {
+      setIsLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (businessId) {
+      setFallbackData(null);
+      setLastDoc(null);
+      fetchHistory(true);
+    }
+  }, [businessId]);
+
+  const handleScroll = () => {
+    if (!containerRef.current || loadingMore || !hasMore || isLoading) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      fetchHistory(false);
+    }
+  };
 
   const filteredHistory = React.useMemo(() => {
     if (!history) return [];
@@ -39,8 +140,18 @@ export default function HistoryPage() {
     });
   }, [history, isAdmin, user]);
 
+  const hasActiveFilters = !isAdmin;
+
+  React.useEffect(() => {
+    if (!isLoading && !loadingMore && hasActiveFilters && filteredHistory.length < 15 && hasMore) {
+      if (history.length < 1000) {
+        fetchHistory(false);
+      }
+    }
+  }, [filteredHistory.length, isLoading, loadingMore, hasActiveFilters, hasMore, history.length]);
+
   return (
-    <div className="history-page">
+    <div className="history-page" ref={containerRef} onScroll={handleScroll}>
       <div className="history-header">
         <button className="back-button" onClick={() => navigate('/')}>
           <ArrowLeft size={20} />
@@ -123,6 +234,31 @@ export default function HistoryPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+        {loadingMore && (
+          <div className="loading-state" style={{ padding: '20px 0' }}>
+            <Activity size={24} className="animate-spin" style={{ opacity: 0.5, marginBottom: 8, display: 'inline-block' }} />
+            <p style={{ fontSize: 13, margin: 0 }}>Loading more history...</p>
+          </div>
+        )}
+        {!loadingMore && hasMore && history.length > 0 && (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <button 
+              onClick={() => fetchHistory(false)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                background: 'white',
+                color: '#64748b',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Load More
+            </button>
           </div>
         )}
       </div>
