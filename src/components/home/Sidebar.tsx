@@ -107,17 +107,17 @@ export const Sidebar = memo(function Sidebar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(() => {
     try {
-      return localStorage.getItem('seen_version_1.6.9') !== 'true';
+      return localStorage.getItem('seen_version_1.6.10') !== 'true';
     } catch {
       return false;
     }
   });
-  const [versionTab, setVersionTab] = useState<'1.6.9' | '1.6.3' | '1.6.2' | '1.6.1' | '1.6.0' | '1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.6.9');
+  const [versionTab, setVersionTab] = useState<'1.6.10' | '1.6.9' | '1.6.3' | '1.6.2' | '1.6.1' | '1.6.0' | '1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.6.10');
 
   const handleCloseVersionModal = useCallback(() => {
     setShowVersionModal(false);
     try {
-      localStorage.setItem('seen_version_1.6.9', 'true');
+      localStorage.setItem('seen_version_1.6.10', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -849,7 +849,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.6.9');
+                  setVersionTab('1.6.10');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -858,9 +858,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.6.9"
+                title="View what's new in v1.6.10"
               >
-                v1.6.9
+                v1.6.10
               </span>
             </span>
           </div>
@@ -1744,6 +1744,25 @@ export const Sidebar = memo(function Sidebar({
             {/* Version Tabs */}
             <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', overflowX: 'auto' }}>
               <button
+                onClick={() => setVersionTab('1.6.10')}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.6.10' ? 'white' : 'transparent',
+                  color: versionTab === '1.6.10' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.6.10' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                v1.6.10 (New)
+              </button>
+              <button
                 onClick={() => setVersionTab('1.6.9')}
                 style={{
                   flex: 1,
@@ -1760,7 +1779,7 @@ export const Sidebar = memo(function Sidebar({
                   whiteSpace: 'nowrap'
                 }}
               >
-                v1.6.9 (New)
+                v1.6.9
               </button>
               <button
                 onClick={() => setVersionTab('1.6.3')}
@@ -1967,9 +1986,52 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.6.9' ? (
+            {versionTab === '1.6.10' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 29, 2026 (Latest)</span>
+                
+                {/* Feature 1: Formula Cache Invalidation */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#dbeafe', color: '#2563eb', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>⚡ Formula Cache Invalidation</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Added automatic cache invalidation for formula results when columns are reordered or moved to ensure formulas always display correct results.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: Strict Excel Import Type Guessing */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>🔒 Strict Excel Import Type Guessing</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Improved Excel type guessing algorithm and strict header keyword verification to prevent numeric columns (e.g. roll numbers, IDs) from being misclassified as dates.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 3: Fractional Date Support */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>📅 Fractional Date Support</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Added support for parsing Excel serial date numbers containing time fractional parts, guaranteeing precise date conversions on Excel import.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : versionTab === '1.6.9' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 29, 2026</span>
                 
                 {/* Feature 1: High-Speed Entry Data-Loss Fixes */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
