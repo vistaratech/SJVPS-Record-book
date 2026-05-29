@@ -1070,9 +1070,10 @@ function excelSerialToDateStr(serial: number): string {
 export function formatDateToDDMMYYYY(val: any): string {
   if (val === null || val === undefined || val === '') return '';
 
-  // 1. Handle Excel Serial Dates
-  if (typeof val === 'number' && looksLikeExcelSerial(val)) {
-    return excelSerialToDateStr(val);
+  // 1. Handle Excel Serial Dates (including floating point timestamps)
+  const numVal = typeof val === 'number' ? val : Number(val);
+  if (!isNaN(numVal) && looksLikeExcelSerial(numVal)) {
+    return excelSerialToDateStr(Math.floor(numVal));
   }
 
   // 2. Handle JS Date object
@@ -1141,7 +1142,7 @@ export function formatDateToDDMMYYYY(val: any): string {
 /** Check if a value looks like a plausible Excel serial date (roughly 1968 to 2077). */
 function looksLikeExcelSerial(val: unknown): boolean {
   if (typeof val !== 'number') return false;
-  return val >= 25000 && val <= 65000 && Number.isInteger(val);
+  return val >= 25000 && val <= 65000;
 }
 
 /**
