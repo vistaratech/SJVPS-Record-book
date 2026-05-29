@@ -27,7 +27,7 @@ async function extractFilesFromDirectory(
         reader.onload = (evt) => {
           try {
             const buffer = evt.target?.result as ArrayBuffer;
-            const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+            const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: false });
             const ws = wb.Sheets[wb.SheetNames[0]];
 
             // Pre-process worksheet to extract original URLs from HYPERLINK formulas
@@ -60,7 +60,7 @@ async function extractFilesFromDirectory(
               }
             }
 
-            const json = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, string>[];
+            const json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true }) as Record<string, string>[];
             
             let metadata: any[] = [];
             const metaSheetName = wb.SheetNames.find(n => n.toLowerCase() === '_metadata_');

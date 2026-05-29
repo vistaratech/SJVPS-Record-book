@@ -23,7 +23,7 @@ self.onmessage = function (evt) {
 
     self.postMessage({ type: 'PROGRESS', payload: { pct: 10, message: 'Reading file…' } });
 
-    const wb = XLSX.read(buffer, { type: 'array', cellDates: true, dense: false });
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: false, dense: false });
 
     self.postMessage({ type: 'PROGRESS', payload: { pct: 40, message: 'Parsing sheet…' } });
 
@@ -90,7 +90,7 @@ self.onmessage = function (evt) {
     }
 
     // sheet_to_json returns objects keyed by header name, starting from the detected header row
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, range: headerRowIdx });
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true, range: headerRowIdx });
 
     self.postMessage({ type: 'PROGRESS', payload: { pct: 85, message: `Loaded ${rows.length} rows…` } });
 
