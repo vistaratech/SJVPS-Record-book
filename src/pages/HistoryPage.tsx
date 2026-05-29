@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Activity, ArrowLeft, Calendar, FileText, Link as LinkIcon, Pencil, Plus, RotateCcw, Settings, Trash2, User } from 'lucide-react';
+import { Activity, ArrowLeft, ArrowRight, Calendar, FileText, Link as LinkIcon, Pencil, Plus, RotateCcw, Settings, Trash2, User } from 'lucide-react';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listBusinesses, type HistoryEntry } from '../lib/api';
@@ -191,7 +191,16 @@ export default function HistoryPage() {
             {filteredHistory.map((entry: HistoryEntry) => {
               const { icon, color, bg } = getActionStyle(entry.action);
               return (
-                <div key={entry.id} className="history-card">
+                <div key={entry.id} className={`history-card${entry.registerId ? ' history-card-clickable' : ''}`}
+                  onClick={() => {
+                    if (entry.registerId && entry.entryId) {
+                      navigate(`/register/${entry.registerId}?row=${entry.entryId}`);
+                    } else if (entry.registerId) {
+                      navigate(`/register/${entry.registerId}`);
+                    }
+                  }}
+                  style={{ cursor: entry.registerId ? 'pointer' : 'default' }}
+                >
                   <div className="history-card-icon">
                     <div className="icon-circle" style={{ borderColor: color, background: bg }}>
                       <span style={{ color }}>{icon}</span>
@@ -227,6 +236,11 @@ export default function HistoryPage() {
                         <span className="meta-item">
                           <FileText size={12} />
                           {entry.registerName}
+                        </span>
+                      )}
+                      {entry.registerId && (
+                        <span className="meta-item" style={{ marginLeft: 'auto', color: '#6366f1', fontWeight: 600, fontSize: 11 }}>
+                          View in Register <ArrowRight size={11} />
                         </span>
                       )}
                     </div>
@@ -382,6 +396,11 @@ export default function HistoryPage() {
         .history-card-main:hover {
           transform: translateY(-2px);
           box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+        .history-card-clickable .history-card-main:hover {
+          border-color: #a5b4fc;
+          box-shadow: 0 4px 12px -2px rgba(99,102,241,0.2);
         }
 
         .history-card-header {
