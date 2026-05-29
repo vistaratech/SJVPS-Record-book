@@ -107,17 +107,17 @@ export const Sidebar = memo(function Sidebar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(() => {
     try {
-      return localStorage.getItem('seen_version_1.6.10') !== 'true';
+      return localStorage.getItem('seen_version_1.7.0') !== 'true';
     } catch {
       return false;
     }
   });
-  const [versionTab, setVersionTab] = useState<'1.6.10' | '1.6.9' | '1.6.3' | '1.6.2' | '1.6.1' | '1.6.0' | '1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.6.10');
+  const [versionTab, setVersionTab] = useState<'1.7.0' | '1.6.10' | '1.6.9' | '1.6.3' | '1.6.2' | '1.6.1' | '1.6.0' | '1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.7.0');
 
   const handleCloseVersionModal = useCallback(() => {
     setShowVersionModal(false);
     try {
-      localStorage.setItem('seen_version_1.6.10', 'true');
+      localStorage.setItem('seen_version_1.7.0', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -849,7 +849,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.6.10');
+                  setVersionTab('1.7.0');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -858,9 +858,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.6.10"
+                title="View what's new in v1.7.0"
               >
-                v1.6.10
+                v1.7.0
               </span>
             </span>
           </div>
@@ -1744,6 +1744,25 @@ export const Sidebar = memo(function Sidebar({
             {/* Version Tabs */}
             <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', overflowX: 'auto' }}>
               <button
+                onClick={() => setVersionTab('1.7.0')}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: versionTab === '1.7.0' ? 'white' : 'transparent',
+                  color: versionTab === '1.7.0' ? '#0f172a' : '#64748b',
+                  boxShadow: versionTab === '1.7.0' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                v1.7.0 (New)
+              </button>
+              <button
                 onClick={() => setVersionTab('1.6.10')}
                 style={{
                   flex: 1,
@@ -1760,7 +1779,7 @@ export const Sidebar = memo(function Sidebar({
                   whiteSpace: 'nowrap'
                 }}
               >
-                v1.6.10 (New)
+                v1.6.10
               </button>
               <button
                 onClick={() => setVersionTab('1.6.9')}
@@ -1986,9 +2005,39 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.6.10' ? (
+            {versionTab === '1.7.0' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 29, 2026 (Latest)</span>
+                
+                {/* Feature 1: History to Register Navigation */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#dbeafe', color: '#2563eb', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>🔗 Direct History Navigation</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Clicking any history entry card now navigates directly to that row in the Register page. It automatically switches tabs, scrolls the row into view, and highlights it.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 2: Fresh Server Data Fetching */}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
+                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>⚡ Stale Cache Bypass</h4>
+                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
+                      Enabled direct server fetches for register updates to bypass stale browser cache issues and guarantee 100% real-time data accuracy.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : versionTab === '1.6.10' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released May 29, 2026</span>
                 
                 {/* Feature 1: Formula Cache Invalidation */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
