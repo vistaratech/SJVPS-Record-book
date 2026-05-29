@@ -527,12 +527,28 @@ async function saveAddedEntryFast(reg: RegisterDetail, newEntryIndex: number): P
   const chunkEntries = entries.slice(chunkStart, chunkStart + ENTRIES_PER_CHUNK);
   const cleaned = JSON.parse(JSON.stringify({ entries: chunkEntries }));
 
-  // Parallelize Firestore writes for maximum speed
-  await Promise.all([
+  const writeOps: Promise<void>[] = [
     setDoc(regDoc(reg.id), mainDoc),
-    setDoc(chunkDoc(reg.id, chunkIndex), cleaned)
-  ]);
+    setDoc(chunkDoc(reg.id, chunkIndex), cleaned),
+  ];
+
+  // ── Data-loss fix: when the new entry is the FIRST entry of a new chunk
+  //    (i.e., we just crossed a chunk boundary) also re-confirm the previous
+  //    chunk in Firestore. Without this, a fresh Firestore read can return the
+  //    previous chunk from before this write, causing the entry count to look
+  //    incomplete during rapid sequential adds.
+  if (chunkIndex > 0 && newEntryIndex % ENTRIES_PER_CHUNK === 0) {
+    const prevChunkIndex = chunkIndex - 1;
+    const prevChunkStart = prevChunkIndex * ENTRIES_PER_CHUNK;
+    const prevChunkEntries = entries.slice(prevChunkStart, prevChunkStart + ENTRIES_PER_CHUNK);
+    const prevCleaned = JSON.parse(JSON.stringify({ entries: prevChunkEntries }));
+    writeOps.push(setDoc(chunkDoc(reg.id, prevChunkIndex), prevCleaned));
+  }
+
+  // Parallelize Firestore writes for maximum speed
+  await Promise.all(writeOps);
 }
+
 
 /**
  * Lightweight save helper for appends: updates the main document and ONLY writes

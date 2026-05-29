@@ -120,9 +120,11 @@ export default function RegisterPage() {
     queryKey: ['register', registerId],
     queryFn: () => getRegister(Number(registerId)),
     enabled: !!registerId && !isNaN(Number(registerId)),
-    staleTime: 10 * 1000, // Reduced staleTime to allow faster fresh updates
-    refetchOnWindowFocus: true, // Automatically pull fresh data from server when user focuses the tab
-    refetchInterval: 15 * 1000, // Background poll every 15 seconds to ensure real-time collaborative sync
+    staleTime: 10 * 1000,
+    // ── Data-loss fix: refetch slowly enough that all queued Firestore writes
+    //    land before the next poll overwrites localEntries.
+    refetchOnWindowFocus: false, // Window-focus refetch races with pending writes — keep disabled
+    refetchInterval: 60 * 1000,  // 60 s background poll (was 15 s — too aggressive for rapid row entry)
     placeholderData: keepPreviousData,
   });
 
@@ -528,6 +530,17 @@ export default function RegisterPage() {
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // ── Data-loss fix: track in-flight row-add mutations so the localEntries sync
+  //    guard (hasPendingDebounce) can also block syncs while rows are being written.
+  //    Without this, a background refetch arriving between two onSuccess calls
+  //    replaces real-integer-ID entries (already promoted from temp) that are not
+  //    yet visible in the Firestore snapshot.
+  const pendingRowMutationsCount = useRef(0);
+
+  // Tracks integer IDs of rows added during this browser session so they are
+  // never silently dropped by a server-sync that lags behind the local writes.
+  const sessionAddedEntryIds = useRef<Set<number>>(new Set());
+
   // Undo/Redo tracking has been removed to ensure reliable Firestore database updates.
 
   // Column widths state for custom resizing
@@ -687,7 +700,13 @@ export default function RegisterPage() {
   const dataToSync = register || (Number(registerId) !== lastSyncId.current ? cachedRegister : null);
 
   const hasPendingDebounce = Object.keys(debounceTimers.current).length > 0;
-  if (Number(registerId) !== lastSyncId.current || (register && register !== lastSyncData.current && !hasPendingDebounce)) {
+  // ── Data-loss fix: also block sync if any row-add mutations are still running.
+  //    Without this check, a 60 s background refetch that lands while row mutations
+  //    are still in-flight would see a partial Firestore snapshot and overwrite the
+  //    locally-held entries that have already been promoted from temp→real integer ID
+  //    but whose Firestore writes haven't fully propagated to the snapshot yet.
+  const hasPendingRowMutations = pendingRowMutationsCount.current > 0;
+  if (Number(registerId) !== lastSyncId.current || (register && register !== lastSyncData.current && !hasPendingDebounce && !hasPendingRowMutations)) {
     if (Number(registerId) !== lastSyncId.current) {
       let loadedSelected: Set<number> = new Set();
       try {
@@ -706,6 +725,8 @@ export default function RegisterPage() {
         }
       } catch (e) {}
       setIsPreviewSelectedColumns(loadedPreview);
+      // Clear session row IDs when switching registers
+      sessionAddedEntryIds.current.clear();
     }
     lastSyncId.current = Number(registerId);
     lastSyncData.current = register;
@@ -715,12 +736,26 @@ export default function RegisterPage() {
       // during query cache synchronization
       const tempEntries = localEntries.filter((e) => !Number.isInteger(e.id));
       const incomingEntries = dataToSync.entries || [];
+      const incomingIdSet = new Set(incomingEntries.map((e: any) => e.id));
       const merged = [...incomingEntries];
+
+      // Preserve temp (float ID) entries not yet in server snapshot
       tempEntries.forEach((temp) => {
-        if (!incomingEntries.some((e: any) => e.id === temp.id)) {
+        if (!incomingIdSet.has(temp.id)) {
           merged.push(temp);
         }
       });
+
+      // ── Data-loss fix: also preserve session-added REAL (integer) entries that
+      //    are absent from this snapshot. This covers the race where onSuccess has
+      //    already replaced a temp ID with a real integer ID in localEntries but the
+      //    background refetch snapshot was taken before that write landed in Firestore.
+      localEntries.forEach((e) => {
+        if (Number.isInteger(e.id) && !incomingIdSet.has(e.id) && sessionAddedEntryIds.current.has(e.id)) {
+          merged.push(e);
+        }
+      });
+
       setLocalEntries(merged);
       // Initialize column settings (widths, summaries) from saved data
       if (dataToSync.columns) {
@@ -751,6 +786,7 @@ export default function RegisterPage() {
       setCalcTypes({});
     }
   }
+
 
   // Also sync localEntriesRef on every local state change
   useEffect(() => {
@@ -1983,6 +2019,10 @@ export default function RegisterPage() {
   const addEntryMutation = useMutation({
     mutationFn: (initialCells: Record<string, string> = {}) => addEntry(registerId, initialCells, currentPageIndex),
     onMutate: async (initialCells: Record<string, string> = {}) => {
+      // ── Data-loss fix: increment pending count BEFORE any async work so the
+      //    sync guard blocks background-refetch overwrites during this mutation.
+      pendingRowMutationsCount.current += 1;
+
       // Optimistic: add a temporary row instantly
       const currentPageRows = (entriesByPage[currentPageIndex] || []).length;
       const tempEntry: Entry = {
@@ -1997,6 +2037,13 @@ export default function RegisterPage() {
       return { tempId: tempEntry.id };
     },
     onSuccess: (newEntry, _vars, context) => {
+      // ── Data-loss fix: register the real integer ID so merge can protect it
+      //    even after the mutation count reaches zero.
+      sessionAddedEntryIds.current.add(newEntry.id);
+      // Decrement AFTER registering the ID so the guard is still active during
+      // the window between this and the next pending mutation's onSuccess.
+      pendingRowMutationsCount.current = Math.max(0, pendingRowMutationsCount.current - 1);
+
       // Invalidate queries for linked columns
       if (_vars) {
         Object.keys(_vars).forEach(colId => {
@@ -2034,10 +2081,13 @@ export default function RegisterPage() {
       _logWork('add_row', `Added new row #${newEntry.rowNumber}`);
     },
     onError: (_err, _vars, context) => {
+      // ── Data-loss fix: always decrement so the guard eventually unblocks
+      pendingRowMutationsCount.current = Math.max(0, pendingRowMutationsCount.current - 1);
       // Roll back temp entry
       setLocalEntries((prev) => prev.filter((e) => e.id !== context?.tempId));
     },
   });
+
 
   const deleteEntryMutation = useMutation({
     mutationFn: (entryId: number) => deleteEntry(Number(registerId), entryId),
