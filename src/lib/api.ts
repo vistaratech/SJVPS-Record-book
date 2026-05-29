@@ -1179,7 +1179,16 @@ function resolveColumnType(
   if (nonEmpty.length > 0) {
     // Check if most values look like dates (DD-MM-YYYY, YYYY-MM-DD, etc.)
     const datePattern = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/;
-    const dateCount = nonEmpty.filter((v) => datePattern.test(String(v).trim())).length;
+    const dateCount = nonEmpty.filter((v) => {
+      const sVal = String(v).trim();
+      const match = sVal.match(datePattern);
+      if (!match) return false;
+      const year = parseInt(match[3]);
+      // Ignore year 1900 dates (which are actually misclassified serial numbers 1, 2, 3)
+      if (match[3].length === 4 && year === 1900) return false;
+      if (match[1].length === 4 && parseInt(match[1]) === 1900) return false;
+      return true;
+    }).length;
     if (dateCount >= nonEmpty.length * 0.6) {
       return { type: 'date' };
     }
@@ -1294,6 +1303,36 @@ export const importExcelData = async (
     createdReg.columns.forEach((col) => {
       let val = row[col.name];
       if (val !== undefined && val !== null && val !== '') {
+        // If SheetJS mistakenly converted a small serial number (like 1, 2, 3) to a 1900 date string (like "01/01/1900" or "01-01-1900"),
+        // convert it back to the original serial number to prevent it from saving as a date.
+        const sVal = String(val).trim();
+        const dateMatch = sVal.replace(/[\/.]/g, '-').match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+        const dateMatchYMD = sVal.replace(/[\/.]/g, '-').match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        
+        let is1900Date = false;
+        let day = 1, month = 1, year = 1900;
+        
+        if (dateMatch) {
+          day = parseInt(dateMatch[1]);
+          month = parseInt(dateMatch[2]);
+          year = parseInt(dateMatch[3]);
+          if (year === 1900) is1900Date = true;
+        } else if (dateMatchYMD) {
+          year = parseInt(dateMatchYMD[1]);
+          month = parseInt(dateMatchYMD[2]);
+          day = parseInt(dateMatchYMD[3]);
+          if (year === 1900) is1900Date = true;
+        }
+        
+        if (is1900Date) {
+          const monthDays = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+          let serial = day;
+          for (let m = 1; m < month; m++) {
+            serial += monthDays[m];
+          }
+          val = serial.toString();
+        }
+
         // Use unified date formatter for consistency across import, display, and storage
         if (col.type === 'date') {
           val = formatDateToDDMMYYYY(val);

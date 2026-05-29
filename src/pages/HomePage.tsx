@@ -265,7 +265,7 @@ export default function HomePage() {
               }
             }
 
-            const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, string>[];
+            const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true }) as Record<string, string>[];
             const metaWs = wb.Sheets[wb.SheetNames.find(n => n.toLowerCase() === '_metadata_') || ''];
             let metadata: any[] = metaWs ? XLSX.utils.sheet_to_json(metaWs) : [];
 
