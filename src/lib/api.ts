@@ -1,7 +1,7 @@
 // Firestore-backed API client for RecordBook Web
 import { db } from './firebase';
 import {
-  collection, doc, getDocs, getDoc, getDocsFromServer, setDoc, deleteDoc, query, where, orderBy,
+  collection, doc, getDocs, getDoc, getDocFromServer, getDocsFromServer, setDoc, deleteDoc, query, where, orderBy,
 } from 'firebase/firestore';
 import { TEMPLATES, type Template, type TemplateColumn } from './templates';
 // Local filesystem completely unmounted from regular API.
@@ -392,7 +392,7 @@ async function getRegDoc(registerId: number): Promise<RegisterDetail> {
   if (!fetchPromise) {
     fetchPromise = (async () => {
       try {
-        const snap = await getDoc(regDoc(registerId));
+        const snap = await getDocFromServer(regDoc(registerId));
         if (!snap.exists()) throw new Error('Register not found');
         const data = snap.data() as RegisterDetail;
 

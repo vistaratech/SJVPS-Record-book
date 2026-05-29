@@ -121,10 +121,12 @@ export default function RegisterPage() {
     queryFn: () => getRegister(Number(registerId)),
     enabled: !!registerId && !isNaN(Number(registerId)),
     staleTime: 10 * 1000,
-    // ── Data-loss fix: refetch slowly enough that all queued Firestore writes
-    //    land before the next poll overwrites localEntries.
-    refetchOnWindowFocus: false, // Window-focus refetch races with pending writes — keep disabled
-    refetchInterval: 60 * 1000,  // 60 s background poll (was 15 s — too aggressive for rapid row entry)
+    // Re-enabled: the sync guard (hasPendingDebounce + hasPendingRowMutations at
+    // the merge block below) already blocks localEntries overwrites when writes are
+    // in-flight, so window-focus refetch is safe and ensures users see fresh data
+    // when switching back to the tab.
+    refetchOnWindowFocus: true,
+    refetchInterval: 30 * 1000,  // 30 s background poll — balanced between freshness and write safety
     placeholderData: keepPreviousData,
   });
 
