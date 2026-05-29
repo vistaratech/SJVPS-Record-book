@@ -1437,10 +1437,17 @@ function getColumnRegex(name: string): RegExp {
 }
 
 // Cache evaluated formulas per entry object to avoid redundant heavy calculations (especially in stats loops)
-const _formulaResultCache = new WeakMap<Entry, Map<string, string>>();
+let _formulaResultCache = new WeakMap<Entry, Map<string, string>>();
+let _lastColumnsRef: Column[] | null = null;
 
 export function evaluateFormula(formula: string, entry: Entry, columns: Column[]): string {
   if (!formula || formula.trim() === '') return '';
+
+  // Invalidate and clear formula result cache if columns list changed (reordered, added, deleted, renamed, or modified)
+  if (columns !== _lastColumnsRef) {
+    _lastColumnsRef = columns;
+    _formulaResultCache = new WeakMap<Entry, Map<string, string>>();
+  }
 
   // Check cache first
   let entryCache = _formulaResultCache.get(entry);
