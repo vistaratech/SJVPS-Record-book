@@ -10,10 +10,11 @@ import {
   clearRegisterCache,
   listRowHistory,
   restoreEntry, bulkRestoreEntries, restoreColumn,
-  renamePage, deletePage,
+  addPage, renamePage, deletePage,
   evaluateFormula,
   generateShareLink, addSharedUser, removeSharedUser,
   subscribeToMutationStatus, updateEntriesOrder, flushAllPendingWrites,
+  getPendingMutationsCount,
   updateEntryCellStyles, unlinkColumn,
   formatDateToDDMMYYYY,
   listFolders,
@@ -49,6 +50,12 @@ import { firebaseLogWorkspaceAction } from '../lib/firebaseAuth';
 import { ImageCompressionModule } from '../lib/imageCompressionModule';
 import { DataPersistenceModule } from '../lib/dataPersistenceModule';
 import { StorageOptimizerModal } from '../components/register/modals/StorageOptimizerModal';
+import { RowDetailModal } from '../components/register/modals/RowDetailModal';
+import { ImagePreviewModal } from '../components/register/modals/ImagePreviewModal';
+import { ReminderModal } from '../components/register/modals/ReminderModal';
+import { RemindersSummaryModal } from '../components/register/modals/RemindersSummaryModal';
+import { FloatingSelectionToolbar } from '../components/register/FloatingSelectionToolbar';
+import { CalcMenuPopover } from '../components/register/menus/CalcMenuPopover';
 
 type CalcType = 'sum' | 'average' | 'count' | 'min' | 'max' | 'filled' | 'empty' | 'distinct' | 'none';
 
@@ -110,11 +117,6 @@ export default function RegisterPage() {
     return null;
   };
 
-  // Clear stale in-memory cache on mount to force fresh Firestore load
-  useEffect(() => {
-    clearRegisterCache(registerId);
-    queryClient.invalidateQueries({ queryKey: ['register', registerId] });
-  }, [registerId]);
 
   const { data: register, isLoading, error } = useQuery({
     queryKey: ['register', registerId],
@@ -357,6 +359,7 @@ export default function RegisterPage() {
   const [storageOptimizerOpen, setStorageOptimizerOpen] = useState(false);
   const [storageOptimizerTab, setStorageOptimizerTab] = useState<'analytics' | 'config' | 'sandbox' | 'chunks' | 'ledger'>('analytics');
   const [activeSyncCount, setActiveSyncCount] = useState(0);
+  const [savingCells, setSavingCells] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const unsubscribe = DataPersistenceModule.subscribe((ledger) => {
@@ -425,8 +428,6 @@ export default function RegisterPage() {
   }, [detailErrors]);
   const detailInputRefs = useRef<Map<number, HTMLElement>>(new Map());
   const [previewImage, setPreviewImage] = useState<{ url: string; entryId?: number; colId?: string } | null>(null);
-  const [previewImageIndex, setPreviewImageIndex] = useState(0);
-  const [isImgZoomed, setIsImgZoomed] = useState(false);
   const [showRowAuditTrail, setShowRowAuditTrail] = useState(false);
   const [rowAuditHistory, setRowAuditHistory] = useState<HistoryEntry[]>([]);
   const [rowAuditLoading, setRowAuditLoading] = useState(false);
@@ -441,13 +442,6 @@ export default function RegisterPage() {
   const [reminderMessage, setReminderMessage] = useState('');
   const [reminderStatus, setReminderStatus] = useState<'Pending' | 'Complete'>('Pending');
   const [showRemindersSummary, setShowRemindersSummary] = useState(false);
-  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
-  const [editRemMessage, setEditRemMessage] = useState('');
-  const [editRemStatus, setEditRemStatus] = useState<'Pending' | 'Complete'>('Pending');
-  const [editRemDate, setEditRemDate] = useState('');
-  const [editRemTime, setEditRemTime] = useState('');
-  const [editRemCellValue, setEditRemCellValue] = useState('');
-  const [inlineCellValues, setInlineCellValues] = useState<Record<string, string>>({});
 
 
   // New column form (shared by Add Column and Insert Column)
@@ -525,7 +519,7 @@ export default function RegisterPage() {
   const [sharePermission, setSharePermission] = useState<'view' | 'edit'>('view');
   const [showExportModal, setShowExportModal] = useState(false);
   // Rename page
-  const [renamePageId] = useState<number | null>(null);
+  const [renamePageId, setRenamePageId] = useState<number | null>(null);
   const [renamePageValue, setRenamePageValue] = useState('');
 
   const [calcMenu, setCalcMenu] = useState<{ colId: number; rect: DOMRect } | null>(null);
@@ -708,7 +702,14 @@ export default function RegisterPage() {
   //    locally-held entries that have already been promoted from temp→real integer ID
   //    but whose Firestore writes haven't fully propagated to the snapshot yet.
   const hasPendingRowMutations = pendingRowMutationsCount.current > 0;
-  if (Number(registerId) !== lastSyncId.current || (register && register !== lastSyncData.current && !hasPendingDebounce && !hasPendingRowMutations)) {
+
+  // ── Data-loss fix: also block sync if there are any active/in-flight database mutations
+  //    (such as cell updates that have fired their debounce but are still persisting).
+  //    Without this, a background poll or window-focus refetch could land during a write,
+  //    reverting the local UI/cache entries to the old server snapshot and causing data loss.
+  const hasPendingMutations = getPendingMutationsCount() > 0;
+
+  if (Number(registerId) !== lastSyncId.current || (register && register !== lastSyncData.current && !hasPendingDebounce && !hasPendingRowMutations && !hasPendingMutations)) {
     if (Number(registerId) !== lastSyncId.current) {
       let loadedSelected: Set<number> = new Set();
       try {
@@ -2228,7 +2229,22 @@ export default function RegisterPage() {
     },
   });
 
-  /* Unused: addPageMutation */
+  const addPageMutation = useMutation({
+    mutationFn: (pageName?: string) => addPage(registerId, pageName),
+    onSuccess: (newPage) => {
+      queryClient.setQueryData(['register', registerId], (old: any) => {
+        if (!old) return old;
+        const pages = [...(old.pages || []), newPage];
+        return { ...old, pages };
+      });
+      queryClient.invalidateQueries({ queryKey: ['register', registerId] });
+      toast.success('New sheet added successfully');
+      setCurrentPageIndex(newPage.index);
+    },
+    onError: () => {
+      toast.error('Failed to add sheet');
+    }
+  });
 
   const renamePageMutation = useMutation({
     mutationFn: () => renamePage(registerId, renamePageId!, renamePageValue),
@@ -2456,6 +2472,13 @@ export default function RegisterPage() {
       };
       return true;
     }
+
+    const cellKey = `${entryId}-${columnId}`;
+    setSavingCells(prev => {
+      const next = new Set(prev);
+      next.add(cellKey);
+      return next;
+    });
 
     if (isImageColumn) {
       const entryIdx = localEntriesRef.current.findIndex(e => e.id === entryId);
@@ -2695,6 +2718,12 @@ export default function RegisterPage() {
           toast.error(errorMsg, { duration: 6000 });
           
           throw err;
+        } finally {
+          setSavingCells(prev => {
+            const next = new Set(prev);
+            next.delete(cellKey);
+            return next;
+          });
         }
       };
       
@@ -2729,6 +2758,13 @@ export default function RegisterPage() {
             const rowIdx = localEntriesRef.current.findIndex(e => e.id === entryId);
             const displayVal = value.length > 50 ? value.substring(0, 50) + '...' : value;
             _logWork('edit_cells', `Updated value to "${displayVal}" in cell [Row #${rowIdx + 1}, Column: ${col?.name || columnId}]`);
+            
+            // Remove from saving cells on success
+            setSavingCells(prev => {
+              const next = new Set(prev);
+              next.delete(cellKey);
+              return next;
+            });
           } catch (err: any) {
             if (attempt < 3) {
               console.warn(`[CellSave] Attempt ${attempt}/3 failed, retrying in ${attempt}s...`);
@@ -2738,6 +2774,13 @@ export default function RegisterPage() {
             DataPersistenceModule.updateLedgerStatus(ledgerId, 'failed', err?.message || err?.toString());
 
             toast.error('Failed to save edit. Please check your connection and try again.', { duration: 4000 });
+            
+            // Remove from saving cells on exhausted failures
+            setSavingCells(prev => {
+              const next = new Set(prev);
+              next.delete(cellKey);
+              return next;
+            });
           }
         };
         saveWithRetry();
@@ -3080,10 +3123,10 @@ export default function RegisterPage() {
   // With 200+ columns, rendering all cols even for 30 visible rows = 6,000+ DOM nodes.
   // Column virtualization is the critical fix for large horizontal datasets.
   //
-  // Threshold: virtualize whenever >50 rows OR >20 columns to keep the DOM lean.
-  const VIRTUALIZATION_THRESHOLD = 50;
+  // Threshold: virtualize whenever >1000 rows OR >20 columns to keep the DOM lean.
+  const VIRTUALIZATION_THRESHOLD = 1000;
   const COL_VIRTUALIZATION_THRESHOLD = 20;
-  const useVirtual = displayEntries.length > VIRTUALIZATION_THRESHOLD || visibleColumns.length > COL_VIRTUALIZATION_THRESHOLD;
+  const useVirtualRows = displayEntries.length > VIRTUALIZATION_THRESHOLD;
   const useColVirtual = visibleColumns.length > COL_VIRTUALIZATION_THRESHOLD;
 
   const parentRef = useRef<HTMLDivElement>(null);
@@ -3108,8 +3151,8 @@ export default function RegisterPage() {
     count: displayEntries.length,
     getScrollElement: () => parentRef.current,
     estimateSize: useCallback(() => dynamicRowHeight, [dynamicRowHeight]),
-    overscan: 10,
-    enabled: useVirtual,
+    overscan: 25,
+    enabled: useVirtualRows,
     initialOffset: initialScrollRef.current?.top || 0,
     initialRect,
     getItemKey: useCallback((index: number) => {
@@ -3214,7 +3257,7 @@ export default function RegisterPage() {
       return col ? (colWidths[col.id] || defaultColWidth) : defaultColWidth;
     }, [visibleColumns, colWidths, defaultColWidth]),
     horizontal: true,
-    overscan: 5,
+    overscan: 10,
     enabled: useColVirtual,
     initialOffset: initialScrollRef.current?.left || 0,
     initialRect,
@@ -3226,14 +3269,14 @@ export default function RegisterPage() {
     colVirtualizer.measure();
   }, [visibleColumns, colWidths, colVirtualizer]);
 
-  const virtualRows = useVirtual ? rowVirtualizer.getVirtualItems() : displayEntries.map((e, i) => ({ index: i, start: i * dynamicRowHeight, end: (i + 1) * dynamicRowHeight, size: dynamicRowHeight, key: e?.id ?? i, lane: 0 }));
+  const virtualRows = useVirtualRows ? rowVirtualizer.getVirtualItems() : displayEntries.map((e, i) => ({ index: i, start: i * dynamicRowHeight, end: (i + 1) * dynamicRowHeight, size: dynamicRowHeight, key: e?.id ?? i, lane: 0 }));
   const virtualCols = useColVirtual ? colVirtualizer.getVirtualItems() : visibleColumns.map((_, i) => ({ index: i, start: 0, end: 0, size: colWidths[visibleColumns[i]?.id] || defaultColWidth, key: i, lane: 0 }));
 
-  const totalVirtualHeight = useVirtual ? rowVirtualizer.getTotalSize() : displayEntries.length * dynamicRowHeight;
+  const totalVirtualHeight = useVirtualRows ? rowVirtualizer.getTotalSize() : displayEntries.length * dynamicRowHeight;
   const totalVirtualWidth = useColVirtual ? colVirtualizer.getTotalSize() : visibleColumns.reduce((sum, col) => sum + (colWidths[col.id] || defaultColWidth), 0);
   
-  const paddingTop = useVirtual && virtualRows.length > 0 ? virtualRows[0].start : 0;
-  const paddingBottom = useVirtual && virtualRows.length > 0 ? totalVirtualHeight - virtualRows[virtualRows.length - 1].end : 0;
+  const paddingTop = useVirtualRows && virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const paddingBottom = useVirtualRows && virtualRows.length > 0 ? totalVirtualHeight - virtualRows[virtualRows.length - 1].end : 0;
   // Horizontal padding for the column virtualizer
   let paddingLeft = useColVirtual && virtualCols.length > 0 ? virtualCols[0].start : 0;
   let paddingRight = useColVirtual && virtualCols.length > 0 ? totalVirtualWidth - virtualCols[virtualCols.length - 1].end : 0;
@@ -3640,8 +3683,8 @@ export default function RegisterPage() {
           <tbody>
             {/* Top row spacer for virtualized rows */}
             {paddingTop > 0 && (
-              <tr>
-                <td className="spacer" style={{ height: `${paddingTop}px`, padding: 0, border: 'none', lineHeight: 0 }} colSpan={visibleColumns.length + 4} />
+              <tr key="virtual-spacer-top" aria-hidden="true" style={{ visibility: 'hidden' }}>
+                <td style={{ height: `${paddingTop}px`, padding: 0, border: 'none', lineHeight: 0 }} colSpan={visibleColumns.length + 4} />
               </tr>
             )}
             {virtualRows.map((virtualRow) => {
@@ -3663,10 +3706,7 @@ export default function RegisterPage() {
                   scrollToColumn={scrollToColumn}
                   isSelected={selectedRows.has(entry.id)}
                   toggleSelectRow={toggleSelectRow}
-                  handleCellChange={(eid, cid, val) => {
-                    if (_editableColumnIds && !_editableColumnIds.has(Number(cid))) return false;
-                    return handleCellChange(eid, cid, val);
-                  }}
+                  handleCellChange={handleCellChange}
                   openDatePicker={openDatePicker}
                   openDropdown={openDropdown}
                   isMenuOpen={rowMenuId === entry.id}
@@ -3684,12 +3724,13 @@ export default function RegisterPage() {
                   searchTerm={deferredSearch || undefined}
                   editableColumnIds={_editableColumnIds}
                   columnSuggestions={columnSuggestions}
+                  savingCells={savingCells}
                 />
               );
             })}
             {paddingBottom > 0 && (
-              <tr>
-                <td className="spacer" style={{ height: `${paddingBottom}px`, padding: 0, border: 'none', lineHeight: 0 }} colSpan={visibleColumns.length + 4} />
+              <tr key="virtual-spacer-bottom" aria-hidden="true" style={{ visibility: 'hidden' }}>
+                <td style={{ height: `${paddingBottom}px`, padding: 0, border: 'none', lineHeight: 0 }} colSpan={visibleColumns.length + 4} />
               </tr>
             )}
             {/* Empty state when search/filter yields no results */}
@@ -3755,80 +3796,20 @@ export default function RegisterPage() {
           </table>
         </div>
 
+
       {/* ── Floating Selection Toolbar ── */}
-      {selectedRows.size > 0 && (
-        <div className="selection-toolbar">
-          <div className="selection-toolbar-info">
-            <CheckSquare size={16} />
-            <span><strong>{selectedRows.size}</strong> row{selectedRows.size > 1 ? 's' : ''} selected</span>
-          </div>
-          <div className="selection-toolbar-actions">
-            <button
-              className="selection-toolbar-btn excel"
-              onClick={() => {
-                const targetColIds = columns
-                  .filter(c => {
-                    if (hiddenColumns.has(c.id)) return false;
-                    if (c.type === 'image') return false;
-                    if (downloadableColumnIds && !downloadableColumnIds.has(c.id)) return false;
-                    if (isPreviewSelectedColumns && selectedColumns.size > 0 && !selectedColumns.has(c.id)) return false;
-                    return true;
-                  })
-                  .map(c => c.id);
-                handleExportExcel({
-                  format: 'excel',
-                  exportRows: 'selected',
-                  selectedColumnIds: new Set(targetColIds),
-                  includeHeading: true,
-                  includeDateTime: false,
-                });
-              }}
-            >
-              <Download size={14} /> Excel
-            </button>
-            <button
-              className="selection-toolbar-btn pdf"
-              onClick={() => {
-                const targetColIds = columns
-                  .filter(c => {
-                    if (hiddenColumns.has(c.id)) return false;
-                    if (c.type === 'image') return false;
-                    if (downloadableColumnIds && !downloadableColumnIds.has(c.id)) return false;
-                    if (isPreviewSelectedColumns && selectedColumns.size > 0 && !selectedColumns.has(c.id)) return false;
-                    return true;
-                  })
-                  .map(c => c.id);
-                handleExportPDF({
-                  format: 'pdf',
-                  exportRows: 'selected',
-                  selectedColumnIds: new Set(targetColIds),
-                  includeHeading: true,
-                  includeDateTime: false,
-                });
-              }}
-            >
-              <FileText size={14} /> PDF
-            </button>
-            <button
-              className="selection-toolbar-btn delete"
-              onClick={() => {
-                if (confirm(`Delete ${selectedRows.size} selected row(s)?`)) {
-                  bulkDeleteMutation.mutate(Array.from(selectedRows));
-                }
-              }}
-            >
-              <Trash2 size={14} /> Delete
-            </button>
-            <button
-              className="selection-toolbar-btn clear"
-              onClick={() => setSelectedRows(new Set())}
-              title="Clear selection"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
+      <FloatingSelectionToolbar
+        selectedRows={selectedRows}
+        setSelectedRows={setSelectedRows}
+        columns={columns}
+        hiddenColumns={hiddenColumns}
+        downloadableColumnIds={downloadableColumnIds}
+        isPreviewSelectedColumns={isPreviewSelectedColumns}
+        selectedColumns={selectedColumns}
+        handleExportExcel={handleExportExcel}
+        handleExportPDF={handleExportPDF}
+        bulkDeleteMutation={bulkDeleteMutation}
+      />
       {/* ── Context Menus ── */}
       <RegisterContextMenus 
         colMenuId={colMenuId} colMenuRect={colMenuRect} setColMenuId={setColMenuId} columns={columns}
@@ -4068,926 +4049,101 @@ export default function RegisterPage() {
       />
 
       {/* Row Detail View Modal (Direct Edit Mode) */}
-      {/* Row Detail View Modal (Direct Edit Mode) */}
-      {detailViewEntry && (() => {
-        const isRowEditable = !_canEditAny ? false : (!_rowEditRange ? true : (() => {
-          const num = detailViewEntry.rowNumber;
-          const { start, end } = _rowEditRange;
-          if (start !== undefined && num < start) return false;
-          if (end !== undefined && num > end) return false;
-          return true;
-        })());
-
-        const isRowDownloadable = _canDownloadAny && (() => {
-          if (!rowDownloadRange) return true;
-          const num = detailViewEntry.rowNumber;
-          const { start, end } = rowDownloadRange;
-          if (start !== undefined && num < start) return false;
-          if (end !== undefined && num > end) return false;
-          return true;
-        })();
-
-        return (
-        <div className="row-detail-overlay" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }}>
-          <div className="row-detail-modal" onClick={e => e.stopPropagation()}>
-            <div className="row-detail-header">
-              <div className="row-detail-title">
-                <span className="row-detail-badge">Row #{(localEntries.findIndex(e => e.id === detailViewEntry.id) + 1)}</span>
-                <h2>Record Details</h2>
-                <button
-                  className="row-audit-trail-btn"
-                  title="View row change history"
-                  onClick={async () => {
-                    if (showRowAuditTrail) {
-                      setShowRowAuditTrail(false);
-                      return;
-                    }
-                    setShowRowAuditTrail(true);
-                    setRowAuditLoading(true);
-                    try {
-                      const history = await listRowHistory(registerId, detailViewEntry.id);
-                      setRowAuditHistory(history);
-                    } catch (err) {
-                      console.error('Failed to load row history:', err);
-                      setRowAuditHistory([]);
-                    } finally {
-                      setRowAuditLoading(false);
-                    }
-                  }}
-                >
-                  <Clock size={15} />
-                </button>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {isRowDownloadable && (
-                  <button
-                    className="pab-tab-action-btn"
-                    style={{ borderColor: '#fca5a5', color: '#dc2626' }}
-                    onClick={() => handleRowDownloadPDF(detailViewEntry.id)}
-                    title="Download PDF"
-                  >
-                    <FileText size={14} /> PDF
-                  </button>
-                )}
-                {isRowDownloadable && (
-                  <button
-                    className="pab-tab-action-btn"
-                    style={{ borderColor: '#86efac', color: '#16a34a' }}
-                    onClick={() => handleRowDownloadExcel(detailViewEntry.id)}
-                    title="Download Excel"
-                  >
-                    <Download size={14} /> Excel
-                  </button>
-                )}
-                <button className="row-detail-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }} aria-label="Close">✕</button>
-              </div>
-            </div>
-
-            {/* Row Audit Trail Panel */}
-            {showRowAuditTrail && (
-              <div className="row-audit-trail-panel">
-                <div className="row-audit-trail-header">
-                  <div className="row-audit-trail-title">
-                    <Clock size={14} />
-                    <span>Change History</span>
-                  </div>
-                  <button className="row-audit-trail-close" onClick={() => setShowRowAuditTrail(false)}>
-                    <X size={14} />
-                  </button>
-                </div>
-                <div className="row-audit-trail-content">
-                  {rowAuditLoading ? (
-                    <div className="row-audit-trail-loading">
-                      <div className="row-audit-spinner" />
-                      <span>Loading history…</span>
-                    </div>
-                  ) : rowAuditHistory.length === 0 ? (
-                    <div className="row-audit-trail-empty">
-                      <Clock size={28} style={{ opacity: 0.25 }} />
-                      <p>No change history found for this row.</p>
-                      <span>Changes will appear here after the next edit or save.</span>
-                    </div>
-                  ) : (
-                    <div className="row-audit-timeline">
-                      {rowAuditHistory.map((h, idx) => {
-                        const dt = new Date(h.timestamp);
-                        const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-                        const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-                        const isFirst = idx === 0;
-                        const actionColor =
-                          h.action === 'Edit Row' ? '#3b82f6' :
-                          h.action === 'Add Row' || h.action === 'Insert Row' ? '#16a34a' :
-                          h.action === 'Delete Row' ? '#dc2626' :
-                          h.action === 'Restore Row' ? '#8b5cf6' : '#64748b';
-
-                        return (
-                          <div key={h.id} className={`row-audit-item ${isFirst ? 'latest' : ''}`}>
-                            <div className="row-audit-item-dot" style={{ borderColor: actionColor }}>
-                              <div className="row-audit-item-dot-inner" style={{ background: actionColor }} />
-                            </div>
-                            {idx < rowAuditHistory.length - 1 && <div className="row-audit-item-connector" />}
-                            <div className="row-audit-item-content">
-                              <div className="row-audit-item-top">
-                                <span className="row-audit-action-badge" style={{ background: actionColor }}>{h.action}</span>
-                                {isFirst && <span className="row-audit-latest-tag">Latest</span>}
-                              </div>
-                              <p className="row-audit-item-details">{h.details}</p>
-                              <div className="row-audit-item-meta">
-                                <span className="row-audit-meta-user">{h.userName || 'Unknown User'}</span>
-                                <span className="row-audit-meta-sep">•</span>
-                                <span className="row-audit-meta-date">{dateStr}</span>
-                                <span className="row-audit-meta-sep">•</span>
-                                <span className="row-audit-meta-time">{timeStr}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="row-detail-body">
-              {(() => {
-                const modalColumns = (isPreviewSelectedColumns && selectedColumns.size > 0)
-                  ? columns.filter(col => selectedColumns.has(col.id))
-                  : columns;
-
-                const handleDetailKeyDown = (e: React.KeyboardEvent, currentId: number) => {
-                  const currentIndex = modalColumns.findIndex(c => c.id === currentId);
-                  
-                  if (e.key === 'Enter' || (e.key === 'ArrowDown' && (e.target as HTMLElement).tagName !== 'SELECT')) {
-                    e.preventDefault();
-                    const nextCol = modalColumns[currentIndex + 1];
-                    if (nextCol) {
-                      detailInputRefs.current.get(nextCol.id)?.focus();
-                    }
-                  } else if (e.key === 'ArrowUp' && (e.target as HTMLElement).tagName !== 'SELECT') {
-                    e.preventDefault();
-                    const prevCol = modalColumns[currentIndex - 1];
-                    if (prevCol) {
-                      detailInputRefs.current.get(prevCol.id)?.focus();
-                    }
-                  }
-                };
-
-                return modalColumns.map((col) => {
-                  const colKey = col.id.toString();
-                  const val = detailEdits[colKey] ?? '';
-                  const isFieldEditable = isRowEditable && (!_editableColumnIds || _editableColumnIds.has(col.id)) && col.type !== 'auto_increment' && col.type !== 'formula';
-
-                  return (
-                    <div className={`row-detail-field ${col.type}-field`} key={col.id}>
-                      <div className="row-detail-label-container">
-                        <div className="row-detail-label-group">
-                          <label className="row-detail-label">
-                            {col.name}
-                            {col.type === 'formula' && <FlaskConical size={10} style={{ marginLeft: 4, opacity: 0.6 }} />}
-                          </label>
-                          <span className="row-detail-type-badge">{col.type.replace('_', ' ')}</span>
-                        </div>
-                        {_canEditAny && (
-                          <button 
-                            className="row-detail-col-btn" 
-                            title="Column Settings"
-                            onClick={() => {
-                              setActiveModalColId(col.id);
-                              setChangeTypeValue(col.type);
-                              if (col.type === 'formula') setNewColFormula(col.formula || '');
-                              if (col.type === 'dropdown') setNewColDropdownOpts((col.dropdownOptions || []).join(', '));
-                              setChangeTypeModal(true);
-                            }}
-                          >
-                            <ChevronDown size={12} />
-                          </button>
-                        )}
-                      </div>
-                      
-                      <div className="row-detail-input-wrapper">
-                        {col.type === 'dropdown' ? (
-                          <div className="row-detail-input-wrapper">
-                            <div 
-                              className={`row-detail-input cell-dropdown ${detailErrors[colKey] ? 'invalid' : ''} ${!isFieldEditable ? 'cell-readonly' : ''}`}
-                              tabIndex={isFieldEditable ? 0 : -1}
-                              ref={(el) => {
-                                if (el) detailInputRefs.current.set(col.id, el);
-                                else detailInputRefs.current.delete(col.id);
-                              }}
-                              onKeyDown={(e) => {
-                                if (!isFieldEditable) {
-                                  handleDetailKeyDown(e, col.id);
-                                  return;
-                                }
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                  openDropdown(detailViewEntry.id, col.id, col.dropdownOptions || [], rect as DOMRect);
-                                } else handleDetailKeyDown(e, col.id);
-                              }}
-                              onClick={isFieldEditable ? (e) => {
-                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                openDropdown(detailViewEntry.id, col.id, col.dropdownOptions || [], rect as DOMRect);
-                                if (detailErrors[colKey]) setDetailErrors(prev => ({ ...prev, [colKey]: null }));
-                              } : undefined}
-                            >
-                              {val || 'Select options...'}
-                            </div>
-                            {detailErrors[colKey] && (
-                              <div className="row-detail-error-msg">
-                                <AlertCircle size={10} />
-                                {detailErrors[colKey]}
-                              </div>
-                            )}
-                          </div>
-                        ) : col.type === 'checkbox' ? (
-                          <div 
-                            className={`row-detail-checkbox-wrapper ${!isFieldEditable ? 'cell-readonly' : ''}`}
-                            tabIndex={isFieldEditable ? 0 : -1}
-                            ref={(el) => {
-                              if (el) detailInputRefs.current.set(col.id, el);
-                              else detailInputRefs.current.delete(col.id);
-                            }}
-                            onKeyDown={(e) => {
-                              if (!isFieldEditable) {
-                                handleDetailKeyDown(e, col.id);
-                                return;
-                              }
-                              if (e.key === ' ') {
-                                e.preventDefault();
-                                setDetailEdits(prev => ({ ...prev, [colKey]: (val === 'true' || val === 'Checked') ? 'false' : 'true' }));
-                              } else {
-                                handleDetailKeyDown(e, col.id);
-                              }
-                            }}
-                            onClick={isFieldEditable ? () => setDetailEdits(prev => ({ ...prev, [colKey]: (val === 'true' || val === 'Checked') ? 'false' : 'true' })) : undefined}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={val === 'true' || val === 'Checked'}
-                              disabled={!isFieldEditable}
-                              readOnly
-                            />
-                            <span className="checkbox-label">{val === 'true' || val === 'Checked' ? 'Checked' : 'Unchecked'}</span>
-                          </div>
-                        ) : col.type === 'date' ? (
-                          <div className="row-detail-input-wrapper">
-                            <input 
-                              type="text"
-                              className={`row-detail-input cell-date ${detailErrors[colKey] ? 'invalid' : ''} ${!isFieldEditable ? 'cell-readonly' : ''}`} 
-                              value={val}
-                              placeholder={isFieldEditable ? "DD-MM-YYYY" : "—"}
-                              autoComplete="off"
-                              readOnly={!isFieldEditable}
-                              onChange={(e) => {
-                                if (!isFieldEditable) return;
-                                setDetailEdits(prev => ({ ...prev, [colKey]: e.target.value }));
-                                if (detailErrors[colKey]) setDetailErrors(prev => ({ ...prev, [colKey]: null }));
-                              }}
-                              onClick={isFieldEditable ? (e) => {
-                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                openDatePicker(detailViewEntry.id, col.id, val, rect as DOMRect);
-                              } : undefined}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Backspace' || e.key === 'Delete') {
-                                  e.preventDefault();
-                                  return;
-                                }
-                                if (e.key === 'Enter' && isFieldEditable) {
-                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                  openDatePicker(detailViewEntry.id, col.id, val, rect as DOMRect);
-                                } else {
-                                  handleDetailKeyDown(e, col.id);
-                                }
-                              }}
-                              ref={(el) => {
-                                if (el) detailInputRefs.current.set(col.id, el);
-                                else detailInputRefs.current.delete(col.id);
-                              }}
-                            />
-                            {detailErrors[colKey] && (
-                              <div className="row-detail-error-msg">
-                                <AlertCircle size={10} />
-                                {detailErrors[colKey]}
-                              </div>
-                            )}
-                          </div>
-                        ) : col.type === 'image' ? (
-                          <div className="row-detail-image-field">
-                            {val ? (
-                              <div className="row-detail-image-container">
-                                <div className="row-detail-img-wrapper" onClick={() => setPreviewImage({ url: val, entryId: detailViewEntry.id, colId: col.id.toString() })}>
-                                  <img 
-                                    src={val.split('|||')[0]} 
-                                    alt="preview" 
-                                    className="row-detail-img-preview" 
-                                  />
-                                  {val.split('|||').length > 1 && (
-                                    <div className="cell-image-count-badge" style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.6)', color: 'white', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', zIndex: 2 }}>
-                                      +{val.split('|||').length - 1}
-                                    </div>
-                                  )}
-                                  <div className="row-detail-img-overlay">
-                                    <Maximize2 size={24} color="white" />
-                                    <span>Quick Reveal</span>
-                                  </div>
-                                </div>
-                                <div className="row-detail-image-actions">
-                                  <button className="row-detail-img-btn" onClick={() => setPreviewImage({ url: val, entryId: detailViewEntry.id, colId: col.id.toString() })}>View Large</button>
-                                  {val.split('|||').length === 1 && <button className="row-detail-img-btn" onClick={() => handleImageDownload(val.split('|||')[0])}>Download</button>}
-                                  {isFieldEditable && <button className="row-detail-img-btn danger" onClick={() => handleCellChange(detailViewEntry.id, colKey, '')}>Remove All</button>}
-                                </div>
-                                
-                                {isFieldEditable && (
-                                  uploadingCells[colKey] ? (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)', padding: '6px', marginTop: '8px' }}>
-                                      <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(0,0,0,0.1)', borderLeftColor: 'var(--primary)' }} />
-                                      <span style={{ fontSize: '13px', fontWeight: 500 }}>Adding another photo...</span>
-                                    </div>
-                                  ) : (
-                                    <label className="row-detail-add-btn">
-                                      <input 
-                                        type="file" 
-                                        accept="image/*" 
-                                        hidden 
-                                        onChange={(e) => {
-                                          const file = e.target.files?.[0];
-                                          if (file) {
-                                            console.log(`[Detail View - Image Selected] Selected file for row #${detailViewEntry.id}, column #${colKey}:`, file.name, `${(file.size / 1024).toFixed(1)} KB`);
-                                            setUploadingCells(prev => ({ ...prev, [colKey]: true }));
-                                            setUploadingImagesCount(prev => prev + 1);
-                                            console.log(`[Detail View - Image Upload] Starting compression & upload...`);
-                                            ImageCompressionModule.compressAndUploadImage(file, registerId, detailViewEntry.id, colKey)
-                                              .then(async (newImg) => {
-                                                console.log(`[Detail View - Image Upload] Upload / Compression succeeded. Persisting to database...`);
-                                                const current = detailEdits[colKey] ?? detailViewEntry.cells?.[colKey] ?? '';
-                                                const updated = current ? `${current}|||${newImg}` : newImg;
-                                                const res = handleCellChange(detailViewEntry.id, colKey, updated);
-                                                if (res === false) throw new Error("Cell change rejected");
-                                                await res;
-                                              })
-                                              .then(() => {
-                                                console.log(`[Detail View - Image Upload] PERSISTED successfully to database for row #${detailViewEntry.id}, column #${colKey}!`);
-                                              })
-                                              .catch(err => {
-                                                console.error(`[Detail View - Image Upload] FAILED for row #${detailViewEntry.id}, column #${colKey}:`, err);
-                                              })
-                                              .finally(() => {
-                                                setUploadingCells(prev => ({ ...prev, [colKey]: false }));
-                                                setUploadingImagesCount(prev => Math.max(0, prev - 1));
-                                              });
-                                          }
-                                        }}
-                                      />
-                                      <Plus size={14} />
-                                      <span>Add Another Image</span>
-                                    </label>
-                                  )
-                                )}
-                              </div>
-                            ) : (
-                              uploadingCells[colKey] ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)', padding: '6px' }}>
-                                  <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(0,0,0,0.1)', borderLeftColor: 'var(--primary)' }} />
-                                  <span style={{ fontSize: '13px', fontWeight: 500 }}>Compressing & uploading photo...</span>
-                                </div>
-                              ) : isFieldEditable ? (
-                                <label className="row-detail-image-upload">
-                                  <input 
-                                    type="file" 
-                                    accept="image/*" 
-                                    hidden 
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        console.log(`[Detail View - Image Selected] Selected file for row #${detailViewEntry.id}, column #${colKey}:`, file.name, `${(file.size / 1024).toFixed(1)} KB`);
-                                        setUploadingCells(prev => ({ ...prev, [colKey]: true }));
-                                        setUploadingImagesCount(prev => prev + 1);
-                                        console.log(`[Detail View - Image Upload] Starting compression & upload...`);
-                                        ImageCompressionModule.compressAndUploadImage(file, registerId, detailViewEntry.id, colKey)
-                                          .then(async (newImg) => {
-                                            console.log(`[Detail View - Image Upload] Upload / Compression succeeded. Persisting to database...`);
-                                            const res = handleCellChange(detailViewEntry.id, colKey, newImg);
-                                            if (res === false) throw new Error("Cell change rejected");
-                                            await res;
-                                          })
-                                          .then(() => {
-                                            console.log(`[Detail View - Image Upload] PERSISTED successfully to database for row #${detailViewEntry.id}, column #${colKey}!`);
-                                          })
-                                          .catch(err => {
-                                            console.error(`[Detail View - Image Upload] FAILED for row #${detailViewEntry.id}, column #${colKey}:`, err);
-                                          })
-                                          .finally(() => {
-                                            setUploadingCells(prev => ({ ...prev, [colKey]: false }));
-                                            setUploadingImagesCount(prev => Math.max(0, prev - 1));
-                                          });
-                                      }
-                                    }}
-                                  />
-                                  <ImageIcon size={16} />
-                                  <span>Upload Image</span>
-                                </label>
-                              ) : (
-                                <div className="row-detail-input auto-increment-readonly" style={{ opacity: 0.5 }}>
-                                  <ImageIcon size={16} style={{ marginRight: 6 }} />
-                                  <span>No image</span>
-                                </div>
-                              )
-                            )}
-                          </div>
-                        ) : col.type === 'formula' ? (
-                          <div 
-                            className="row-detail-formula-result"
-                            tabIndex={0}
-                            ref={(el) => {
-                              if (el) detailInputRefs.current.set(col.id, el);
-                              else detailInputRefs.current.delete(col.id);
-                            }}
-                            onKeyDown={(e) => handleDetailKeyDown(e, col.id)}
-                            onClick={_canEditAny ? () => {
-                              setActiveModalColId(col.id);
-                              setNewColFormula(col.formula || '');
-                              setChangeTypeValue(col.type);
-                              setChangeTypeModal(true);
-                            } : undefined}
-                            title={_canEditAny ? "Click to edit formula" : undefined}
-                          >
-                            {evaluateFormula(col.formula || '', { ...detailViewEntry, cells: { ...detailViewEntry.cells, ...detailEdits } }, columns)}
-                          </div>
-                        ) : col.type === 'auto_increment' ? (
-                          <div className="row-detail-input auto-increment-readonly">
-                            <ListOrdered size={14} style={{ opacity: 0.5 }} />
-                            <span>{val || '–'}</span>
-                          </div>
-                        ) : (
-                          <div className="row-detail-input-wrapper">
-                            <input
-                              className={`row-detail-input ${detailErrors[colKey] ? 'invalid' : ''} ${!isFieldEditable ? 'cell-readonly' : ''}`}
-                              value={val}
-                              readOnly={!isFieldEditable}
-                              ref={(el) => {
-                                if (el) detailInputRefs.current.set(col.id, el);
-                                else detailInputRefs.current.delete(col.id);
-                              }}
-                              onKeyDown={(e) => handleDetailKeyDown(e, col.id)}
-                              onChange={e => {
-                                if (!isFieldEditable) return;
-                                setDetailEdits(prev => ({ ...prev, [colKey]: e.target.value }));
-                                if (detailErrors[colKey]) setDetailErrors(prev => ({ ...prev, [colKey]: null }));
-                              }}
-                              placeholder={isFieldEditable ? `Enter ${col.name}…` : '—'}
-                              type={col.type === 'email' ? 'email' : col.type === 'phone' ? 'tel' : 'text'}
-                              inputMode={col.type === 'number' || col.type === 'currency' ? 'decimal' : undefined}
-                              list={isFieldEditable ? `list-detail-${col.id}` : undefined}
-                            />
-                            {isFieldEditable && columnSuggestions[col.id.toString()]?.length > 0 && (
-                              <datalist id={`list-detail-${col.id}`}>
-                                {columnSuggestions[col.id.toString()].map((s, i) => (
-                                  <option key={`${s}-${i}`} value={s} />
-                                ))}
-                              </datalist>
-                            )}
-                            {detailErrors[colKey] && (
-                              <div className="row-detail-error-msg">
-                                <AlertCircle size={10} />
-                                {detailErrors[colKey]}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-
-            <div className="row-detail-footer">
-              <button className="row-detail-btn-close" onClick={() => { setDetailViewEntry(null); setDetailEdits({}); setDetailErrors({}); setShowRowAuditTrail(false); setRowAuditHistory([]); }}>{isRowEditable ? 'Cancel' : 'Close'}</button>
-              {isRowEditable && (
-                <button 
-                  className="row-detail-btn-save" 
-                  disabled={isSaving}
-                  onClick={async () => {
-                    if (!detailViewEntry) return;
-
-                    const modalColumns = (isPreviewSelectedColumns && selectedColumns.size > 0)
-                      ? columns.filter(col => selectedColumns.has(col.id))
-                      : columns;
-
-                    const errors: Record<string, string | null> = {};
-                    let hasErrors = false;
-
-                    modalColumns.forEach(col => {
-                      // Fallback to existing value if not edited in this session
-                      const val = detailEdits[col.id.toString()] ?? detailViewEntry.cells?.[col.id.toString()] ?? '';
-                      
-                      if ((col as any).mandatory && col.type !== 'formula' && col.type !== 'auto_increment' && val.trim() === '') {
-                        errors[col.id.toString()] = "This field is mandatory and cannot be empty.";
-                        hasErrors = true;
-                      } else if ((col as any).unique && val.trim() !== '') {
-                        const isDuplicate = localEntriesRef.current.some(
-                          e => e.id !== detailViewEntry.id && e.cells?.[col.id.toString()]?.trim().toLowerCase() === val.trim().toLowerCase()
-                        );
-                        if (isDuplicate) {
-                          errors[col.id.toString()] = `Unique field: The value "${val}" already exists.`;
-                          hasErrors = true;
-                        }
-                      } 
-                      
-                      if (!errors[col.id.toString()]) {
-                        const validation = validateCellValue(col, val);
-                        if (!validation.isValid && val.trim() !== '') {
-                          errors[col.id.toString()] = validation.error;
-                          hasErrors = true;
-                        }
-                      }
-                    });
-
-                    // Check if we already showed these warnings
-                    const hadErrorsBefore = Object.keys(detailErrors || {}).length > 0;
-                    setDetailErrors(errors);
-
-                    if (hasErrors && !hadErrorsBefore) {
-                      toast("Some entries have formatting warnings. Click save again to confirm.", { icon: '⚠️' });
-                      return;
-                    }
-
-                    // Batch all changes from the modal
-                    const changedCells: Record<string, string> = {};
-                    Object.entries(detailEdits).forEach(([colId, value]) => {
-                      if (detailViewEntry.cells?.[colId] !== value) {
-                        changedCells[colId] = value;
-                      }
-                    });
-
-                    if (Object.keys(changedCells).length > 0) {
-                      if (!Number.isInteger(detailViewEntry.id)) {
-                        // It is a temporary entry!
-                        // Buffer these edits
-                        pendingTempRowEdits.current[detailViewEntry.id] = {
-                          ...(pendingTempRowEdits.current[detailViewEntry.id] || {}),
-                          ...changedCells
-                        };
-                        toast.success("Changes buffered. Saving to database once the row is created.");
-                        
-                        // Close modal IMMEDIATELY
-                        setDetailViewEntry(null);
-                        setDetailEdits({});
-                        setDetailErrors({});
-                        setShowRowAuditTrail(false);
-                        setRowAuditHistory([]);
-                        return;
-                      }
-
-                      // 1. Update local state instantly (optimistic)
-                      setLocalEntries(prev => prev.map(e => 
-                        e.id === detailViewEntry.id ? { ...e, cells: { ...e.cells, ...changedCells } } : e
-                      ));
-
-                      // 2. Clear any pending debounces for these specific cells
-                      Object.keys(changedCells).forEach(colId => {
-                        const key = `${detailViewEntry.id}-${colId}`;
-                        if (debounceTimers.current[key]) {
-                          clearTimeout(debounceTimers.current[key]);
-                          delete debounceTimers.current[key];
-                        }
-                      });
-
-                      // 3. Persist batch to Firestore (non-blocking for UI)
-                      setIsSaving(true);
-                      updateEntry(registerId, detailViewEntry.id, changedCells).then(() => {
-                        Object.keys(changedCells).forEach(colId => {
-                          const col = columnsRef.current.find(c => c.id.toString() === colId);
-                          if (col?.linkedTo) {
-                            queryClient.invalidateQueries({ queryKey: ['register', col.linkedTo.registerId] });
-                          }
-                        });
-                        
-                        // 4. Patch queryClient cache
-                        queryClient.setQueryData(['register', registerId], (old: any) => {
-                          if (!old) return old;
-                          return {
-                            ...old,
-                            entries: old.entries.map((e: any) =>
-                              e.id === detailViewEntry.id ? { ...e, cells: { ...e.cells, ...changedCells } } : e
-                            ),
-                          };
-                        });
-                        toast.success("Changes saved successfully!");
-                      }).catch(err => {
-                        console.error("Failed to save:", err);
-                        toast.error("Failed to save changes. Please check your connection.");
-                      }).finally(() => {
-                        setIsSaving(false);
-                      });
-                    } else {
-                      toast.success("No changes to save.");
-                    }
-                    
-                    // Close modal IMMEDIATELY for instant feel
-                    setDetailViewEntry(null);
-                    setDetailEdits({});
-                    setDetailErrors({});
-                    setShowRowAuditTrail(false);
-                    setRowAuditHistory([]);
-                  }}
-                >
-                  Save Changes
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-        );
-      })()}
-
-      {calcMenu && (
-        <div className="context-popover-layer" onClick={() => setCalcMenu(null)}>
-          <div 
-            className="context-menu calc-dropdown-menu"
-            style={{
-              position: 'fixed',
-              bottom: window.innerHeight - calcMenu.rect.top + 5,
-              left: Math.min(calcMenu.rect.left, window.innerWidth - 180),
-              zIndex: 1000,
-              width: '180px'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="context-section-label">Calculation Type</div>
-            {[
-              { id: 'sum', label: 'Sum (Σ)', icon: 'Σ' },
-              { id: 'count', label: 'Count (N)', icon: 'N' },
-              { id: 'distinct', label: 'Distinct (D)', icon: 'D' },
-              { id: 'average', label: 'Average (Avg)', icon: 'μ' },
-              { id: 'min', label: 'Minimum (Min)', icon: '↓' },
-              { id: 'max', label: 'Maximum (Max)', icon: '↑' },
-              { id: 'filled', label: 'Filled Cells', icon: '●' },
-              { id: 'empty', label: 'Empty Cells', icon: '○' },
-            ].map(opt => {
-              const currentType = calcTypes[calcMenu.colId];
-              const isActive = currentType === opt.id;
-              return (
-                <button 
-                  key={opt.id}
-                  className={`context-item ${isActive ? 'active' : ''}`} 
-                  onClick={() => updateCalcType(calcMenu.colId, opt.id)}
-                >
-                  <span className="context-item-icon" style={{ fontSize: '12px', width: '16px', fontWeight: 800 }}>{opt.icon}</span>
-                  <span className="context-item-label" style={{ fontWeight: isActive ? 700 : 400 }}>{opt.label}</span>
-                  {isActive && <span style={{ marginLeft: 'auto', fontSize: '10px' }}>●</span>}
-                </button>
-              );
-            })}
-            
-            <div className="context-divider" />
-            
-            <button className="context-item danger" onClick={() => updateCalcType(calcMenu.colId, 'none')}>
-              <span className="context-item-label">Remove Calculation</span>
-            </button>
-          </div>
-        </div>
+      {detailViewEntry && (
+        <RowDetailModal
+          detailViewEntry={detailViewEntry}
+          setDetailViewEntry={setDetailViewEntry}
+          _canEditAny={_canEditAny}
+          _rowEditRange={_rowEditRange}
+          _canDownloadAny={_canDownloadAny}
+          rowDownloadRange={rowDownloadRange}
+          localEntries={localEntries}
+          setLocalEntries={setLocalEntries}
+          registerId={registerId}
+          columns={columns}
+          isPreviewSelectedColumns={isPreviewSelectedColumns}
+          selectedColumns={selectedColumns}
+          _editableColumnIds={_editableColumnIds}
+          columnSuggestions={columnSuggestions}
+          uploadingCells={uploadingCells}
+          setUploadingCells={setUploadingCells}
+          setUploadingImagesCount={setUploadingImagesCount}
+          setPreviewImage={setPreviewImage}
+          evaluateFormula={evaluateFormula}
+          validateCellValue={validateCellValue}
+          handleCellChange={handleCellChange}
+          handleRowDownloadPDF={handleRowDownloadPDF}
+          handleRowDownloadExcel={handleRowDownloadExcel}
+          handleImageDownload={handleImageDownload}
+          setActiveModalColId={setActiveModalColId}
+          setChangeTypeValue={setChangeTypeValue}
+          setChangeTypeModal={setChangeTypeModal}
+          setNewColFormula={setNewColFormula}
+          setNewColDropdownOpts={setNewColDropdownOpts}
+          openDropdown={openDropdown}
+          openDatePicker={openDatePicker}
+          queryClient={queryClient}
+          pendingTempRowEdits={pendingTempRowEdits}
+          debounceTimers={debounceTimers}
+          columnsRef={columnsRef}
+          localEntriesRef={localEntriesRef}
+          
+          detailEdits={detailEdits}
+          setDetailEdits={setDetailEdits}
+          detailErrors={detailErrors}
+          setDetailErrors={setDetailErrors}
+          detailErrorsRef={detailErrorsRef}
+          showRowAuditTrail={showRowAuditTrail}
+          setShowRowAuditTrail={setShowRowAuditTrail}
+          rowAuditHistory={rowAuditHistory}
+          setRowAuditHistory={setRowAuditHistory}
+          rowAuditLoading={rowAuditLoading}
+          setRowAuditLoading={setRowAuditLoading}
+          detailInputRefs={detailInputRefs}
+        />
       )}
+
+      <CalcMenuPopover
+        calcMenu={calcMenu}
+        setCalcMenu={setCalcMenu}
+        calcTypes={calcTypes}
+        updateCalcType={updateCalcType}
+      />
       
       {/* ── Image Preview Modal ── */}
-      {previewImage && previewImage.url && (() => {
-        const urls = previewImage.url.includes('|||') ? previewImage.url.split('|||') : [previewImage.url];
-        const currentUrl = urls[previewImageIndex] || urls[0];
-        return (
-        <div className="img-preview-overlay" onClick={() => { setPreviewImage(null); setIsImgZoomed(false); setPreviewImageIndex(0); }}>
-          <div className="img-preview-content" onClick={e => e.stopPropagation()}>
-            <div className="img-preview-header">
-              <h3>Image Preview {urls.length > 1 ? `(${previewImageIndex + 1}/${urls.length})` : ''}</h3>
-              <div className="img-preview-actions">
-                {/* Previous Image */}
-                {urls.length > 1 && (
-                  <button 
-                    className="img-preview-nav"
-                    disabled={previewImageIndex === 0}
-                    onClick={() => setPreviewImageIndex(prev => prev - 1)}
-                  >
-                    <ChevronDown size={20} style={{ transform: 'rotate(90deg)' }} />
-                  </button>
-                )}
-                {/* Next Image */}
-                {urls.length > 1 && (
-                  <button 
-                    className="img-preview-nav"
-                    disabled={previewImageIndex === urls.length - 1}
-                    onClick={() => setPreviewImageIndex(prev => prev + 1)}
-                  >
-                    <ChevronDown size={20} style={{ transform: 'rotate(-90deg)' }} />
-                  </button>
-                )}
-                
-                <div className="img-preview-divider" />
-
-                <button onClick={() => handleImageDownload(currentUrl)} className="img-download-btn" title="Download Image">
-                  <Download size={18} />
-                  Download
-                </button>
-
-                {previewImage.entryId !== undefined && previewImage.colId !== undefined && (
-                  <>
-                  {uploadingCells[previewImage.colId!] ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', opacity: 0.8, padding: '8px 12px' }}>
-                      <div className="spinner" style={{ width: '12px', height: '12px', border: '2px solid rgba(255,255,255,0.2)', borderLeftColor: 'white' }} />
-                      <span style={{ fontSize: '13px' }}>Uploading...</span>
-                    </div>
-                  ) : (
-                    <label className="img-preview-add" title="Add Image">
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        style={{ display: 'none' }} 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            console.log(`[Preview View - Image Selected] Selected file for row #${previewImage.entryId}, column #${previewImage.colId}:`, file.name, `${(file.size / 1024).toFixed(1)} KB`);
-                            setUploadingCells(prev => ({ ...prev, [previewImage.colId!]: true }));
-                            setUploadingImagesCount(prev => prev + 1);
-                            console.log(`[Preview View - Image Upload] Starting compression & upload...`);
-                            ImageCompressionModule.compressAndUploadImage(file, registerId, previewImage.entryId!, previewImage.colId!)
-                              .then(async (newUrl) => {
-                                console.log(`[Preview View - Image Upload] Upload / Compression succeeded. Persisting to database...`);
-                                const updated = [...urls, newUrl].join('|||');
-                                const res = handleCellChange(previewImage.entryId!, previewImage.colId!, updated);
-                                if (res === false) throw new Error("Cell change rejected");
-                                await res;
-                                setPreviewImage({ ...previewImage, url: updated });
-                                setPreviewImageIndex(urls.length);
-                              })
-                              .then(() => {
-                                console.log(`[Preview View - Image Upload] PERSISTED successfully to database for row #${previewImage.entryId}, column #${previewImage.colId}!`);
-                              })
-                              .catch(err => {
-                                console.error(`[Preview View - Image Upload] FAILED for row #${previewImage.entryId}, column #${previewImage.colId}:`, err);
-                              })
-                              .finally(() => {
-                                setUploadingCells(prev => ({ ...prev, [previewImage.colId!]: false }));
-                                setUploadingImagesCount(prev => Math.max(0, prev - 1));
-                              });
-                          }
-                        }}
-                      />
-                      <Plus size={18} /> Add Image
-                    </label>
-                  )}
-                  <button 
-                    className="img-preview-remove" 
-                    onClick={() => {
-                      if (urls.length > 1) {
-                        const next = [...urls];
-                        next.splice(previewImageIndex, 1);
-                        const updated = next.join('|||');
-                        handleCellChange(previewImage.entryId!, previewImage.colId!, updated);
-                        setPreviewImage({ ...previewImage, url: updated });
-                        setPreviewImageIndex(Math.max(0, previewImageIndex - 1));
-                      } else {
-                        handleCellChange(previewImage.entryId!, previewImage.colId!, '');
-                        if (detailViewEntry?.id === previewImage.entryId) {
-                          setDetailEdits(prev => ({ ...prev, [previewImage.colId!]: '' }));
-                        }
-                        setPreviewImage(null);
-                        setIsImgZoomed(false);
-                      }
-                    }}
-                    title="Remove Current Image"
-                  >
-                    <Trash2 size={18} /> Remove
-                  </button>
-                  </>
-                )}
-                <button className="img-preview-btn" onClick={() => setIsImgZoomed(!isImgZoomed)} title={isImgZoomed ? "Zoom Out" : "Zoom In"}>
-                  {isImgZoomed ? <ZoomOut size={20} /> : <ZoomIn size={20} />}
-                </button>
-                <button className="img-preview-close" onClick={() => { setPreviewImage(null); setIsImgZoomed(false); setPreviewImageIndex(0); }}>✕</button>
-              </div>
-            </div>
-            <div className="img-preview-body" onClick={() => setIsImgZoomed(!isImgZoomed)}>
-              <img src={currentUrl} alt="Large preview" className={isImgZoomed ? 'zoomed' : ''} />
-            </div>
-          </div>
-        </div>
-        );
-      })()}
+      {previewImage && previewImage.url && (
+        <ImagePreviewModal
+          previewImage={previewImage}
+          setPreviewImage={setPreviewImage}
+          handleImageDownload={handleImageDownload}
+          uploadingCells={uploadingCells}
+          setUploadingCells={setUploadingCells}
+          setUploadingImagesCount={setUploadingImagesCount}
+          registerId={registerId}
+          handleCellChange={handleCellChange}
+          detailViewEntry={detailViewEntry}
+          setDetailEdits={setDetailEdits}
+        />
+      )}
 
       {/* Reminder Modal */}
       {reminderModal && (
-        <div className="modal-overlay" onClick={() => setReminderModal(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '400px', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', overflow: 'hidden', background: '#fff' }}>
-            <div className="modal-header" style={{ position: 'relative', padding: '20px 20px 12px', borderBottom: 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Bell size={18} color="var(--primary)" />
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--text-color)' }}>Set Reminder</h3>
-              </div>
-              <button 
-                onClick={() => setReminderModal(null)} 
-                style={{ 
-                  position: 'absolute', top: '16px', right: '16px', 
-                  background: '#f3f4f6', borderRadius: '50%', width: '32px', height: '32px',
-                  cursor: 'pointer', transition: 'all 0.2s', border: 'none',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  zIndex: 10
-                }}
-                onMouseOver={(e) => e.currentTarget.style.background = '#e5e7eb'}
-                onMouseOut={(e) => e.currentTarget.style.background = '#f3f4f6'}
-              >
-                <X size={16} color="#374151" strokeWidth={2.5} />
-              </button>
-            </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 20px 20px' }}>
-              <div>
-                <label className="modal-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-color)' }}>Reminder Date <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>(Optional)</span></label>
-                <input type="date" className="modal-input" value={reminderDate} onChange={e => setReminderDate(e.target.value)} style={{ width: '100%', marginBottom: 0 }} />
-              </div>
-              
-              <div>
-                <label className="modal-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-color)' }}>Reminder Time <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>(Optional)</span></label>
-                <input type="time" className="modal-input" value={reminderTime} onChange={e => setReminderTime(e.target.value)} style={{ width: '100%', marginBottom: 0 }} />
-              </div>
-
-              <div>
-                <label className="modal-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-color)' }}>Status <span style={{color: 'red'}}>*</span></label>
-                <select 
-                  className="modal-input" 
-                  value={reminderStatus} 
-                  onChange={e => setReminderStatus(e.target.value as 'Pending' | 'Complete')} 
-                  style={{ width: '100%', marginBottom: 0, background: '#ffffff' }}
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Complete">Complete</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="modal-label" style={{ marginBottom: '6px', display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-color)' }}>Message / Description <span style={{color: 'red'}}>*</span></label>
-                <textarea 
-                  className="modal-textarea" 
-                  value={reminderMessage} 
-                  onChange={e => setReminderMessage(e.target.value)} 
-                  placeholder="What should this reminder tell you?"
-                  rows={3}
-                  style={{ width: '100%', resize: 'none', marginBottom: 0 }}
-                />
-              </div>
-            </div>
-            <div className="modal-footer" style={{ borderTop: '1px solid var(--border)', padding: '16px 20px', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#fafafa' }}>
-              <button className="modal-cancel-btn" onClick={() => setReminderModal(null)}>Cancel</button>
-              <button 
-                className="modal-confirm-btn" 
-                onClick={() => {
-                  if (!reminderMessage) {
-                    toast.error('Please enter a reminder message');
-                    return;
-                  }
-                  
-                  let triggerTime: number | undefined = undefined;
-                  if (reminderDate && reminderTime) {
-                    const dt = new Date(`${reminderDate}T${reminderTime}`);
-                    if (isNaN(dt.getTime())) {
-                      toast.error('Please enter a valid date and time');
-                      return;
-                    }
-                    if (reminderStatus === 'Pending' && dt.getTime() < Date.now()) {
-                      toast.error('Reminder time must be in the future for active/pending reminders');
-                      return;
-                    }
-                    triggerTime = dt.getTime();
-                  }
-
-                  const existingIdx = reminders.findIndex(r => r.rowId === reminderModal.entryId && r.colId === reminderModal.colId && r.registerId === String(registerId));
-                  if (existingIdx > -1) {
-                    const updated = [...reminders];
-                    updated[existingIdx] = {
-                      ...updated[existingIdx],
-                      triggerTime: triggerTime,
-                      message: reminderMessage,
-                      status: reminderStatus
-                    };
-                    setReminders(updated);
-                    toast.success('Reminder updated successfully!');
-                  } else {
-                    scheduleReminder({
-                      triggerTime: triggerTime,
-                      message: reminderMessage,
-                      registerId: String(registerId),
-                      rowId: reminderModal.entryId,
-                      colId: reminderModal.colId,
-                      status: reminderStatus
-                    });
-                    toast.success('Reminder set successfully!');
-                  }
-                  setReminderModal(null);
-                }}
-              >
-                Save Reminder
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReminderModal
+          reminderModal={reminderModal}
+          setReminderModal={setReminderModal}
+          reminderDate={reminderDate}
+          setReminderDate={setReminderDate}
+          reminderTime={reminderTime}
+          setReminderTime={setReminderTime}
+          reminderStatus={reminderStatus}
+          setReminderStatus={setReminderStatus}
+          reminderMessage={reminderMessage}
+          setReminderMessage={setReminderMessage}
+          reminders={reminders}
+          setReminders={setReminders}
+          scheduleReminder={scheduleReminder}
+          registerId={registerId}
+        />
       )}
 
       {/* ── Cell Format Toolbar ── */}
@@ -5027,435 +4183,18 @@ export default function RegisterPage() {
       )}
 
       {/* Reminders Summary Modal */}
-      {showRemindersSummary && (
-        <div className="modal-overlay" onClick={() => { setShowRemindersSummary(false); setEditingReminderId(null); }}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ width: '650px', maxWidth: '90%', position: 'relative' }}>
-            <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Bell size={18} color="var(--primary)" />
-                <h3 style={{ margin: 0 }}>Active Reminders</h3>
-              </div>
-              <button 
-                className="modal-close" 
-                onClick={() => { setShowRemindersSummary(false); setEditingReminderId(null); }}
-                style={{
-                  position: 'absolute',
-                  top: '16px',
-                  right: '16px',
-                  background: 'var(--border-color, #f3f4f6)',
-                  borderRadius: '50%',
-                  width: '32px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: 'none',
-                  cursor: 'pointer',
-                  zIndex: 10,
-                  transition: 'background 0.2s'
-                }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="modal-body" style={{ maxHeight: '450px', overflowY: 'auto' }}>
-              {registerReminders.length === 0 ? (
-                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <Bell size={32} style={{ opacity: 0.3, marginBottom: '8px' }} />
-                  <p style={{ margin: 0 }}>No reminders set for this register.</p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {registerReminders.map(r => {
-                    const entry = localEntries.find(e => e.id === r.rowId);
-                    const rowNum = entry ? (entry.rowNumber || localEntries.indexOf(entry) + 1) : 'Unknown Row';
-                    const column = columns.find(c => c.id.toString() === r.colId);
-                    const colName = column?.name || r.colId || 'General';
-                    const currentCellValue = (r.colId && entry?.cells) ? entry.cells[r.colId] : '';
-                    const isEditing = editingReminderId === r.id;
-                    const registerName = register?.name || 'Register';
-
-                    if (isEditing) {
-                      return (
-                        <div 
-                          key={r.id} 
-                          style={{ 
-                            border: '2px solid var(--primary)', 
-                            borderRadius: '12px', 
-                            padding: '16px', 
-                            background: '#f9fafb',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '12px',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                              <span className="badge badge-primary" style={{ fontSize: '11px', padding: '2px 8px' }}>Editing {registerName} (Row #{rowNum})</span>
-                              <span className="badge badge-secondary" style={{ fontSize: '11px', padding: '2px 8px', background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)' }}>Col: {colName}</span>
-                            </div>
-                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)' }}>Edit Mode</span>
-                          </div>
-
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                            <div>
-                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>Reminder Date <span style={{fontSize: '10px', color: 'var(--text-muted)'}}>(Optional)</span></label>
-                              <input 
-                                type="date" 
-                                className="modal-input" 
-                                value={editRemDate} 
-                                onChange={e => setEditRemDate(e.target.value)} 
-                                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }} 
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>Reminder Time <span style={{fontSize: '10px', color: 'var(--text-muted)'}}>(Optional)</span></label>
-                              <input 
-                                type="time" 
-                                className="modal-input" 
-                                value={editRemTime} 
-                                onChange={e => setEditRemTime(e.target.value)} 
-                                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }} 
-                              />
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
-                            <div>
-                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>Reminder Message *</label>
-                              <input 
-                                type="text" 
-                                className="modal-input" 
-                                value={editRemMessage} 
-                                onChange={e => setEditRemMessage(e.target.value)} 
-                                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }} 
-                                placeholder="Reminder message"
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>Status *</label>
-                              <select 
-                                className="modal-input" 
-                                value={editRemStatus} 
-                                onChange={e => setEditRemStatus(e.target.value as 'Pending' | 'Complete')} 
-                                style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }}
-                              >
-                                <option value="Pending">Pending</option>
-                                <option value="Complete">Complete</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          {column && (
-                            <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '8px' }}>
-                              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-color)', marginBottom: '4px' }}>
-                                Respective Cell Value ({colName})
-                              </label>
-                              {column.type === 'dropdown' ? (
-                                <select
-                                  className="modal-input"
-                                  value={editRemCellValue}
-                                  onChange={e => setEditRemCellValue(e.target.value)}
-                                  style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }}
-                                >
-                                  <option value="">-- Select Option --</option>
-                                  {column.dropdownOptions?.map((opt: string) => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
-                              ) : column.type === 'checkbox' ? (
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '6px 0' }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={editRemCellValue === 'true'}
-                                    onChange={e => setEditRemCellValue(e.target.checked ? 'true' : 'false')}
-                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                  />
-                                  <span style={{ fontSize: '13px', color: 'var(--text-color)' }}>Checked</span>
-                                </label>
-                              ) : column.type === 'date' ? (
-                                <input
-                                  type="date"
-                                  className="modal-input"
-                                  value={parseDateString(editRemCellValue)}
-                                  onChange={e => setEditRemCellValue(e.target.value)}
-                                  style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }}
-                                />
-                              ) : (
-                                <input
-                                  type="text"
-                                  className="modal-input"
-                                  value={editRemCellValue}
-                                  onChange={e => setEditRemCellValue(e.target.value)}
-                                  style={{ width: '100%', padding: '6px 10px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#fff', marginBottom: 0 }}
-                                  placeholder={`Enter cell value...`}
-                                />
-                              )}
-                            </div>
-                          )}
-
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
-                            <button 
-                              onClick={() => setEditingReminderId(null)}
-                              style={{ 
-                                padding: '6px 12px', fontSize: '12px', fontWeight: 500, borderRadius: '6px', 
-                                border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer', color: 'var(--text-color)' 
-                              }}
-                            >
-                              Cancel
-                            </button>
-                            <button 
-                              onClick={() => {
-                                if (!editRemMessage) {
-                                  toast.error('Please enter a reminder message');
-                                  return;
-                                }
-                                
-                                let triggerTime: number | undefined = undefined;
-                                if (editRemDate && editRemTime) {
-                                  const dt = new Date(`${editRemDate}T${editRemTime}`);
-                                  if (isNaN(dt.getTime())) {
-                                    toast.error('Please enter a valid date and time');
-                                    return;
-                                  }
-                                  if (editRemStatus === 'Pending' && dt.getTime() < Date.now()) {
-                                    toast.error('Reminder time must be in the future for active/pending reminders');
-                                    return;
-                                  }
-                                  triggerTime = dt.getTime();
-                                }
-
-                                const updated = reminders.map(rem => {
-                                  if (rem.id === r.id) {
-                                    return {
-                                      ...rem,
-                                      message: editRemMessage,
-                                      status: editRemStatus,
-                                      triggerTime: triggerTime
-                                    };
-                                  }
-                                  return rem;
-                                });
-                                setReminders(updated);
-
-                                const res = handleCellChange(r.rowId as number, r.colId as string, editRemCellValue);
-                                if (res !== false) {
-                                  toast.success('Reminder and respective cell updated successfully!');
-                                }
-                                setEditingReminderId(null);
-                              }}
-                              style={{ 
-                                padding: '6px 12px', fontSize: '12px', fontWeight: 600, borderRadius: '6px', 
-                                border: 'none', background: 'var(--primary)', cursor: 'pointer', color: '#fff' 
-                              }}
-                            >
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    const triggerDate = r.triggerTime ? new Date(r.triggerTime).toLocaleString() : 'No schedule set';
-                    
-                    return (
-                      <div 
-                        key={r.id} 
-                        style={{ 
-                          border: '1px solid var(--border-color)', 
-                          borderRadius: '8px', 
-                          padding: '12px', 
-                          background: 'var(--card-bg, #ffffff)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '8px',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span className="badge badge-primary" style={{ fontSize: '11px', padding: '2px 8px' }}>{registerName} (Row #{rowNum})</span>
-                            <span className="badge badge-secondary" style={{ fontSize: '11px', padding: '2px 8px', background: 'rgba(var(--primary-rgb), 0.1)', color: 'var(--primary)' }}>Col: {colName}</span>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{triggerDate}</span>
-                          </div>
-                          
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span 
-                              style={{ 
-                                fontSize: '11px', 
-                                padding: '2px 8px', 
-                                borderRadius: '4px', 
-                                background: r.status === 'Pending' ? '#fffbeb' : '#ecfdf5',
-                                color: r.status === 'Pending' ? '#d97706' : '#059669',
-                                fontWeight: 600
-                              }}
-                            >
-                              {r.status}
-                            </span>
-
-                            <button 
-                              onClick={() => {
-                                setEditingReminderId(r.id);
-                                setEditRemMessage(r.message || '');
-                                setEditRemStatus(r.status || 'Pending');
-                                if (r.triggerTime) {
-                                  const dt = new Date(r.triggerTime);
-                                  const yyyy = dt.getFullYear();
-                                  const mm = String(dt.getMonth() + 1).padStart(2, '0');
-                                  const dd = String(dt.getDate()).padStart(2, '0');
-                                  setEditRemDate(`${yyyy}-${mm}-${dd}`);
-                                  const hh = String(dt.getHours()).padStart(2, '0');
-                                  const min = String(dt.getMinutes()).padStart(2, '0');
-                                  setEditRemTime(`${hh}:${min}`);
-                                } else {
-                                  setEditRemDate('');
-                                  setEditRemTime('');
-                                }
-                                setEditRemCellValue(currentCellValue);
-                              }}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'var(--primary)',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                padding: '4px',
-                                fontSize: '12px',
-                                fontWeight: 500
-                              }}
-                              title="Edit Reminder & Cell Value"
-                            >
-                              Edit
-                            </button>
-
-                            <button 
-                              onClick={() => {
-                                if (window.confirm('Are you sure you want to delete this reminder?')) {
-                                  const updated = reminders.filter(rem => rem.id !== r.id);
-                                  setReminders(updated);
-                                  toast.success('Reminder deleted successfully');
-                                }
-                              }}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'var(--danger-color, #ef4444)',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                padding: '4px'
-                              }}
-                              title="Delete Reminder"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-color)', fontWeight: 500 }}>
-                            {r.message}
-                          </p>
-                          <div style={{ 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            gap: '6px', 
-                            marginTop: '8px', 
-                            background: '#fafafa', 
-                            padding: '8px 12px', 
-                            borderRadius: '6px', 
-                            border: '1px solid #e5e7eb' 
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                                Respective Cell Value:
-                              </span>
-                              {inlineCellValues[r.id] !== undefined && inlineCellValues[r.id] !== currentCellValue && (
-                                <span style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 600 }}>Unsaved changes</span>
-                              )}
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              {column?.type === 'dropdown' ? (
-                                <select
-                                  value={inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue}
-                                  onChange={e => setInlineCellValues(prev => ({ ...prev, [r.id]: e.target.value }))}
-                                  style={{ flex: 1, padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #d1d5db', background: '#fff' }}
-                                >
-                                  <option value="">-- Select Option --</option>
-                                  {column.dropdownOptions?.map((opt: string) => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
-                              ) : column?.type === 'checkbox' ? (
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flex: 1 }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={(inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue) === 'true'}
-                                    onChange={e => setInlineCellValues(prev => ({ ...prev, [r.id]: e.target.checked ? 'true' : 'false' }))}
-                                    style={{ cursor: 'pointer' }}
-                                  />
-                                  <span style={{ fontSize: '12px' }}>Checked</span>
-                                </label>
-                              ) : column?.type === 'date' ? (
-                                <input
-                                  type="date"
-                                  value={parseDateString(inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue)}
-                                  onChange={e => setInlineCellValues(prev => ({ ...prev, [r.id]: e.target.value }))}
-                                  style={{ flex: 1, padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #d1d5db', background: '#fff' }}
-                                />
-                              ) : (
-                                <input
-                                  type="text"
-                                  value={inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue}
-                                  onChange={e => setInlineCellValues(prev => ({ ...prev, [r.id]: e.target.value }))}
-                                  style={{ flex: 1, padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #d1d5db', background: '#fff' }}
-                                  placeholder="Enter cell value..."
-                                />
-                              )}
-                              <button
-                                onClick={() => {
-                                  const valToSave = inlineCellValues[r.id] !== undefined ? inlineCellValues[r.id] : currentCellValue;
-                                  const res = handleCellChange(r.rowId as number, r.colId as string, valToSave);
-                                  if (res !== false) {
-                                    setInlineCellValues(prev => {
-                                      const next = { ...prev };
-                                      delete next[r.id];
-                                      return next;
-                                    });
-                                    toast.success('Cell value saved back to table successfully!');
-                                  }
-                                }}
-                                style={{
-                                  padding: '4px 12px',
-                                  fontSize: '12px',
-                                  fontWeight: 600,
-                                  borderRadius: '4px',
-                                  border: 'none',
-                                  background: 'var(--primary)',
-                                  color: '#fff',
-                                  cursor: 'pointer',
-                                  transition: 'background 0.2s'
-                                }}
-                              >
-                                Save
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <div className="modal-footer" style={{ marginTop: '16px' }}>
-              <button className="modal-confirm-btn" onClick={() => { setShowRemindersSummary(false); setEditingReminderId(null); }}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RemindersSummaryModal
+        isOpen={showRemindersSummary}
+        onClose={() => setShowRemindersSummary(false)}
+        registerReminders={registerReminders}
+        reminders={reminders}
+        setReminders={setReminders}
+        localEntries={localEntries}
+        columns={columns}
+        register={register}
+        registerId={registerId}
+        handleCellChange={handleCellChange}
+      />
     </div>
   );
 }
