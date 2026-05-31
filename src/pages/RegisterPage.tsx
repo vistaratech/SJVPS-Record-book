@@ -758,7 +758,27 @@ export default function RegisterPage() {
         }
       });
 
-      setLocalEntries(merged);
+      // ── Stability fix: Skip setLocalEntries when the merged data is structurally
+      //    identical to the current localEntries. This prevents unnecessary re-renders
+      //    from background refetches (every 30s or on window focus) that would cause
+      //    the virtualizer to recalculate and briefly display rows in wrong positions.
+      const isSameData = merged.length === localEntries.length && merged.every((m, i) => {
+        const l = localEntries[i];
+        if (!l || m.id !== l.id || m.rowNumber !== l.rowNumber || m.pageIndex !== l.pageIndex) return false;
+        // Deep-check cells only if both exist
+        const mCells = m.cells || {};
+        const lCells = l.cells || {};
+        const mKeys = Object.keys(mCells);
+        const lKeys = Object.keys(lCells);
+        if (mKeys.length !== lKeys.length) return false;
+        for (const k of mKeys) {
+          if (mCells[k] !== lCells[k]) return false;
+        }
+        return true;
+      });
+      if (!isSameData) {
+        setLocalEntries(merged);
+      }
       // Initialize column settings (widths, summaries) from saved data
       if (dataToSync.columns) {
         const widths: Record<number, number> = {};
