@@ -89,6 +89,10 @@ export default function RegisterPage() {
     return reminders.filter(r => r.registerId === String(registerId));
   }, [reminders, registerId]);
 
+  const [showAddRecordModal, setShowAddRecordModal] = useState(false);
+  const [detailViewEntry, setDetailViewEntry] = useState<Entry | null>(null);
+  const [highlightedRowId, setHighlightedRowId] = useState<number | null>(null);
+
   const isAdminUserTop = useMemo(() => {
     return (user as any)?.permissions?.isAdmin === true || (user as any)?.permissions?.fullSheetAccess === true || (user as any)?.role === 'admin' || (user as any)?.role === 'superadmin' || (user as any)?.role === 'sheet_admin';
   }, [user]);
@@ -128,7 +132,7 @@ export default function RegisterPage() {
     // in-flight, so window-focus refetch is safe and ensures users see fresh data
     // when switching back to the tab.
     refetchOnWindowFocus: true,
-    refetchInterval: 30 * 1000,  // 30 s background poll — balanced between freshness and write safety
+    refetchInterval: (detailViewEntry || showAddRecordModal) ? false : 30 * 1000,  // Pause background sync when editing in modals
     placeholderData: keepPreviousData,
   });
 
@@ -319,8 +323,7 @@ export default function RegisterPage() {
   const [pendingDebounceCount, setPendingDebounceCount] = useState(0);
   const pendingTempRowEdits = useRef<Record<number, Record<string, string>>>({});
 
-  // Add Record modal
-  const [showAddRecordModal, setShowAddRecordModal] = useState(false);
+
 
   // Modals
   const [newColumnModal, setNewColumnModal] = useState(false);
@@ -406,7 +409,7 @@ export default function RegisterPage() {
   }, [frozenColumns, registerId]);
   const [sortColId, setSortColId] = useState<number | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc' | null>(null);
-  const [detailViewEntry, setDetailViewEntry] = useState<Entry | null>(null);
+
   const detailViewEntryIdRef = useRef<number | null>(null);
   const scrollToRowIdRef = useRef<number | null>(null);
   useEffect(() => {
@@ -3189,6 +3192,7 @@ export default function RegisterPage() {
     if (rowParam) {
       const entryId = Number(rowParam);
       scrollToRowIdRef.current = entryId;
+      setHighlightedRowId(entryId);
 
       // Clear any active search/filters so the target row is visible
       setSearch('');
@@ -3203,6 +3207,12 @@ export default function RegisterPage() {
 
       // Clean up the URL param so refreshing doesn't re-scroll
       window.history.replaceState({}, '', window.location.pathname);
+
+      // Clean up the highlighted row after 3.5 seconds
+      const timeoutId = setTimeout(() => {
+        setHighlightedRowId(null);
+      }, 3500);
+      return () => clearTimeout(timeoutId);
     }
   }, [location.search, localEntries]);
 
@@ -3745,6 +3755,7 @@ export default function RegisterPage() {
                   editableColumnIds={_editableColumnIds}
                   columnSuggestions={columnSuggestions}
                   savingCells={savingCells}
+                  highlightedRowId={highlightedRowId}
                 />
               );
             })}

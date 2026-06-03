@@ -531,6 +531,7 @@ interface SpreadsheetRowProps {
   /** Called when an inline image upload ends (compression + handleCellChange done) */
   onImageUploadEnd?: () => void;
   savingCells?: Set<string>;
+  highlightedRowId?: number | null;
 }
 
 export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: SpreadsheetRowProps) {
@@ -563,6 +564,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     columnSuggestions,
     displayRowNumber,
     scrollToColumn,
+    highlightedRowId,
   } = props;
   const { reminders } = useNotifications();
   const [uploadingImageCols, setUploadingImageCols] = useState<Record<number, boolean>>({});
@@ -654,8 +656,14 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
     toggleSelectRow(entry.id);
   }, [entry.id, toggleSelectRow]);
 
+  const isHighlighted = entry.id === highlightedRowId;
+  const rowClassName = [
+    isSelected ? 'row-selected' : '',
+    isHighlighted ? 'row-highlight-pulse' : ''
+  ].filter(Boolean).join(' ');
+
   return (
-    <tr id={`row-${entry.id}`} data-entry-id={entry.id} className={isSelected ? 'row-selected' : ''} style={rowHeight ? { height: rowHeight, maxHeight: rowHeight } : undefined}>
+    <tr id={`row-${entry.id}`} data-entry-id={entry.id} className={rowClassName} style={rowHeight ? { height: rowHeight, maxHeight: rowHeight } : undefined}>
       <td 
         className="serial" 
         style={{ cursor: 'pointer' }}
