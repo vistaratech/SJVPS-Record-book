@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { 
   Clock, FileText, Download, X, Plus, AlertCircle, 
   Image as ImageIcon, FlaskConical, ChevronDown, Maximize2, 
-  ListOrdered, Globe, Phone, Mail 
+  ListOrdered, Globe, Phone, Mail,
+  Link as LinkIcon, Lock as LockIcon
 } from 'lucide-react';
 import { type Entry, listRowHistory, updateEntry } from '../../../lib/api';
 import { ImageCompressionModule } from '../../../lib/imageCompressionModule';
@@ -281,7 +282,8 @@ export const RowDetailModal = React.memo(function RowDetailModal({
           {modalColumns.map((col) => {
             const colKey = col.id.toString();
             const val = detailEdits[colKey] ?? '';
-            const isFieldEditable = isRowEditable && (!_editableColumnIds || _editableColumnIds.has(col.id)) && col.type !== 'auto_increment' && col.type !== 'formula';
+            const isTargetLinked = col.linkedTo && col.linkedTo.role === 'target';
+            const isFieldEditable = isRowEditable && (!_editableColumnIds || _editableColumnIds.has(col.id)) && col.type !== 'auto_increment' && col.type !== 'formula' && !isTargetLinked;
 
             return (
               <div className={`row-detail-field ${col.type}-field`} key={col.id}>
@@ -290,6 +292,19 @@ export const RowDetailModal = React.memo(function RowDetailModal({
                     <label className="row-detail-label">
                       {col.name}
                       {col.type === 'formula' && <FlaskConical size={10} style={{ marginLeft: 4, opacity: 0.6 }} />}
+                      {col.linkedTo && (
+                        <span 
+                          title={isTargetLinked 
+                            ? "Linked column (To) — Read-only data synced from source register" 
+                            : "Linked column (From) — Sends data to destination register"}
+                          style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 6, gap: 2 }}
+                        >
+                          <LinkIcon size={12} color="var(--primary)" style={{ verticalAlign: 'middle' }} />
+                          {isTargetLinked && (
+                            <LockIcon size={10} color="#dc2626" style={{ verticalAlign: 'middle' }} />
+                          )}
+                        </span>
+                      )}
                     </label>
                     <span className="row-detail-type-badge">{col.type.replace('_', ' ')}</span>
                   </div>

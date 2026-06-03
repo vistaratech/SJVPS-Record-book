@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, AlertTriangle, CloudUpload, X, Loader2 } from 'lucide-react';
+import { Plus, AlertTriangle, CloudUpload, X, Loader2, Link as LinkIcon, Lock as LockIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatDateToDDMMYYYY } from '../../../lib/api';
 import { ImageCompressionModule } from '../../../lib/imageCompressionModule';
@@ -13,6 +13,7 @@ interface Column {
   mandatory?: boolean;
   unique?: boolean;
   doubleEntryWarning?: boolean;
+  linkedTo?: { registerId: number; columnId: number; role?: 'source' | 'target' };
 }
 
 interface Entry {
@@ -241,7 +242,8 @@ export function AddRecordModal({
                 const isDup = duplicates.has(colIdStr);
                 const isFormula = col.type === 'formula';
                 const isAutoIncr = col.type === 'auto_increment';
-                const inputCls = `row-detail-input${isDup ? ' add-record-input--dup' : ''}${isFormula ? ' add-record-input--readonly' : ''}`;
+                const isTargetLinked = col.linkedTo && col.linkedTo.role === 'target';
+                const inputCls = `row-detail-input${isDup ? ' add-record-input--dup' : ''}${isFormula || isTargetLinked ? ' add-record-input--readonly' : ''}`;
                 
                 const onChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
                   handleChange(colIdStr, e.target.value, col.type, col.name);
@@ -255,6 +257,19 @@ export function AddRecordModal({
                           {col.mandatory && <span style={{ color: 'var(--primary)', marginLeft: 4, fontSize: 14 }} title="Mandatory">*</span>}
                           {col.unique && <span style={{ color: 'var(--primary)', marginLeft: 4, fontSize: 13 }} title="Unique">★</span>}
                           {isFormula && <span style={{ color: 'var(--navy)', marginLeft: 4, opacity: 0.6, fontSize: 10 }} title="Calculated">ƒₓ</span>}
+                          {col.linkedTo && (
+                            <span 
+                              title={isTargetLinked 
+                                ? "Linked column (To) — Read-only data synced from source register" 
+                                : "Linked column (From) — Sends data to destination register"}
+                              style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 6, gap: 2 }}
+                            >
+                              <LinkIcon size={12} color="var(--primary)" style={{ verticalAlign: 'middle' }} />
+                              {isTargetLinked && (
+                                <LockIcon size={10} color="#dc2626" style={{ verticalAlign: 'middle' }} />
+                              )}
+                            </span>
+                          )}
                         </label>
                         <span className="row-detail-type-badge">{col.type.replace('_', ' ')}</span>
                       </div>
@@ -265,6 +280,11 @@ export function AddRecordModal({
                         <div className="add-record-readonly-box" style={{ padding: '0 14px', height: '44px', display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.02)', borderRadius: '8px', border: '1px solid var(--border)' }}>
                           <span className="formula-icon" style={{ marginRight: '8px', opacity: 0.5 }}>ƒₓ</span>
                           <span className="formula-placeholder" style={{ color: 'var(--muted)', fontSize: '13px' }}>Computed automatically</span>
+                        </div>
+                      ) : isTargetLinked ? (
+                        <div className="add-record-readonly-box" style={{ padding: '0 14px', height: '44px', display: 'flex', alignItems: 'center', background: 'rgba(0,0,0,0.02)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                          <LinkIcon size={14} color="var(--primary)" style={{ marginRight: '8px', opacity: 0.7 }} />
+                          <span className="link-placeholder" style={{ color: 'var(--muted)', fontSize: '13px' }}>Synced from source register</span>
                         </div>
                       ) : isAutoIncr ? (
                         <div className="add-record-autoincrement-wrap" style={{ width: '100%' }}>
