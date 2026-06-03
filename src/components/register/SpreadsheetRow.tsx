@@ -530,6 +530,7 @@ interface SpreadsheetRowProps {
   onImageUploadStart?: () => void;
   /** Called when an inline image upload ends (compression + handleCellChange done) */
   onImageUploadEnd?: () => void;
+  savingCells?: Set<string>;
 }
 
 export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: SpreadsheetRowProps) {
@@ -712,6 +713,7 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
         
         const colIdx = vc.index; // Absolute index for navigation
         const isFrozen = frozenColumns?.has(col.id);
+        const isSavingCell = props.savingCells?.has(`${entry.id}-${col.id}`);
         const w = colWidths?.[col.id] || defaultColWidth;
         const cs = entry.cellStyles?.[col.id.toString()];
         let cellStyle: React.CSSProperties = { width: w, minWidth: w, maxWidth: w };
@@ -738,6 +740,24 @@ export const SpreadsheetRow = React.memo(function SpreadsheetRow(props: Spreadsh
         return (
         <td key={col.id} className={isFrozen ? 'frozen-col' : ''} style={cellStyle} onContextMenu={handleContextMenu}>
           <div className="cell-inner-wrapper" style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flex: 1 }}>
+          {isSavingCell && (
+            <div className="cell-saving-indicator" style={{
+              position: 'absolute',
+              right: '6px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10,
+              pointerEvents: 'none',
+              background: 'var(--table-bg)',
+              padding: '2px',
+              borderRadius: '50%'
+            }} title="Saving changes...">
+              <span className="spinner dark" style={{ width: '10px', height: '10px', borderWidth: '1.5px', display: 'inline-block' }} />
+            </div>
+          )}
           {col.type === 'formula' ? (
             <FormulaCell idx={idx} col={col} entry={entry} registerColumns={registerColumns} onKeyDown={(e) => handleCellKeyDown(e, col.id, colIdx)} />
           ) : col.type === 'date' ? (
