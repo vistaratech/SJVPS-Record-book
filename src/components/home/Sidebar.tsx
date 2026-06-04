@@ -107,17 +107,17 @@ export const Sidebar = memo(function Sidebar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(() => {
     try {
-      return localStorage.getItem('seen_version_1.7.2') !== 'true';
+      return localStorage.getItem('seen_version_1.7.1') !== 'true';
     } catch {
       return false;
     }
   });
-  const [versionTab, setVersionTab] = useState<'1.7.2' | '1.7.1' | '1.7.0' | '1.6.10' | '1.6.9' | '1.6.3' | '1.6.2' | '1.6.1' | '1.6.0' | '1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.7.2');
+  const [versionTab, setVersionTab] = useState<'1.7.1' | '1.7.0' | '1.6.10' | '1.6.9' | '1.6.3' | '1.6.2' | '1.6.1' | '1.6.0' | '1.5.6' | '1.5.5' | '1.5.2' | '1.5.1' | '1.5' | '1.3.1' | '1.2'>('1.7.1');
 
   const handleCloseVersionModal = useCallback(() => {
     setShowVersionModal(false);
     try {
-      localStorage.setItem('seen_version_1.7.2', 'true');
+      localStorage.setItem('seen_version_1.7.1', 'true');
     } catch (e) {
       console.error(e);
     }
@@ -849,7 +849,7 @@ export const Sidebar = memo(function Sidebar({
                 style={{ fontSize: '10px', fontWeight: 600, color: '#1d4ed8', backgroundColor: '#dbeafe', padding: '2px 6px', borderRadius: '4px', fontSizeAdjust: 'none', cursor: 'pointer', transition: 'all 0.15s' }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setVersionTab('1.7.2');
+                  setVersionTab('1.7.1');
                   setShowVersionModal(true);
                 }}
                 onMouseEnter={e => {
@@ -858,9 +858,9 @@ export const Sidebar = memo(function Sidebar({
                 onMouseLeave={e => {
                   e.currentTarget.style.backgroundColor = '#dbeafe';
                 }}
-                title="View what's new in v1.7.2"
+                title="View what's new in v1.7.1"
               >
-                v1.7.2
+                v1.7.1
               </span>
             </span>
           </div>
@@ -1744,25 +1744,6 @@ export const Sidebar = memo(function Sidebar({
             {/* Version Tabs */}
             <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', padding: '4px', borderRadius: '8px', overflowX: 'auto' }}>
               <button
-                onClick={() => setVersionTab('1.7.2')}
-                style={{
-                  flex: 1,
-                  padding: '6px 4px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  background: versionTab === '1.7.2' ? 'white' : 'transparent',
-                  color: versionTab === '1.7.2' ? '#0f172a' : '#64748b',
-                  boxShadow: versionTab === '1.7.2' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                v1.7.2 (New)
-              </button>
-              <button
                 onClick={() => setVersionTab('1.7.1')}
                 style={{
                   flex: 1,
@@ -1779,7 +1760,7 @@ export const Sidebar = memo(function Sidebar({
                   whiteSpace: 'nowrap'
                 }}
               >
-                v1.7.1
+                v1.7.1 (New)
               </button>
               <button
                 onClick={() => setVersionTab('1.7.0')}
@@ -2043,39 +2024,9 @@ export const Sidebar = memo(function Sidebar({
               </button>
             </div>
             
-            {versionTab === '1.7.2' ? (
+            {versionTab === '1.7.1' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released Jun 4, 2026 (Latest)</span>
-                
-                {/* Feature 1: Real-time Database Sync */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
-                  <div style={{ background: '#dbeafe', color: '#2563eb', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
-                    <CheckCircle2 size={16} />
-                  </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>⚡ Real-time Database Sync</h4>
-                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
-                      Implemented true real-time database updates using Firestore listeners. Records sync instantly without needing page refreshes or waiting 30 seconds.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Feature 2: Large Table Infinite Scroll Fix */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
-                  <div style={{ background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', marginTop: '2px', display: 'flex', flexShrink: 0 }}>
-                    <CheckCircle2 size={16} />
-                  </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>📜 Infinite Scroll Fix</h4>
-                    <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#475569', lineHeight: 1.5 }}>
-                      Fixed a critical bug that capped table scrolling at ~154 rows. Users can now scroll smoothly through registers with 1250+ entries.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : versionTab === '1.7.1' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released Jun 3, 2026</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released Jun 3, 2026 (Latest)</span>
                 
                 {/* Feature 1: Prevent Data Overwrite */}
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>

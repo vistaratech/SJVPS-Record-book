@@ -1,7 +1,7 @@
 // Firestore-backed API client for RecordBook Web
 import { db } from './firebase';
 import {
-  collection, doc, getDocs, getDoc, getDocFromServer, getDocsFromServer, setDoc, deleteDoc, query, where, orderBy, onSnapshot,
+  collection, doc, getDocs, getDoc, getDocFromServer, getDocsFromServer, setDoc, deleteDoc, query, where, orderBy,
 } from 'firebase/firestore';
 import { TEMPLATES, type Template, type TemplateColumn } from './templates';
 // Local filesystem completely unmounted from regular API.
@@ -819,96 +819,6 @@ export async function getRegister(registerId: number): Promise<RegisterDetail> {
   }
 
   return reg;
-}
-
-export function subscribeRegister(
-  registerId: number,
-  onData: (reg: RegisterDetail) => void,
-  onError: (err: any) => void
-): () => void {
-  let mainDocData: any = null;
-  const chunkDocsMap = new Map<string, Entry[]>();
-  let hasLoadedMain = false;
-  let hasLoadedChunks = false;
-
-  const checkAndEmit = () => {
-    if (!hasLoadedMain || !hasLoadedChunks || !mainDocData) return;
-
-    const allEntries: Entry[] = [];
-    const sortedChunkIds = Array.from(chunkDocsMap.keys())
-      .map(Number)
-      .sort((a, b) => a - b);
-    
-    sortedChunkIds.forEach(id => {
-      const entries = chunkDocsMap.get(id.toString()) || [];
-      allEntries.push(...entries);
-    });
-
-    const combined: RegisterDetail = {
-      ...mainDocData,
-      entries: allEntries
-    };
-
-    combined.entries.forEach(e => { if (!e.cells) e.cells = {}; });
-    
-    let isOutOfOrder = false;
-    for (let i = 1; i < combined.entries.length; i++) {
-      if (combined.entries[i].id < combined.entries[i - 1].id) {
-        isOutOfOrder = true;
-        break;
-      }
-    }
-    if (isOutOfOrder) {
-      combined.entries.sort((a, b) => a.id - b.id);
-    }
-    
-    combined.entries.forEach((e, i) => { e.rowNumber = i + 1; });
-    combined.entryCount = combined.entries.length;
-
-    firestoreRegisterCache.set(registerId, combined);
-
-    onData(combined);
-  };
-
-  const unsubMain = onSnapshot(
-    regDoc(registerId),
-    (docSnap) => {
-      if (!docSnap.exists()) {
-        onError(new Error('Register not found'));
-        return;
-      }
-      mainDocData = docSnap.data();
-      if (!mainDocData.columns) mainDocData.columns = [];
-      mainDocData.columns.sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0));
-      if (!mainDocData.pages) mainDocData.pages = [];
-      if (!mainDocData.sharedWith) mainDocData.sharedWith = [];
-      hasLoadedMain = true;
-      checkAndEmit();
-    },
-    onError
-  );
-
-  const unsubChunks = onSnapshot(
-    chunksCol(registerId),
-    (querySnap) => {
-      chunkDocsMap.clear();
-      querySnap.docs.forEach((docSnap) => {
-        const idNum = parseInt(docSnap.id, 10);
-        if (!isNaN(idNum)) {
-          const chunkData = docSnap.data() as { entries: Entry[] };
-          chunkDocsMap.set(docSnap.id, chunkData.entries || []);
-        }
-      });
-      hasLoadedChunks = true;
-      checkAndEmit();
-    },
-    onError
-  );
-
-  return () => {
-    unsubMain();
-    unsubChunks();
-  };
 }
 
 export async function createRegister(data: {
