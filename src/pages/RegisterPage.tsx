@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
-  getRegister, listRegisters, addColumn, deleteColumn, renameColumn, updateColumnDropdownOptions,
+  getRegister, subscribeRegister, listRegisters, addColumn, deleteColumn, renameColumn, updateColumnDropdownOptions,
   duplicateColumn, moveColumn, reorderColumn, changeColumnType, clearColumnData, insertColumn, updateColumnWidth, updateColumnSummary,
   freezeColumn, hideColumn, setColumnMandatory, setColumnUnique, setColumnDoubleEntryWarning,
   addEntry, updateEntry, updateEntryDirect, deleteEntry, duplicateEntry, bulkDeleteEntries, insertEntry,
@@ -126,15 +126,36 @@ export default function RegisterPage() {
     queryKey: ['register', registerId],
     queryFn: () => getRegister(Number(registerId)),
     enabled: !!registerId && !isNaN(Number(registerId)),
-    staleTime: 10 * 1000,
-    // Re-enabled: the sync guard (hasPendingDebounce + hasPendingRowMutations at
-    // the merge block below) already blocks localEntries overwrites when writes are
-    // in-flight, so window-focus refetch is safe and ensures users see fresh data
-    // when switching back to the tab.
-    refetchOnWindowFocus: true,
-    refetchInterval: (detailViewEntry || showAddRecordModal) ? false : 30 * 1000,  // Pause background sync when editing in modals
+    staleTime: 5 * 60 * 1000, // Stale time set to 5 minutes as real-time push will maintain it
+    refetchOnWindowFocus: false, // Push updates handle this in real-time
+    refetchInterval: false, // Polling disabled since we listen to updates via onSnapshot
     placeholderData: keepPreviousData,
   });
+
+  // Subscribe to real-time updates from Firestore
+  useEffect(() => {
+    if (!registerId || isNaN(Number(registerId))) return;
+
+    console.log(`[Realtime] Subscribing to Firestore updates for register #${registerId}`);
+    const unsubscribe = subscribeRegister(
+      Number(registerId),
+      (updatedReg) => {
+        // Optimistically update React Query's cache.
+        // This will immediately push new database values to the component state,
+        // and if there are no pending user edits (as checked in the merge/derived state block below),
+        // it will automatically merge into localEntries and update the UI.
+        queryClient.setQueryData(['register', registerId], updatedReg);
+      },
+      (err) => {
+        console.error(`[Realtime] Subscription error for register #${registerId}:`, err);
+      }
+    );
+
+    return () => {
+      console.log(`[Realtime] Unsubscribing from Firestore updates for register #${registerId}`);
+      unsubscribe();
+    };
+  }, [registerId, queryClient]);
 
   // Helper to log workspace actions for activity tracking
   const _logWork = useCallback((action: string, details: string) => {
@@ -3713,8 +3734,8 @@ export default function RegisterPage() {
           <tbody>
             {/* Top row spacer for virtualized rows */}
             {paddingTop > 0 && (
-              <tr key="virtual-spacer-top" aria-hidden="true" style={{ visibility: 'hidden' }}>
-                <td style={{ height: `${paddingTop}px`, padding: 0, border: 'none', lineHeight: 0 }} colSpan={visibleColumns.length + 4} />
+              <tr key="virtual-spacer-top" aria-hidden="true" style={{ height: `${paddingTop}px` }}>
+                <td style={{ padding: 0, border: 'none', lineHeight: 0, fontSize: 0 }} colSpan={visibleColumns.length + 4} />
               </tr>
             )}
             {virtualRows.map((virtualRow) => {
@@ -3760,8 +3781,8 @@ export default function RegisterPage() {
               );
             })}
             {paddingBottom > 0 && (
-              <tr key="virtual-spacer-bottom" aria-hidden="true" style={{ visibility: 'hidden' }}>
-                <td style={{ height: `${paddingBottom}px`, padding: 0, border: 'none', lineHeight: 0 }} colSpan={visibleColumns.length + 4} />
+              <tr key="virtual-spacer-bottom" aria-hidden="true" style={{ height: `${paddingBottom}px` }}>
+                <td style={{ padding: 0, border: 'none', lineHeight: 0, fontSize: 0 }} colSpan={visibleColumns.length + 4} />
               </tr>
             )}
             {/* Empty state when search/filter yields no results */}

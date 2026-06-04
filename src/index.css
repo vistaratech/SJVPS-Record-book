@@ -1857,7 +1857,7 @@ a {
   overflow-anchor: none;
   will-change: scroll-position;
   -webkit-overflow-scrolling: touch;
-  contain: content;
+  contain: layout style;
   background: var(--surface);
   border-radius: 0;
 }
